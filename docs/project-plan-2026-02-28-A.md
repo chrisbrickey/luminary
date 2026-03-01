@@ -31,8 +31,8 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 
 ---
 
-## Step 1: Project scaffolding
-- `uv init --python 3.14` to speciy Python 3.14
+## ✅ Step 1: Project scaffolding
+- `uv init --python 3.14` to specify Python 3.14
 - Create only the structure needed for this step's deliverables:
   ```
   src/__init__.py
@@ -42,7 +42,6 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   ```
   Subsequent steps add their own directories when first needed.
 - Add dependencies: `langchain`, `langchain-ollama`, `langchain-community`, `langchain-chroma`, `chromadb`, `pydantic`
-- Add optional dependency group `[ui]`: `streamlit`
 - Add dev dependencies: `pytest`, `pytest-cov`, `mypy`, `types-requests`
 - Configure `pyproject.toml`:
   ```
@@ -60,7 +59,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   disallow_untyped_defs = true
   check_untyped_defs = true
   mypy_path = "src"
-  packages = ["src", "scripts"]
+  packages = ["src"]
   ```
 - Update `.gitignore`: `__pycache__/`, `.venv/`, `.idea/`
 - Create `src/utils/ollama_health.py`: `check_ollama_available(base_url="http://localhost:11434") -> None` — sends GET to `/api/tags`; raises `RuntimeError("Ollama is not running. Start it with: ollama serve")` on connection failure; called at the top of all CLI scripts that need Ollama
@@ -80,6 +79,8 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 
 ## Step 3: Corpus ingestion — loader
 - Create new directories with `__init__.py`: `src/configs/`, `src/document_loaders/`; create `scripts/`
+- Update `pyproject.toml` mypy config: change `packages = ["src"]` to `packages = ["src", "scripts"]`
+- Update `tests/integration/test_mypy.py`: add `"scripts"` to the mypy command
 - Update `.gitignore`: add `data/raw/`
 - Create `src/configs/loader_configs.py`:
   - `DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "chroma_db"` — resolved relative to project root, not CWD
@@ -154,16 +155,17 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - Helpers: `_format_docs_with_titles()`, `_extract_chunk_ids()`, `_extract_source_titles()` (combines document_title + page_number; fallback: title-only → source URL → "unknown")
 - **Test:** `tests/unit/chains/test_chat_chain.py` — mock LLM and retriever; assert chain wires retrieval + prompt correctly; test `_extract_source_titles()` with title+page, title-only, fallback to source URL, missing metadata; test empty retrieval; test unknown author raises ValueError; test language detection integration
 - **Test:** `tests/integration/test_chat_chain_integration.py` — wire small fixture ChromaDB (FakeEmbeddings) → real retriever → real prompt → FakeChatModel; assert full chain returns ChatResponse with correct retrieved_source_titles and non-empty text
-- **README:** Add pipeline overview diagram; update project structure diagram to add `src/prompts/`, `src/chains/`
+- **README:** Add Architecture Overview section with full pipeline diagram (Ingestion, Query, Debate, Eval); update project structure diagram to add `src/prompts/`, `src/chains/`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ## Step 9: Chat CLI script
 - Create `scripts/chat.py` — interactive CLI chat loop; flags: `--db`, `--author`, `--show-chunks`, `--verbose`; calls `check_ollama_available()`; prints deduplicated "Sources:" footer (with page numbers); exits on `quit`, Ctrl+C, EOFError
 - **Test:** `tests/unit/test_script_chat.py` — mock `build_default_chain` and `input()`; assert CLI flags forwarded, chain invoked per question, source footer always printed, chunks only with `--show-chunks`, all exit paths
-- **README:** Add CLI chat section: `scripts/chat.py` command, all flags table, example questions in French and English
+- **README:** Add CLI chat section: `scripts/chat.py` command, all flags table; add Example Usage section with French and English chat examples
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ## Step 10: Web UI
+- Add dependency: `uv add --optional ui streamlit`
 - Create `chat_ui.py` — chat interface with:
   - Text input for user questions
   - Response text display with deduplicated sources caption (page-specific)
@@ -218,7 +220,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 - **Test:** `tests/unit/agents/test_philosopher_agent.py` — mock LLM and retriever tool; assert agent calls retrieval, constructs DebateResponse, handles empty retrieval
 - **Test:** `tests/unit/agents/test_debate_orchestrator.py` — mock both agents; assert each called once with same question, responses in declared author order
 - **Test:** `tests/unit/test_script_debate.py` — mock `run_debate` and `input()`; assert flags forwarded, headers per philosopher, source footer, `--show-chunks` behaviour
-- **README:** Add debate CLI section: command with `--authors`, flags table, example question; update project structure to include `src/agents/`
+- **README:** Add debate CLI section: command with `--authors`, flags table, example question; add debate row to Example Usage table; update project structure to include `src/agents/`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ## Step 14: Evaluation harness — schemas + deterministic metrics
