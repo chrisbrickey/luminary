@@ -1,0 +1,38 @@
+[project]
+name = "luminary"
+version = "0.1.0"
+description = "RAG chatbot where Enlightenment philosophers answer questions grounded in their historical texts"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "chromadb>=1.5.2",
+    "langchain>=1.2.10",
+    "langchain-chroma>=1.1.0",
+    "langchain-community>=0.4.1",
+    "langchain-ollama>=1.0.1",
+    "pydantic>=2.12.5",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "types-requests>=2.32.4.20260107",
+]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not external'"
+markers = [
+    "external: marks tests that make real network/service calls (deselect with -m 'not external')",
+    "integration: marks integration tests that wire multiple internal modules",
+]
+
+[tool.mypy]
+python_version = "3.14"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+mypy_path = "src"
+packages = ["src"]
