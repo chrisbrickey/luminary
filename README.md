@@ -25,11 +25,14 @@ luminary/
 ├── pyproject.toml           # project metadata, dependencies, and configuration
 ├── uv.lock                  # locked dependency versions
 ├── docs/
-│ 
+│
 ├── src/
-│   └── utils/               # shared functions 
-│ 
-└──tests/
+│   ├── schemas.py           # shared Pydantic data models to validate data structures
+│   └── utils/               # shared utility functions
+│
+└── tests/
+    ├── unit/                # fast offline tests; all external boundaries mocked
+    └── integration/         # tests wiring real internal modules with faked external services
 ```
 
 ## Development

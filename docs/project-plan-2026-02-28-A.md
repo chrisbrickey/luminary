@@ -69,12 +69,12 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **README:** Add Technology table (all initial dependencies + purposes); add Setup section (clone, `uv sync`, Ollama install + model pulls); add project structure diagram
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 2: Pydantic schemas
+## ✅ Step 2: Pydantic schemas
 - Create `src/schemas.py` with:
-  - `ChunkInfo`: `chunk_id` (SHA256 of `document_id:chunk_index`, truncated to 12 chars), `document_id`, `document_title`, `author` (lowercase), `chunk_index`, `source`, `page_number: int | None = None` (+ `extra="allow"` for domain-specific fields)
+  - `ChunkInfo`: `chunk_id` (SHA256 of `document_id:chunk_index`, truncated to 12 chars), `document_id`, `document_title: str | None = None`, `author: str | None = None` (lowercase), `chunk_index`, `source` (+ `extra="allow"` for domain-specific fields)
   - `ChatResponse`: `text`, `retrieved_passage_ids: list[str]`, `retrieved_contexts: list[str]`, `retrieved_source_titles: list[str]`, `language` (ISO 639-1: `^[a-z]{2}$`)
 - **Test:** `tests/unit/test_schemas.py` — validate construction, required fields, type enforcement, extra fields on ChunkInfo, language regex validation, page_number optional field
-- **README:** No user-visible feature; no README update needed
+- **README:** No user-facing command; update project structure diagram to add `src/schemas.py`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ## Step 3: Corpus ingestion — loader
@@ -291,7 +291,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - Add `langchain-anthropic` and `langchain-openai` as optional dependency groups
 - Modify `src/chains/chat_chain.py`: `build_default_chain` uses `build_llm_from_env()` and `build_embeddings_from_env()` when env vars are set; falls back to Ollama defaults otherwise
 - **Test:** existing unit tests require no changes (they mock LLM and embeddings); add `tests/unit/configs/test_provider_config.py` — mock env vars, assert correct provider classes returned, assert fallback to Ollama
-- **README:** Add "Deploying to Heroku" section: required env vars, `heroku config:set` commands, note to pre-populate ChromaDB
+- **README:** Add "Deploying to Heroku" section: required env vars, `heroku config:set` commands, note to pre-populate ChromaDB; update project structure diagram to add `Procfile`, `runtime.txt` at root
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ---
