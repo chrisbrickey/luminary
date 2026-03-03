@@ -4,18 +4,15 @@ A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges
 
 ## Technology
 
-| Dependency | Purpose |
-| --- | --- |
-| Python 3.14 | Language runtime |
-| uv | Package manager |
-| LangChain | LLM orchestration framework |
-| LangChain-Ollama | Ollama LLM and embeddings integration |
-| LangChain-Community | Community integrations (document loaders, etc.) |
-| LangChain-Chroma | ChromaDB vector store integration |
-| ChromaDB | Vector store for document embeddings |
-| Pydantic | Data validation and schema definitions |
-| pytest + pytest-cov | Test runner and coverage |
-| mypy | Static type checking |
+| Dependency | Purpose                                |
+| --- |----------------------------------------|
+| Python 3.14 | language runtime                       |
+| uv | package manager                        |
+| LangChain | LLM orchestration framework            |
+| ChromaDB | vector store for document embeddings   |
+| Pydantic | data validation and schema definitions |
+| pytest + pytest-cov | test runner and coverage               |
+| mypy | static type checking                   |
 
 
 ## Project Structure
@@ -24,16 +21,21 @@ A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges
 luminary/
 ├── pyproject.toml           # project metadata, dependencies, and configuration
 ├── uv.lock                  # locked dependency versions
+│
 ├── docs/
 │
 ├── src/
 │   ├── schemas.py           # shared Pydantic data models to validate data structures
+│   │
+│   ├── configs/             # configurations shared across modules
+│   ├── document_loaders/    # fetch and parse data, returning standardised LangChain Documents
 │   └── utils/               # shared utility functions
 │
 └── tests/
     ├── unit/                # fast offline tests; all external boundaries mocked
-    └── integration/         # tests wiring real internal modules with faked external services
+    └── integration/         # tests across modules and services*
 ```
+_*Tests that make http or grpc calls to confirm API contracts are tagged with 'external' annotation._
 
 ## Development
 

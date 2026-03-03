@@ -923,6 +923,7 @@ dependencies = [
     { name = "langchain" },
     { name = "langchain-chroma" },
     { name = "langchain-community" },
+    { name = "langchain-core" },
     { name = "langchain-ollama" },
     { name = "pydantic" },
 ]
@@ -941,6 +942,7 @@ requires-dist = [
     { name = "langchain", specifier = ">=1.2.10" },
     { name = "langchain-chroma", specifier = ">=1.1.0" },
     { name = "langchain-community", specifier = ">=0.4.1" },
+    { name = "langchain-core", specifier = ">=1.2.16" },
     { name = "langchain-ollama", specifier = ">=1.0.1" },
     { name = "pydantic", specifier = ">=2.12.5" },
 ]
