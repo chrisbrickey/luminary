@@ -9,6 +9,7 @@ dependencies = [
     "langchain>=1.2.10",
     "langchain-chroma>=1.1.0",
     "langchain-community>=0.4.1",
+    "langchain-core>=1.2.16",
     "langchain-ollama>=1.0.1",
     "pydantic>=2.12.5",
 ]
@@ -26,6 +27,10 @@ addopts = "-m 'not external'"
 markers = [
     "external: marks tests that make real network/service calls (deselect with -m 'not external')",
     "integration: marks integration tests that wire multiple internal modules",
+]
+filterwarnings = [
+    # known compatibility issue (not an error); LangChain likely to fix in future release to which I will upgrade
+    "ignore:Core Pydantic V1 functionality isn't compatible with Python 3.14:UserWarning:langchain_core._api.deprecation",
 ]
 
 [tool.mypy]
