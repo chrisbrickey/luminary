@@ -1,5 +1,6 @@
 # data
 data/raw/
+data/chroma_db/
 
 # python
 __pycache__/
