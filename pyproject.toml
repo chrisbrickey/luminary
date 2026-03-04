@@ -40,4 +40,4 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
 mypy_path = "src"
-packages = ["src"]
+packages = ["src", "scripts"]

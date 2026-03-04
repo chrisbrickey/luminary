@@ -4,8 +4,9 @@ import subprocess
 
 
 def test_mypy_passes_on_src_and_scripts() -> None:
+    """Test that mypy passes on all packages configured in pyproject.toml."""
     result = subprocess.run(
-        ["uv", "run", "mypy", "src"],
+        ["uv", "run", "mypy"],
         capture_output=True,
         text=True,
     )

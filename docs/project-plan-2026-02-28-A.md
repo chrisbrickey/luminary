@@ -77,16 +77,16 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **README:** No user-facing command; update project structure diagram to add `src/schemas.py`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 3: Corpus ingestion — loader
+## ✅ Step 3: Corpus ingestion — loader
 - Create new directories with `__init__.py`: `src/configs/`, `src/document_loaders/`; create `scripts/`
 - Update `pyproject.toml` mypy config: change `packages = ["src"]` to `packages = ["src", "scripts"]`
 - Update `tests/integration/test_mypy.py`: add `"scripts"` to the mypy command
 - Update `.gitignore`: add `data/raw/`
 - Create `src/configs/loader_configs.py`:
-  - `DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "chroma_db"` — resolved relative to project root, not CWD
+  - `DEFAULT_DB_PATH = Path("data/chroma_db")` — simplified to relative path (not resolved)
   - `WikisourceCollectionConfig` (Pydantic): `document_id`, `document_title`, `author` (lowercase), `page_title_template` (with `{n}` placeholder), `total_pages: int | None` (auto-discovered if None), `api_url` (default: `https://fr.wikisource.org/w/api.php`)
-  - `VOLTAIRE_LETTRES_CONFIG`: pre-built config for the 25 Lettres philosophiques
-  - `INGEST_CONFIGS: dict[str, WikisourceCollectionConfig]` — registry mapping author key → config; initially `{"voltaire": VOLTAIRE_LETTRES_CONFIG}`
+  - `LETTRES_PHILOSOPHIQUES_CONFIG`: pre-built config for Voltaire's Lettres philosophiques (renamed from VOLTAIRE_LETTRES_CONFIG)
+  - `INGEST_CONFIGS: dict[str, WikisourceCollectionConfig]` — registry mapping author key → config; initially `{"voltaire": LETTRES_PHILOSOPHIQUES_CONFIG}`
 - Create `src/document_loaders/wikisource_loader.py`:
   - `WikisourceLoader`: class-based loader with `load() -> list[Document]`; fetches HTML via Wikisource API; parses with `_WikisourceHTMLExtractor` (HTMLParser subclass, skip-depth tracking to strip ws-noexport, reference, reflist, script, style)
   - Metadata per Document: `document_id`, `document_title`, `author`, `source` (canonical URL), `page_number`
@@ -94,12 +94,22 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - **Retry with exponential backoff** (max 3 retries, base 2s) for transient HTTP errors (429, 5xx, connection timeouts) — improvement over rag-chat-1 which had no retry logic
 - Create `src/utils/io.py`:
   - `save_documents_to_disk(docs, directory) -> list[Path]`: saves each Document as `page_NN.json`
-  - `load_documents_from_disk(directory) -> list[Document]`: loads all `page_*.json`, ordered
-- Create `scripts/scrape_wikisource.py` — CLI entrypoint: loads config, calls loader, saves to `data/raw/<document_id>/`; calls `check_ollama_available()` is NOT needed here (no Ollama dependency for scraping)
-- **Test:** `tests/unit/test_script_scrape_wikisource.py` — mock HTTP calls; assert Documents have correct content, metadata, logging; test retry on 429/5xx; test error cases (network failure, empty response)
-- **Test:** `tests/unit/test_loader_configs.py` — validate VOLTAIRE config fields, `INGEST_CONFIGS` has `"voltaire"` key, DEFAULT_DB_PATH resolves to absolute path
-- **README:** Add ingestion step 1 (`scripts/scrape_wikisource.py`) with command, output location (`data/raw/<document_id>/`); update project structure diagram to add `src/configs/`, `src/document_loaders/`, `scripts/`
-- **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+  - ~~`load_documents_from_disk(directory) -> list[Document]`~~ — deferred to Step 7 (not needed until combined ingestion script)
+- Create `scripts/scrape_wikisource.py` — CLI entrypoint: loads config, calls loader, saves to `data/raw/<document_id>/`; does NOT call `check_ollama_available()` (no Ollama dependency for scraping)
+- **Test:** `tests/unit/test_script_scrape_wikisource.py` — mock all external dependencies; test successful scraping, invalid author, no documents loaded, loader exception, save exception, custom output directory, output path construction, default scraping all authors (9 tests)
+- **Test:** `tests/unit/test_loader_configs.py` — validate LETTRES_PHILOSOPHIQUES_CONFIG fields, `INGEST_CONFIGS` has `"voltaire"` key, DEFAULT_DB_PATH correctness, custom API URL (6 tests)
+- **Test:** `tests/unit/document_loaders/test_wikisource_loader.py` — comprehensive tests for HTML parser and loader with mocked HTTP calls; test retry on 429/5xx, network errors, max retries, non-transient errors, auto-discovery, empty responses, metadata construction (15 tests for parser and loader combined)
+- **Test:** `tests/unit/utils/test_io.py` — test save operations: directory creation, error handling, Unicode preservation, padding (6 tests for save only; load tests deferred to Step 7)
+- **README:** Added Usage > Ingestion section with `scripts/scrape_wikisource.py` command, options table, output location details, and example; updated project structure diagram to add `scripts/` and clarify directories
+- **Deviations from plan:**
+  - `DEFAULT_DB_PATH` simplified to relative path `Path("data/chroma_db")` instead of absolute resolved path
+  - Config name changed from `VOLTAIRE_LETTRES_CONFIG` to `LETTRES_PHILOSOPHIQUES_CONFIG`
+  - `--author` flag changed from required to optional (defaults to all configured authors)
+  - Enhanced logging with user-friendly progress messages and simplified format to show real-time scraping progress
+  - `load_documents_from_disk()` and associated tests deferred to Step 7 (not needed until combined ingestion script)
+  - Test organization: created `tests/unit/document_loaders/conftest.py` with shared fixtures and helpers following DRY principles
+  - Added integration test `tests/integration/document_loaders/test_wikisource_loader_integration.py` for external API contract testing
+  - Refactored `scripts/scrape_wikisource.py` with `scrape_author()` helper function for cleaner code organization
 
 ## Step 4: Corpus ingestion — chunking
 - Create `src/utils/chunker.py`
@@ -134,6 +144,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 
 ## Step 7: Combined ingestion script
 - **Goal:** Single `scripts/ingest.py` replaces running scrape + embed separately; moved here because the full ingestion pipeline (Steps 3–5) is now complete
+- **Note:** Add `load_documents_from_disk()` function to `src/utils/io.py` (deferred from Step 3) with corresponding tests for load operations and round-trip testing
 - Create `scripts/ingest.py`: `ingest_author(config, raw_dir, db_dir, skip_scrape, skip_embed)` function + `main()` with argparse
   - Flags: `--author` (optional, defaults to all registered in `INGEST_CONFIGS`), `--skip-scrape`, `--skip-embed`, `--db`
   - Calls existing `WikisourceLoader`, `save_documents_to_disk`, `load_documents_from_disk`, `chunk_documents`, `embed_and_store`
