@@ -3,7 +3,7 @@ name = "luminary"
 version = "0.1.0"
 description = "RAG chatbot where Enlightenment philosophers answer questions grounded in their historical texts"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.5.2",
     "langchain>=1.2.10",
@@ -28,13 +28,9 @@ markers = [
     "external: marks tests that make real network/service calls (deselect with -m 'not external')",
     "integration: marks integration tests that wire multiple internal modules",
 ]
-filterwarnings = [
-    # known compatibility issue (not an error); LangChain likely to fix in future release to which I will upgrade
-    "ignore:Core Pydantic V1 functionality isn't compatible with Python 3.14:UserWarning:langchain_core._api.deprecation",
-]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
