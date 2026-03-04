@@ -1,3 +1,6 @@
+# data
+data/raw/
+
 # python
 __pycache__/
 .venv/

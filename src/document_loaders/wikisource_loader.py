@@ -201,6 +201,8 @@ class WikisourceLoader:
         Returns:
             The total number of pages found
         """
+        logger.info("Auto-discovering total pages...")
+
         # Start with a reasonable guess and probe
         page_num = 1
         last_valid = 0
@@ -213,6 +215,7 @@ class WikisourceLoader:
                 html = self._fetch_page_html(page_title)
                 if html:  # Page exists
                     last_valid = page_num
+                    logger.info(f"  Found page {page_num}...")
                     page_num += 1
                 else:
                     # Page doesn't exist, we've found the limit
@@ -224,7 +227,7 @@ class WikisourceLoader:
             # Be polite between requests
             time.sleep(self.delay)
 
-        logger.info(f"Auto-discovered {last_valid} pages for {self.config.document_id}")
+        logger.info(f"✓ Discovered {last_valid} total pages\n")
         return last_valid
 
     def load(self) -> list[Document]:
@@ -248,6 +251,9 @@ class WikisourceLoader:
         for page_num in range(1, total_pages + 1):
             # Construct page title
             page_title = self.config.page_title_template.format(n=page_num)
+
+            # Show progress before fetching
+            logger.info(f"Fetching page {page_num}/{total_pages}: {page_title}")
 
             # Fetch HTML
             html = self._fetch_page_html(page_title)
@@ -274,23 +280,15 @@ class WikisourceLoader:
                 documents.append(doc)
 
                 logger.info(
-                    f"Loaded page {page_num}/{total_pages} "
-                    f"for {self.config.document_id} "
-                    f"({len(text)} chars)"
+                    f"  ✓ Saved page {page_num}/{total_pages} ({len(text)} chars)"
                 )
             else:
                 logger.warning(
-                    f"Page {page_num} for {self.config.document_id} "
-                    f"was empty or not found"
+                    f"  ⚠ Page {page_num}/{total_pages} was empty or not found"
                 )
 
             # Be polite between requests (except for the last one)
             if page_num < total_pages:
                 time.sleep(self.delay)
-
-        logger.info(
-            f"Successfully loaded {len(documents)} documents "
-            f"for {self.config.document_id}"
-        )
 
         return documents
