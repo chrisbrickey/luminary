@@ -111,14 +111,17 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - Added integration test `tests/integration/document_loaders/test_wikisource_loader_integration.py` for external API contract testing
   - Refactored `scripts/scrape_wikisource.py` with `scrape_author()` helper function for cleaner code organization
 
-## Step 4: Corpus ingestion — chunking
+## ✅ Step 4: Corpus ingestion — chunking
 - Create `src/utils/chunker.py`
 - Use LangChain `RecursiveCharacterTextSplitter` (chunk_size=1200 chars, chunk_overlap=150, separators=["\n\n", "\n", ". ", " ", ""] for French prose)
 - Attach chunk metadata: `chunk_id` (SHA256 of `document_id:chunk_index`[:12]), `chunk_index` (0-indexed per document); preserve all source metadata
 - **Validate chunks via ChunkInfo** — construct a `ChunkInfo` from each chunk's metadata before returning, ensuring schema compliance at chunking time (improvement over rag-chat-1 where ChunkInfo was defined but never enforced)
 - **Test:** `tests/unit/utils/test_chunker.py` — given a known Document, assert chunks are within size bounds, metadata is correct, no text is lost, ChunkInfo validation passes; test empty document edge case
 - **README:** No user-facing command; update pipeline diagram to show chunking stage
-- **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - Added 14 comprehensive tests covering all edge cases including deterministic chunk ID generation, multi-document processing, custom parameters, and validation failures
+  - Added pipeline stages overview to README showing Scrape → Chunk → Embed flow
+  - Used `langchain_text_splitters` import instead of `langchain.text_splitter`
 
 ## Step 5: Embedding + ChromaDB storage
 - Create new directories: `src/vectorstores/` with `__init__.py`; `tests/unit/vectorstores/`
