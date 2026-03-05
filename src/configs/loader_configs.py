@@ -1,10 +1,8 @@
 """Configuration for document loaders."""
 
-from pathlib import Path
-
 from pydantic import BaseModel, Field
 
-DEFAULT_DB_PATH = Path("data/chroma_db")
+from src.configs.common import DEFAULT_DB_PATH
 
 class WikisourceCollectionConfig(BaseModel):
     document_id: str = Field(

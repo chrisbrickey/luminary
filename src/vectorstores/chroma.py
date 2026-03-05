@@ -8,19 +8,21 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_ollama import OllamaEmbeddings
 
+from src.configs.vectorstore_config import COLLECTION_NAME, EMBEDDING_MODEL
+
 
 def _get_embeddings_instance(embeddings: Embeddings | None) -> Embeddings:
     """Get embeddings instance, using default Ollama if none provided.
 
     Args:
         embeddings: Optional embeddings instance. If None, creates
-            OllamaEmbeddings with nomic-embed-text model.
+            OllamaEmbeddings with EMBEDDING_MODEL.
 
     Returns:
         Embeddings instance ready to use
     """
     if embeddings is None:
-        return OllamaEmbeddings(model="nomic-embed-text")
+        return OllamaEmbeddings(model=EMBEDDING_MODEL)
     return embeddings
 
 
@@ -50,7 +52,7 @@ def _extract_and_validate_chunk_ids(chunks: Sequence[Document]) -> list[str]:
 def embed_and_store(
     chunks: Sequence[Document],
     persist_dir: Path | str,
-    collection_name: str = "philosophes",
+    collection_name: str = COLLECTION_NAME,
     embeddings: Embeddings | None = None,
 ) -> Chroma:
     """Embed chunks and store them in ChromaDB with idempotent IDs.
@@ -59,9 +61,9 @@ def embed_and_store(
         chunks: List of Document chunks to embed and store. Each chunk must
             have a 'chunk_id' in its metadata.
         persist_dir: Directory path where ChromaDB will persist the vector store
-        collection_name: Name of the ChromaDB collection (default: "philosophes")
+        collection_name: Name of the ChromaDB collection (default: COLLECTION_NAME)
         embeddings: Embeddings instance to use. If None, defaults to
-            OllamaEmbeddings(model="nomic-embed-text")
+            OllamaEmbeddings(model=EMBEDDING_MODEL)
 
     Returns:
         Chroma vectorstore instance containing the embedded chunks

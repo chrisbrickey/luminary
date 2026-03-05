@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
+from src.configs.common import DEFAULT_DB_PATH
 from src.configs.loader_configs import (
-    DEFAULT_DB_PATH,
     INGEST_CONFIGS,
     LETTRES_PHILOSOPHIQUES_CONFIG,
     WikisourceCollectionConfig,

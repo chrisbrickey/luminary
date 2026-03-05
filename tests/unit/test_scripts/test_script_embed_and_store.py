@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from langchain_core.documents import Document
 
+from src.configs.vectorstore_config import COLLECTION_NAME
+
 # Test constants
 TEST_AUTHOR = "voltaire"
 INVALID_AUTHOR = "nonexistent_author"
@@ -103,7 +105,7 @@ class TestEmbedAndStoreMain:
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args[1]
         assert call_kwargs["chunks"] == sample_chunks
-        assert call_kwargs["collection_name"] == "philosophes"
+        assert call_kwargs["collection_name"] == COLLECTION_NAME
 
     @patch("scripts.embed_and_store.check_ollama_available")
     @patch("scripts.embed_and_store.embed_and_store")

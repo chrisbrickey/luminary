@@ -106,7 +106,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **Test:** `tests/unit/utils/test_io.py` — test save operations: directory creation, error handling, Unicode preservation, padding (6 tests for save only; load tests deferred to Step 7)
 - **README:** Added Usage > Ingestion section with `scripts/scrape_wikisource.py` command, options table, output location details, and example; updated project structure diagram to add `scripts/` and clarify directories
 - **Deviations from plan:**
-  - `DEFAULT_DB_PATH` simplified to relative path `Path("data/chroma_db")` instead of absolute resolved path
+  - `DEFAULT_DB_PATH` simplified to relative path `Path("data/chroma_db")` instead of absolute resolved path; later moved to `src/configs/common.py` in 2026-03-08 refactoring (see Step 6 deviations)
   - Config name changed from `VOLTAIRE_LETTRES_CONFIG` to `LETTRES_PHILOSOPHIQUES_CONFIG`
   - `--author` flag changed from required to optional (defaults to all configured authors)
   - Enhanced logging with user-friendly progress messages and simplified format to show real-time scraping progress
@@ -151,8 +151,9 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - Test suite includes 6 comprehensive tests for vectorstore module + 12 tests for script + 7 tests for I/O operations (vs. suggested "2-3 fixture chunks"): basic functionality, idempotent upserts, custom collection name, persist_dir as string, missing chunk_id validation, complete metadata preservation, and all CLI argument combinations
   - Fixed chunk ID generation to include `page_number` in hash (`document_id:page_number:chunk_index`) to prevent duplicate IDs across pages within the same document
   - Added ChromaDB telemetry disable and Python 3.14 compatibility workaround to `tests/conftest.py` (the workaround is no longer needed with Python 3.13 but kept for documentation)
+  - **Configuration refactoring (2026-03-08):** `chroma.py` and `scripts/embed_and_store.py` updated to use shared constants from `src/configs/vectorstore_config.py` (see Step 6 deviations for full details)
 
-## Step 6: Retrieval chain
+## ✅ Step 6: Retrieval chain
 - Create `src/vectorstores/retriever.py`
 - `build_retriever(persist_dir, collection_name="philosophes", embeddings=None, k=5, author=None) -> VectorStoreRetriever`
 - Wrap ChromaDB as LangChain retriever; apply author filter at retriever level via `search_kwargs={"filter": {"author": author}}` (ChromaDB metadata filter, not post-retrieval)
@@ -160,16 +161,30 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **Test:** `tests/integration/test_retriever.py` — wire real ChromaDB + FakeEmbeddings end-to-end; embed fixtures then retrieve; verify round-trip
 - **README:** No user-facing command; update pipeline diagram to show retrieval stage
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - Added 7 comprehensive unit tests covering: basic retrieval, author filtering for different authors, retrieval without filter, k parameter limiting, custom collection name, and persist_dir as string
+  - Added 3 integration tests covering: full end-to-end round-trip with metadata preservation, multi-author filtering across full pipeline, and persistence across separate sessions
+  - All tests pass; total of 10 tests vs. suggested "with small fixture DB" approach
+  - Type checking passes via mypy integration test
+  - **Configuration refactoring (2026-03-08):** Extracted shared constants to improve maintainability and observability:
+    - Created `src/configs/common.py` with `DEFAULT_DB_PATH` constant (moved from `loader_configs.py`)
+    - Created `src/configs/vectorstore_config.py` with `COLLECTION_NAME`, `EMBEDDING_MODEL`, and `DEFAULT_K` constants
+    - Updated `retriever.py` to use constants as defaults and added logging before opening ChromaDB collection (logger.info with collection name, path, k, and author filter)
+    - Updated `chroma.py` to use shared constants instead of hardcoded literals
+    - Updated `scripts/embed_and_store.py` to import from new config modules
+    - Added comprehensive test coverage: `tests/unit/test_config_common.py` and `tests/unit/test_config_vectorstore.py`
+    - Updated existing tests to import constants from new locations
+    - Benefits: DRY principle (constants defined once), improved observability (logging), easier maintenance (change values in one place)
 
 ## Step 7: Combined ingestion script
-- **Goal:** Single `scripts/ingest.py` replaces running scrape + embed separately; moved here because the full ingestion pipeline (Steps 3–5) is now complete
-- **Note:** Add `load_documents_from_disk()` function to `src/utils/io.py` (deferred from Step 3) with corresponding tests for load operations and round-trip testing
+- **Goal:** Create a single `scripts/ingest.py` that can be used instead of running scrape + embed scripts separately
+- Keep the two original scripts and their tests so that the two parts of ingestion can be run separately as lower level alternatives
 - Create `scripts/ingest.py`: `ingest_author(config, raw_dir, db_dir, skip_scrape, skip_embed)` function + `main()` with argparse
   - Flags: `--author` (optional, defaults to all registered in `INGEST_CONFIGS`), `--skip-scrape`, `--skip-embed`, `--db`
   - Calls existing `WikisourceLoader`, `save_documents_to_disk`, `load_documents_from_disk`, `chunk_documents`, `embed_and_store`
   - Calls `check_ollama_available()` unless `--skip-embed` (only embedding needs Ollama)
 - **Test:** `tests/unit/test_script_ingest.py` — mock all external deps; test default (scrape+embed), skip-scrape, skip-embed, all-authors, single-author, invalid-author
-- **README:** Replace two-step ingestion instructions with `scripts/ingest.py` as primary command; document all flags; keep individual scripts as lower-level alternatives
+- **README:** Move the two-step ingestion instructions to the bottom of the README document in new section called ## Troubleshooting. In the gap left by that move, add instructions for using the unified `scripts/ingest.py` as primary command; document all flags
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ## Step 8: Voltaire prompt + chat chain

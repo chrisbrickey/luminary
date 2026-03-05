@@ -9,7 +9,9 @@ import logging
 import sys
 from pathlib import Path
 
-from src.configs.loader_configs import DEFAULT_DB_PATH, INGEST_CONFIGS
+from src.configs.common import DEFAULT_DB_PATH
+from src.configs.loader_configs import INGEST_CONFIGS
+from src.configs.vectorstore_config import COLLECTION_NAME
 from src.utils.chunker import chunk_documents
 from src.utils.io import load_documents_from_disk
 from src.utils.ollama_health import check_ollama_available
@@ -68,7 +70,7 @@ def embed_author(author: str, input_base_dir: str, db_path: str) -> int:
     embed_and_store(
         chunks=chunks,
         persist_dir=db_path,
-        collection_name="philosophes"
+        collection_name=COLLECTION_NAME
     )
     logger.info(f"✓ Stored {len(chunks)} chunks in ChromaDB")
 
