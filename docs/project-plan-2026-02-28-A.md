@@ -15,6 +15,10 @@ All design decisions should keep Heroku deployment in mind:
 
 **Design rule:** prefer injectable dependencies (LLM, embeddings, retriever) over hardcoded defaults so local and hosted implementations can be swapped via configuration without touching business logic.
 
+## Python version downgrade
+
+**Note:** The project was initially scaffolded with Python 3.14 (Step 1), but was downgraded to Python 3.13 between Steps 4 and 5 due to a ChromaDB compatibility issue. ChromaDB's internal Pydantic V1 functionality is not compatible with Python 3.14, causing the error: "Core Pydantic V1 functionality isn't compatible with Python 3.14". All references to Python 3.14 in Step 1 are historical; the project now uses Python 3.13.
+
 ## Prerequisites (manual)
 - Install Ollama: https://ollama.ai
 - Pull the LLM model: `ollama pull mistral`
@@ -123,18 +127,30 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - Added pipeline stages overview to README showing Scrape → Chunk → Embed flow
   - Used `langchain_text_splitters` import instead of `langchain.text_splitter`
 
-## Step 5: Embedding + ChromaDB storage
+## ✅ Step 5: Embedding + ChromaDB storage
 - Create new directories: `src/vectorstores/` with `__init__.py`; `tests/unit/vectorstores/`
 - Update `.gitignore`: add `data/chroma_db/`
 - Create `tests/conftest.py`: `FakeEmbeddings(Embeddings)` fixture returning constant 8-dim vectors; disable ChromaDB telemetry via `os.environ.setdefault` before import
-- Create `src/vectorstores/embed_and_store.py`
+- Create `src/vectorstores/chroma.py` (renamed from `embed_and_store.py` for better module naming)
 - `embed_and_store(chunks, persist_dir, collection_name="philosophes", embeddings=None) -> Chroma`:
   - Uses `Chroma.from_documents()` with **`ids=` set to each chunk's `chunk_id`** — idempotent upserts on re-run (improvement over rag-chat-1 which omitted `ids=`, causing duplicates)
   - Accepts injectable embeddings for testing; defaults to `OllamaEmbeddings(model="nomic-embed-text")`
+  - Refactored with private helper functions `_get_embeddings_instance()` and `_extract_and_validate_chunk_ids()` following SRP
 - Create `scripts/embed_and_store.py` — CLI entrypoint: calls `check_ollama_available()`, loads chunks from disk, embeds and stores
-- **Test:** `tests/unit/vectorstores/test_embed_and_store.py` — ingest 2-3 fixture chunks with FakeEmbeddings; verify retrievable by similarity search; verify re-running with same IDs does not create duplicates
-- **README:** Add ingestion step 2 (`scripts/embed_and_store.py`) with command, output location (`data/chroma_db/`); update project structure diagram to add `src/vectorstores/`, `data/chroma_db/`
+- **Test:** `tests/unit/vectorstores/test_chroma.py` (renamed from `test_embed_and_store.py`) — ingest 2-3 fixture chunks with FakeEmbeddings; verify retrievable by similarity search; verify re-running with same IDs does not create duplicates
+- **README:** Add ingestion step 2 (`scripts/embed_and_store.py`) with command, output location (`data/chroma_db/`); update project structure diagram to add `src/vectorstores/`, `data/chroma_db/`; update pipeline diagram to reference `chroma.py`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - Implemented with Python 3.13 instead of 3.14 (see "Python version downgrade" section above)
+  - Module renamed from `embed_and_store.py` to `chroma.py` to eliminate module/function name redundancy and allow room for future ChromaDB utilities
+  - Refactored `embed_and_store()` function with private helper functions `_get_embeddings_instance()` and `_extract_and_validate_chunk_ids()` for better separation of concerns
+  - Test file renamed from `test_embed_and_store.py` to `test_chroma.py` to match module name
+  - Script tests moved to `tests/unit/test_scripts/` directory for better organization
+  - Added `load_documents_from_disk()` function to `src/utils/io.py` (originally planned for Step 7) with comprehensive tests for load operations
+  - Made `--author` flag optional in `scripts/embed_and_store.py` (defaults to all authors), consistent with `scripts/scrape_wikisource.py`
+  - Test suite includes 6 comprehensive tests for vectorstore module + 12 tests for script + 7 tests for I/O operations (vs. suggested "2-3 fixture chunks"): basic functionality, idempotent upserts, custom collection name, persist_dir as string, missing chunk_id validation, complete metadata preservation, and all CLI argument combinations
+  - Fixed chunk ID generation to include `page_number` in hash (`document_id:page_number:chunk_index`) to prevent duplicate IDs across pages within the same document
+  - Added ChromaDB telemetry disable and Python 3.14 compatibility workaround to `tests/conftest.py` (the workaround is no longer needed with Python 3.13 but kept for documentation)
 
 ## Step 6: Retrieval chain
 - Create `src/vectorstores/retriever.py`
@@ -286,7 +302,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 - Create `src/vectorstores/chroma_client.py`: `build_chroma_vectorstore(config, collection_name, embeddings) -> Chroma`
   - Embedded: `Chroma(persist_directory=..., ...)`
   - Server: `Chroma(client=chromadb.HttpClient(host, port), ...)`
-- Modify `src/vectorstores/embed_and_store.py` and `src/vectorstores/retriever.py`: add optional `db_config: ChromaDBConfig | None` param; when provided, use factory
+- Modify `src/vectorstores/chroma.py` and `src/vectorstores/retriever.py`: add optional `db_config: ChromaDBConfig | None` param; when provided, use factory
 - Create `tests/unit/configs/`
 - **Test:** `tests/unit/configs/test_db_config.py` — default mode, validation, env var parsing
 - **Test:** `tests/unit/vectorstores/test_chroma_client.py` — embedded uses persist_directory, server uses HttpClient (mock HttpClient)

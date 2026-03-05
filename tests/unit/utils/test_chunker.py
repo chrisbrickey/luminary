@@ -208,24 +208,30 @@ class TestChunkDocuments:
 class TestGenerateChunkId:
     def test_chunk_id_format(self) -> None:
         """Verify chunk_id is 12-character hex string."""
-        chunk_id = _generate_chunk_id("test-doc", 0)
+        chunk_id = _generate_chunk_id("test-doc", 1, 0)
         assert len(chunk_id) == 12
         assert all(c in "0123456789abcdef" for c in chunk_id)
 
     def test_chunk_id_deterministic(self) -> None:
         """Verify same inputs produce same chunk_id."""
-        chunk_id_1 = _generate_chunk_id("doc-001", 5)
-        chunk_id_2 = _generate_chunk_id("doc-001", 5)
+        chunk_id_1 = _generate_chunk_id("doc-001", 1, 5)
+        chunk_id_2 = _generate_chunk_id("doc-001", 1, 5)
         assert chunk_id_1 == chunk_id_2
 
     def test_chunk_id_unique_per_index(self) -> None:
         """Verify different chunk indices produce different IDs."""
-        chunk_id_0 = _generate_chunk_id("doc-001", 0)
-        chunk_id_1 = _generate_chunk_id("doc-001", 1)
+        chunk_id_0 = _generate_chunk_id("doc-001", 1, 0)
+        chunk_id_1 = _generate_chunk_id("doc-001", 1, 1)
         assert chunk_id_0 != chunk_id_1
 
     def test_chunk_id_unique_per_document(self) -> None:
         """Verify different document_ids produce different IDs."""
-        chunk_id_a = _generate_chunk_id("doc-001", 0)
-        chunk_id_b = _generate_chunk_id("doc-002", 0)
+        chunk_id_a = _generate_chunk_id("doc-001", 1, 0)
+        chunk_id_b = _generate_chunk_id("doc-002", 1, 0)
         assert chunk_id_a != chunk_id_b
+
+    def test_chunk_id_unique_per_page(self) -> None:
+        """Verify different page numbers produce different IDs."""
+        chunk_id_page1 = _generate_chunk_id("doc-001", 1, 0)
+        chunk_id_page2 = _generate_chunk_id("doc-001", 2, 0)
+        assert chunk_id_page1 != chunk_id_page2

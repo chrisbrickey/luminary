@@ -32,7 +32,7 @@ def chunk_documents(
         - Chunks are split using RecursiveCharacterTextSplitter with
           separators optimized for French prose
         - Each chunk gets a deterministic chunk_id (SHA256 hash of
-          document_id:chunk_index, truncated to 12 chars)
+          document_id:page_number:chunk_index, truncated to 12 chars)
         - All chunks are validated against ChunkInfo schema before return
         - Empty documents produce no chunks
     """
@@ -58,7 +58,8 @@ def chunk_documents(
         for chunk_index, chunk in enumerate(doc_chunks):
             # Generate deterministic chunk ID
             document_id = chunk.metadata.get("document_id", "")
-            chunk_id = _generate_chunk_id(document_id, chunk_index)
+            page_number = chunk.metadata.get("page_number", 0)
+            chunk_id = _generate_chunk_id(document_id, page_number, chunk_index)
 
             # Add chunk-specific metadata while preserving all original metadata
             chunk.metadata["chunk_id"] = chunk_id
@@ -72,17 +73,18 @@ def chunk_documents(
     return all_chunks
 
 
-def _generate_chunk_id(document_id: str, chunk_index: int) -> str:
-    """Generate deterministic chunk ID from document_id and chunk_index.
+def _generate_chunk_id(document_id: str, page_number: int, chunk_index: int) -> str:
+    """Generate deterministic chunk ID from document_id, page_number, and chunk_index.
 
     Args:
-        document_id: Unique identifier for the source document
-        chunk_index: 0-indexed position of chunk within document
+        document_id: Unique identifier for the source document collection
+        page_number: Page number within the document
+        chunk_index: 0-indexed position of chunk within the page
 
     Returns:
-        12-character truncated SHA256 hash of "document_id:chunk_index"
+        12-character truncated SHA256 hash of "document_id:page_number:chunk_index"
     """
-    composite_key = f"{document_id}:{chunk_index}"
+    composite_key = f"{document_id}:{page_number}:{chunk_index}"
     hash_digest = hashlib.sha256(composite_key.encode("utf-8")).hexdigest()
     return hash_digest[:12]
 
