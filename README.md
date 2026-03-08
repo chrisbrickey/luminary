@@ -34,7 +34,10 @@ QUERY (real-time via user prompt)
   raw string             prompt from user in their natural language
       │
       ▼
- (placeholder, under development)
+ retriever.py            embeds prompt, performs similarity search on ChromaDB, retrieves top-k chunks
+      │
+      ▼
+ (chain and prompt assembly, under development)
 
 
 ## Project Structure
