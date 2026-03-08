@@ -18,6 +18,7 @@ A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges
 
 Two distinct phases, each with its own entry point:
 
+```
 INGESTION (one-time / on-demand via scripts)
 ─────────────────────────────────────────────────────────────────────
  *_loader.py             fetches source data, strips formatting, returns LangChain Documents
@@ -26,7 +27,7 @@ INGESTION (one-time / on-demand via scripts)
  chunker.py              splits Documents into overlapping chunks and adds metadata
       │
       ▼
- chroma.py               embeds chunks and persists in ChromaDB
+ chroma.py               embeds chunks and persists in a vector database
 
 
 QUERY (real-time via user prompt)
@@ -38,7 +39,7 @@ QUERY (real-time via user prompt)
       │
       ▼
  (chain and prompt assembly, under development)
-
+```
 
 ## Project Structure
 
@@ -114,14 +115,51 @@ uv run mypy
 ```
 
 ### 5. Run the ingestion pipeline
-Initially, this will be controlled by two, sequential scripts to be run in order. Each is idempotent and will overwrite previous output.
-Later, I will endeavor to combine these into one script.
+Ingestion is automated with scripts. Ingestion components are designed to be idempotent so re-running scripts will update existing data rather than creating duplicates.
+
+The unified `ingest.py` script runs the entire pipeline:
+```
+# run everything - all parts of ingestion pipeline (scrape + embed) for all sources and all authors
+uv run python scripts/ingest.py
+```
+_If you only need to run a portion of the pipeline, see the next section for lower-level scripts._
+
+**What it does:**
+1. **Scrape phase:** Fetches source data from online sources, parses HTML, and saves documents as JSON files to `data/raw/<document_id>/`
+2. **Embed phase:** Loads documents from storage, splits them into overlapping chunks with added metadata, embeds the chunks, and stores in a vector database at `data/chroma_db/`
+
+**Options:**
+- `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
+- `--raw-dir` (optional): Base directory for scraped documents (default: `data/raw`)
+- `--db` (optional): ChromaDB persist directory (default: `data/chroma_db`)
+- `--skip-scrape` (optional): Skip scraping phase and use existing scraped documents
+- `--skip-embed` (optional): Skip embedding phase (only scrape documents)
+
+**Examples using options:**
+```
+# Run all parts of ingestion pipeline for ony one author
+uv run python scripts/ingest.py --author voltaire
+
+# Run ony the scraping portion (skip embedding)
+uv run python scripts/ingest.py --skip-embed
+
+# Run only the embedding portion (uses existing scraped documents)
+uv run python scripts/ingest.py --skip-scrape
+```
+
+### Running ingestion steps separately
+
+If you need to run scraping and embedding as separate steps (for debugging or development), use the individual scripts:
 
 **Script 1 of 2 — Scrape:** fetches data from designated 3rd party sources, parses the data, formulates LangChain documents, and persists json files
 
 ```
 uv run python scripts/scrape_wikisource.py
+
+# scrape only documents tagged with author: Voltaire
+uv run python scripts/scrape_wikisource.py --author voltaire
 ```
+_Output: data/raw/voltaire_lettres_philosophiques-1734/page_01.json, page_02.json, ..._
 
 **Options:**
 - `--author` (optional): Author key to scrape. Defaults to all configured authors. Currently available: `voltaire`
@@ -132,33 +170,22 @@ Documents are saved to `data/raw/<document_id>/` as `page_NN.json` files contain
 - `page_content`: The extracted text content
 - `metadata`: Document metadata including `document_id`, `document_title`, `author`, `source` URL, and `page_number`
 
-**Example using options:**
-```
-# scrape only documents tagged with author: Voltaire
-uv run python scripts/scrape_wikisource.py --author voltaire
-```
-_Output: data/raw/voltaire_lettres_philosophiques-1734/page_01.json, page_02.json, ..._
-
-**Script 2 of 2 — Embed and Store:** loads JSON files from disk that were persisted in Step 1, 
-splits each letter into overlapping chunks, 
-converts each chunk into a vector using Ollama nomic-embed-text (a small neural network that captures the meaning of text as a list of numbers), 
-and stores both the vectors and the original text in ChromaDB at data/chroma_db/. 
+**Script 2 of 2 — Embed and Store:** loads JSON files from disk that were persisted in Step 1,
+splits each letter into overlapping chunks,
+converts each chunk into a vector using Ollama nomic-embed-text (a small neural network that captures the meaning of text as a list of numbers),
+and stores both the vectors and the original text in ChromaDB at data/chroma_db/.
 Once stored, chunks can be retrieved by semantic similarity — the basis for RAG.
 
 ```
 uv run python scripts/embed_and_store.py
-```
 
+# embed and store only documentes tagged with author: Voltaire
+uv run python scripts/embed_and_store.py --author voltaire
+```
 **Options:**
 - `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
 - `--input-dir` (optional): Base directory containing scraped documents (default: `data/raw`)
 - `--db` (optional): ChromaDB persist directory (default: `data/chroma_db`)
 
 **Output location:**
-Embeddings are stored in the ChromaDB vector database at `data/chroma_db/` with collection name "philosophes". The script uses idempotent chunk IDs, so re-running will update existing embeddings rather than creating duplicates.
-
-**Example using options:**
-```
-# embed and store only Voltaire documents
-uv run python scripts/embed_and_store.py --author voltaire
-```
+Embeddings are stored in the ChromaDB vector database at `data/chroma_db/` with collection name "philosophes".

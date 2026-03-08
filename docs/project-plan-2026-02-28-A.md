@@ -176,16 +176,25 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
     - Updated existing tests to import constants from new locations
     - Benefits: DRY principle (constants defined once), improved observability (logging), easier maintenance (change values in one place)
 
-## Step 7: Combined ingestion script
+## ✅ Step 7: Combined ingestion script
 - **Goal:** Create a single `scripts/ingest.py` that can be used instead of running scrape + embed scripts separately
 - Keep the two original scripts and their tests so that the two parts of ingestion can be run separately as lower level alternatives
-- Create `scripts/ingest.py`: `ingest_author(config, raw_dir, db_dir, skip_scrape, skip_embed)` function + `main()` with argparse
-  - Flags: `--author` (optional, defaults to all registered in `INGEST_CONFIGS`), `--skip-scrape`, `--skip-embed`, `--db`
-  - Calls existing `WikisourceLoader`, `save_documents_to_disk`, `load_documents_from_disk`, `chunk_documents`, `embed_and_store`
+- Create `scripts/ingest.py`: `ingest_author(author, raw_dir, db_dir, skip_scrape, skip_embed) -> None` function + `main()` with argparse
+  - Flags: `--author` (optional, defaults to all registered in `INGEST_CONFIGS`), `--skip-scrape`, `--skip-embed`, `--db`, `--raw-dir`
+  - Calls existing `scrape_wikisource.py` and `embed_and_store.py` scripts via `subprocess.run()` (maintains script separation)
   - Calls `check_ollama_available()` unless `--skip-embed` (only embedding needs Ollama)
-- **Test:** `tests/unit/test_script_ingest.py` — mock all external deps; test default (scrape+embed), skip-scrape, skip-embed, all-authors, single-author, invalid-author
-- **README:** Move the two-step ingestion instructions to the bottom of the README document in new section called ## Troubleshooting. In the gap left by that move, add instructions for using the unified `scripts/ingest.py` as primary command; document all flags
-- **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Test:** `tests/unit/test_scripts/test_script_ingest.py` — mock all external deps; test default (scrape+embed), skip-scrape, skip-embed, all-authors, single-author, invalid-author, both-skip-flags error, custom directories, ollama availability checks, file-not-found errors, general exceptions (17 tests total covering main() and ingest_author())
+- **README:** Moved two-step ingestion instructions to new ## Troubleshooting section at bottom. In section 5 (Run the ingestion pipeline), added unified `scripts/ingest.py` as primary command with comprehensive documentation of all flags and usage examples
+- **Deviations from plan:**
+  - `ingest_author()` signature uses positional parameters `author, raw_dir, db_dir, skip_scrape, skip_embed` instead of `config, raw_dir, db_dir, skip_scrape, skip_embed` — directly takes author string and looks up config internally for cleaner interface
+  - Added `--raw-dir` flag for consistency with individual scripts (not in original plan)
+  - **Implementation approach:** Uses `subprocess.run()` to call the existing `scrape_wikisource.py` and `embed_and_store.py` scripts rather than importing their functions — this maintains complete separation between scripts and avoids the need to make scripts a Python package
+  - `ingest_author()` returns `None` instead of `tuple[int, int]` since subprocess calls don't return counts
+  - Final summary simplified to show database location only (no document/chunk counts)
+  - Added validation to prevent both `--skip-scrape` and `--skip-embed` flags being used together
+  - Added `subprocess.CalledProcessError` handling for script execution failures
+  - Added 17 comprehensive tests vs. suggested 6 test scenarios, covering both main() and ingest_author() functions — tests mock `subprocess.run()` and verify correct command arguments
+  - Test organization follows existing pattern in `tests/unit/test_scripts/`
 
 ## Step 8: Voltaire prompt + chat chain
 - Create new directories with `__init__.py`: `src/prompts/`, `src/chains/`; create `tests/unit/chains/`
