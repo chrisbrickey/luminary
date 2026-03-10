@@ -14,9 +14,26 @@ A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges
 | pytest + pytest-cov | test runner and coverage               |
 | mypy | static type checking                   |
 
-## Pipeline Overview
+## Architecture
 
-Two distinct phases, each with its own entry point:
+### Overview
+
+Luminary will be organized into four pipelines. The ingestion and query pipelines are complete. 
+Evaluation harness and multi-agent debate are under development.
+
+```
+I. INGESTION PIPELINE
+──────────────────────────────────────────────────────────────
+  load    →    persist   →   chunk    →    embed  →  vector DB
+(web scrape)  (JSON files) (overlapping)  (vectors)  (persist)
+
+
+II. QUERY PIPELINE
+──────────────────────────────────────────────────────────────
+user question → retriever → format context → prompt LLM with agent personas → respond
+```
+
+## Pipelines in Detail
 
 ```
 INGESTION (one-time / on-demand via scripts)
@@ -38,10 +55,13 @@ QUERY (real-time via user prompt)
  retriever.py            embeds prompt, performs similarity search on ChromaDB, retrieves top-k chunks
       │
       ▼
- (chain and prompt assembly, under development)
+ chat_chain.py           formats retrieved chunks, populates the prompt template, calls an LLM, returns structured response
+      │
+      ▼
+ ChatResponse            validated and structured response
 ```
 
-## Project Structure
+### Project Structure
 
 ```
 luminary/
@@ -57,7 +77,9 @@ luminary/
 │   ├── schemas.py           # shared Pydantic data models to validate data structures
 │   │
 │   ├── configs/             # configurations shared across modules
+│   ├── chains/              # RAG chain orchestration with retrieval + LLM
 │   ├── document_loaders/    # fetch and parse data, returning standardised LangChain Documents
+│   ├── prompts/             # author-specific persona prompts (e.g., Voltaire, Gouges)
 │   ├── utils/               # shared utility functions
 │   └── vectorstores/        # ingestion-time storage and query-time retrieval operations
 │
