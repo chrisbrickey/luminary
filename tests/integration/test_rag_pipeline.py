@@ -383,3 +383,86 @@ def test_rag_chain_handles_missing_metadata(
 
     # Verify language
     assert response.language == "en"
+
+
+def test_rag_chain_does_not_expose_chunk_ids_to_llm(
+    tmp_path: Path, make_test_document
+) -> None:
+    """Test that chunk IDs never reach the LLM in the full RAG pipeline.
+
+    This integration test verifies:
+    1. Documents are stored with chunk_id metadata
+    2. Chunk IDs are available in the response object for --show-chunks
+    3. But chunk IDs are NOT included in the context sent to the LLM
+    4. And chunk IDs are NOT in the prompt instructions
+
+    Chunk IDs are internal metadata for debugging only.
+    """
+    from unittest.mock import Mock
+
+    db_path = tmp_path / "chroma"
+    embeddings = FakeEmbeddings()
+
+    # Create documents with known chunk IDs
+    chunks = [
+        make_test_document(
+            content="First passage about philosophy.",
+            chunk_id="secret_id_001",
+            chunk_index=0,
+            doc_id="test-doc",
+            title="Test Document",
+            page_number=1,
+        ),
+        make_test_document(
+            content="Second passage about philosophy.",
+            chunk_id="secret_id_002",
+            chunk_index=1,
+            doc_id="test-doc",
+            title="Test Document",
+            page_number=2,
+        ),
+    ]
+
+    # Embed and store
+    embed_and_store(chunks=chunks, persist_dir=db_path, embeddings=embeddings)
+
+    # Build retriever
+    retriever = build_retriever(
+        persist_dir=db_path, embeddings=embeddings, k=5, author="voltaire"
+    )
+
+    # Build chain with mock LLM to inspect what it receives
+    mock_llm = Mock()
+    mock_llm.invoke.return_value = Mock(content="Mock response")
+
+    chain = build_chain(
+        retriever=retriever,
+        llm=mock_llm,
+        prompt=build_voltaire_prompt(),
+        default_language="fr",
+        detect_user_language=False,
+    )
+
+    # Invoke chain
+    response = chain.invoke("test question")
+
+    # VERIFY: Chunk IDs ARE available in the response metadata (for --show-chunks)
+    assert "secret_id_001" in response.retrieved_passage_ids
+    assert "secret_id_002" in response.retrieved_passage_ids
+
+    # VERIFY: Chunk IDs are NOT in the LLM input
+    llm_call_args = mock_llm.invoke.call_args[0][0]
+    llm_input_str = str(llm_call_args)
+
+    # Should NOT contain chunk IDs
+    assert "secret_id_001" not in llm_input_str
+    assert "secret_id_002" not in llm_input_str
+    assert "chunk_id:" not in llm_input_str
+
+    # Should still contain proper source formatting (without chunk IDs)
+    assert "[source: Test Document, page 1]" in llm_input_str
+    assert "[source: Test Document, page 2]" in llm_input_str
+
+    # Should contain the actual content
+    assert "First passage about philosophy." in llm_input_str
+    assert "Second passage about philosophy." in llm_input_str

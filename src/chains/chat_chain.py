@@ -135,7 +135,7 @@ def build_chain(
 def _format_docs_with_titles(docs: list[Document]) -> str:
     """Format documents with source labels.
 
-    Each document is labeled with: [source: {title}, page {page_number} | chunk_id: {id}]
+    Each document is labeled with: [source: {title}, page {page_number}]
 
     Args:
         docs: List of retrieved documents
@@ -149,7 +149,6 @@ def _format_docs_with_titles(docs: list[Document]) -> str:
     formatted_chunks = []
     for doc in docs:
         metadata = doc.metadata
-        chunk_id = metadata.get("chunk_id", "unknown")
 
         # Build source label
         document_title = metadata.get("document_title")
@@ -162,9 +161,9 @@ def _format_docs_with_titles(docs: list[Document]) -> str:
         else:
             source_label = metadata.get("source", "unknown")
 
-        # Format: [source: title, page N | chunk_id: xxx]\ncontent
+        # Format: [source: title, page N]\ncontent
         formatted_chunks.append(
-            f"[source: {source_label} | chunk_id: {chunk_id}]\n{doc.page_content}"
+            f"[source: {source_label}]\n{doc.page_content}"
         )
 
     return "\n\n".join(formatted_chunks)
