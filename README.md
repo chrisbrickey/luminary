@@ -1,6 +1,23 @@
 # Luminary
 
-A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts.
+A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts with sources cited.
+
+## Chat Features
+
+- **Grounded citations:** All responses include source references with page numbers.
+- **Deduplicated sources:** The sources footer shows each unique source only once.
+- **Bilingual support (under development):** From the user's question, the app detects the language (French/English) and responds accordingly.
+
+### Example Questions
+Ask Voltaire anything grounded in his writings. Here are some questions to get you started:
+
+| English | Français |
+| --- | --- |
+| In your view, what is the nature of tolerance, and why is it essential for human society? | Selon vous, quelle est la nature de la tolérance, et pourquoi est‑elle essentielle à la vie en société ? |
+| How do you reconcile the pursuit of personal happiness with the moral duty to others? | Comment conciliez‑vous la recherche du bonheur personnel avec le devoir moral que nous avons envers autrui ? |
+| What is the proper role of the philosopher in challenging injustice? | Quel est, selon vous, le rôle propre du philosophe lorsqu'il s'agit de dénoncer et de combattre l'injustice ? |
+
+
 
 ## Technology
 
@@ -211,3 +228,36 @@ uv run python scripts/embed_and_store.py --author voltaire
 
 **Output location:**
 Embeddings are stored in the ChromaDB vector database at `data/chroma_db/` with collection name "philosophes".
+
+### 6. Start chatting with Enlightenment Philosophes
+
+#### Prerequisites
+- Ollama must be running.
+- Both models must be pulled: nomic-embed-text (for embedding queries), mistral (for LLM responses).
+- ChromaDB must be populated by the ingestion script.
+
+
+#### Chat via CLI
+This script launches an interactive chat session where you can ask questions and receive grounded responses from the selected philosopher.
+
+```
+# chat with default author (Voltaire as of 2026)
+uv run python scripts/chat.py
+
+# specify the author
+uv run python scripts/chat.py --author voltaire
+
+# show raw retrieved chunks for debugging
+uv run python scripts/chat.py --show-chunks
+```
+
+To exit: Type `quit` or press Ctrl+C.
+
+**Available flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--db` | Path to ChromaDB directory | `data/chroma_db` |
+| `--author` | Author to query (e.g., `voltaire`) | `voltaire` |
+| `--show-chunks` | Display retrieved chunks with IDs and contexts | `False` |
+| `--verbose` | Enable verbose logging | `False` |

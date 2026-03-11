@@ -151,7 +151,7 @@ class TestBuildChain:
     def test_context_formatting(
         self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
     ) -> None:
-        """Should format context with source labels and chunk IDs for all documents."""
+        """Should format context with source labels but NOT chunk IDs."""
         docs = [sample_docs["full"], sample_docs["no_page"]]
         mock_llm = mock_llm_with_response()
 
@@ -166,9 +166,41 @@ class TestBuildChain:
         # Inspect what was passed to the LLM
         llm_call_args = mock_llm.invoke.call_args[0][0]
         context_str = str(llm_call_args)
-        assert "[source: Lettres philosophiques, page 5 | chunk_id: abc123]" in context_str
-        assert "[source: Philosophical Letters | chunk_id: def456]" in context_str
+
+        # Should include source labels without chunk IDs
+        assert "[source: Lettres philosophiques, page 5]" in context_str
+        assert "[source: Philosophical Letters]" in context_str
         assert "Text about tolerance" in context_str
+
+        # Should NOT include chunk IDs in context (they're internal metadata only)
+        assert "chunk_id: abc123" not in context_str
+        assert "chunk_id: def456" not in context_str
+
+    def test_prompt_does_not_instruct_chunk_id_citations(
+        self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should NOT instruct LLM to cite chunk IDs in responses."""
+        docs = [sample_docs["full"]]
+        mock_llm = mock_llm_with_response()
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs(docs),
+            prompt=build_voltaire_prompt(),
+            llm=mock_llm,
+        )
+
+        chain.invoke(SAMPLE_QUESTION)
+
+        # Inspect the prompt template passed to the LLM
+        llm_call_args = mock_llm.invoke.call_args[0][0]
+        prompt_str = str(llm_call_args)
+
+        # Prompt should NOT instruct LLM to include chunk_id in citations
+        assert "chunk_id: xxx" not in prompt_str
+        assert "| chunk_id:" not in prompt_str
+
+        # Prompt should still instruct proper citation format (without chunk_id)
+        assert "[source:" in prompt_str
 
     def test_empty_retrieval(self, mock_retriever_with_docs, mock_llm_with_response) -> None:
         """Should handle empty retrieval gracefully."""

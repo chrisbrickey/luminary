@@ -175,6 +175,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
     - Added comprehensive test coverage: `tests/unit/test_config_common.py` and `tests/unit/test_config_vectorstore.py`
     - Updated existing tests to import constants from new locations
     - Benefits: DRY principle (constants defined once), improved observability (logging), easier maintenance (change values in one place)
+  - **Chunk ID isolation (2026-03-11):** Added integration test `test_rag_chain_does_not_expose_chunk_ids_to_llm` in `tests/integration/test_rag_pipeline.py` to verify chunk IDs are preserved in metadata but never sent to the LLM in the full pipeline. Integration test count increased from 5 to 6; all 184 tests pass.
 
 ## ✅ Step 7: Combined ingestion script
 - **Goal:** Create a single `scripts/ingest.py` that can be used instead of running scrape + embed scripts separately
@@ -205,7 +206,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - `_AUTHOR_CONFIGS: dict[str, tuple[Callable[[], ChatPromptTemplate], str]]` — extensible registry
   - `build_default_chain(persist_dir, author=DEFAULT_AUTHOR) -> Runnable[str, ChatResponse]` — production entry point; validates author against registry; uses `ChatOllama(model="mistral")` as default LLM
   - `build_chat_chain(retriever, llm=None, prompt=None, default_language="fr", detect_user_language=True) -> Runnable[str, ChatResponse]` — injectable helper
-  - Internal `_run(question) -> ChatResponse`: retrieves top-k docs, formats context with `[source: {title}, page {page_number} | chunk_id: {id}]` labels (page-specific from the start), detects question language, invokes LLM, returns structured ChatResponse
+  - Internal `_run(question) -> ChatResponse`: retrieves top-k docs, formats context with `[source: {title}, page {page_number}]` labels (page-specific from the start), detects question language, invokes LLM, returns structured ChatResponse
   - Helpers: `_format_docs_with_titles()`, `_extract_chunk_ids()`, `_extract_source_titles()` (combines document_title + page_number; fallback: title-only → source URL → "unknown")
 - **Test:** `tests/unit/chains/test_chat_chain.py` — mock LLM and retriever; assert chain wires retrieval + prompt correctly; test `_extract_source_titles()` with title+page, title-only, fallback to source URL, missing metadata; test empty retrieval; test unknown author raises ValueError; test language detection integration
 - **Test:** `tests/integration/test_chat_chain_integration.py` — wire small fixture ChromaDB (FakeEmbeddings) → real retriever → real prompt → FakeChatModel; assert full chain returns ChatResponse with correct retrieved_source_titles and non-empty text
@@ -219,13 +220,27 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - **Post-implementation refactoring:**
     - Moved `DEFAULT_AUTHOR = "voltaire"` from `chat_chain.py` to `src/configs/common.py` for consistency with Step 6 config pattern; added 2 tests; all future CLI scripts (Steps 9, 15) will import this constant for their argparse defaults
     - **Unified API:** Merged `build_default_chain()` and `build_chat_chain()` into single `build_chain()` method. This method takes all parameters with sensible defaults, supporting both production use (`build_chain()` or `build_chain(author="gouges")`) and testing use (`build_chain(retriever=mock, llm=mock, prompt=mock)`). Eliminates API confusion and reduces code duplication. Updated all 25 test call sites. Added 1 new test for injection mode. All 154 tests pass. Single public API is clearer and more maintainable.
+    - **Chunk ID isolation (2026-03-11):** Removed chunk IDs from LLM-facing context and prompt instructions. Chunk IDs are internal metadata for debugging (visible only with `--show-chunks` flag) and should never be sent to the LLM or appear in responses. Changes: (1) Updated `src/prompts/voltaire.py` to remove `| chunk_id: xxx` from citation format instruction, (2) Updated `src/chains/chat_chain.py::_format_docs_with_titles()` to format context as `[source: {title}, page {page}]` without chunk IDs, (3) Added unit test `test_prompt_does_not_instruct_chunk_id_citations` to verify prompt doesn't instruct chunk ID citations, (4) Updated existing `test_context_formatting` to assert chunk IDs are NOT in LLM input, (5) Added integration test `test_rag_chain_does_not_expose_chunk_ids_to_llm` to verify end-to-end pipeline isolation. All 184 tests pass.
 
-## Step 9: Chat CLI script
+## ✅ Step 9: Chat CLI script
 - Create `scripts/chat.py` — interactive CLI chat loop; flags: `--db`, `--author`, `--show-chunks`, `--verbose`; calls `check_ollama_available()`; prints deduplicated "Sources:" footer (with page numbers); exits on `quit`, Ctrl+C, EOFError
 - **Important:** Import and use `DEFAULT_AUTHOR` from `src.configs.common` as the default value for `--author` argparse argument (consistency with `build_default_chain`)
-- **Test:** `tests/unit/test_script_chat.py` — mock `build_default_chain` and `input()`; assert CLI flags forwarded, chain invoked per question, source footer always printed, chunks only with `--show-chunks`, all exit paths
+- **Test:** `tests/unit/test_scripts/test_script_chat.py` — mock `build_chain` and `input()`; assert CLI flags forwarded, chain invoked per question, source footer always printed, chunks only with `--show-chunks`, all exit paths
 - **README:** Add CLI chat section: `scripts/chat.py` command, all flags table; add Example Usage section with French and English chat examples
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - `DEFAULT_AUTHOR` is imported from `src.configs.authors` (not `src.configs.common` as stated in plan) — this matches the actual codebase structure from Step 8
+  - Created comprehensive test suite with 28 tests (vs. suggested basic mocking) covering:
+    - Helper functions: `deduplicate_sources()`, `format_sources_footer()`, `format_chunks_output()` (7 tests)
+    - Interactive chat loop: `run_interactive_chat()` (14 tests) — all flags, exit paths, error handling, multiple questions
+    - Main function: `main()` (7 tests) — argument parsing and forwarding
+  - All tests use proper mocking via `@patch` decorators and assert on behavior, not implementation
+  - Logging tests use `caplog` fixture instead of `capsys` for proper log capture
+  - Script includes helper functions for formatting output (following SRP)
+  - Enhanced error handling with try/except around chain invocation to allow continuation after errors
+  - Verbose logging includes debug messages for chain invocation and initialization steps
+  - All 178 tests pass (including existing tests from previous steps)
+  - **Chunk ID isolation (2026-03-11):** Added test `test_chunk_ids_not_in_response_output` to verify that chunk IDs never appear in the main chat output (they should only appear in the `--show-chunks` section). This test ensures chunk IDs remain internal debugging metadata and don't leak into user-facing responses. Test count increased from 28 to 29; all 184 tests pass.
 
 ## Step 10: Web UI
 - Add dependency: `uv add --optional ui streamlit`

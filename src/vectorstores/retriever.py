@@ -44,7 +44,7 @@ def build_retriever(
     if embeddings is None:
         embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
 
-    logger.info(
+    logger.debug(
         "Opening ChromaDB collection '%s' at %s (k=%d, author=%r)",
         collection_name,
         persist_dir,
