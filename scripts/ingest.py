@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.utils.ollama_health import check_ollama_available
 
@@ -151,8 +151,8 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--raw-dir",
         type=str,
-        default="data/raw",
-        help="Base directory for scraped documents (default: data/raw)"
+        default=str(DEFAULT_RAW_DIR),
+        help=f"Base directory for scraped documents (default: {DEFAULT_RAW_DIR})"
     )
     parser.add_argument(
         "--db",

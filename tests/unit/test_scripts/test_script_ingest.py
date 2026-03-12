@@ -6,16 +6,47 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
+from src.configs.loader_configs import INGEST_CONFIGS
+
 # Test constants
 TEST_AUTHOR = "voltaire"
 INVALID_AUTHOR = "nonexistent_author"
-TEST_RAW_DIR = "data/raw"
-TEST_DB_PATH = "data/chroma_db"
-ALL_AUTHORS = ["voltaire"]  # List of all authors in INGEST_CONFIGS
+
+# Test data for helper function tests (not testing defaults)
+TEST_RAW_DIR = "test/raw"
+TEST_DB_PATH = "test/db"
 
 
 class TestIngestMain:
     """Test main() function of ingest script."""
+
+    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.ingest_author")
+    def test_default_arguments(
+        self,
+        mock_ingest: MagicMock,
+        mock_ollama: MagicMock,
+    ) -> None:
+        """Test main() with default arguments."""
+        mock_ollama.return_value = None
+
+        with patch("sys.argv", ["ingest.py"]):
+            from scripts.ingest import main
+            main()
+
+        # Verify Ollama check was called
+        mock_ollama.assert_called_once()
+
+        # Verify ingest_author called for all authors (since default author is None)
+        assert mock_ingest.call_count == len(INGEST_CONFIGS)
+
+        # Verify default directories used
+        call_kwargs = mock_ingest.call_args[1]
+        assert call_kwargs["raw_dir"] == str(DEFAULT_RAW_DIR)
+        assert call_kwargs["db_dir"] == str(DEFAULT_DB_PATH)
+        assert call_kwargs["skip_scrape"] is False
+        assert call_kwargs["skip_embed"] is False
 
     @patch("scripts.ingest.check_ollama_available")
     @patch("scripts.ingest.subprocess.run")
@@ -38,22 +69,22 @@ class TestIngestMain:
         # Verify both scripts were called
         assert mock_run.call_count == 2
 
-        # Verify scrape script called
+        # Verify scrape script called with default paths
         scrape_call = mock_run.call_args_list[0]
         assert scrape_call[0][0] == [
             "uv", "run", "python", "scripts/scrape_wikisource.py",
             "--author", TEST_AUTHOR,
-            "--output-dir", TEST_RAW_DIR
+            "--output-dir", str(DEFAULT_RAW_DIR)
         ]
         assert scrape_call[1]["check"] is True
 
-        # Verify embed script called
+        # Verify embed script called with default paths
         embed_call = mock_run.call_args_list[1]
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", TEST_RAW_DIR,
-            "--db", TEST_DB_PATH
+            "--input-dir", str(DEFAULT_RAW_DIR),
+            "--db", str(DEFAULT_DB_PATH)
         ]
         assert embed_call[1]["check"] is True
 
@@ -75,14 +106,14 @@ class TestIngestMain:
         # Verify Ollama check was called (embed needs it)
         mock_ollama.assert_called_once()
 
-        # Verify only embed script was called
+        # Verify only embed script was called with default paths
         mock_run.assert_called_once()
         embed_call = mock_run.call_args_list[0]
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", TEST_RAW_DIR,
-            "--db", TEST_DB_PATH
+            "--input-dir", str(DEFAULT_RAW_DIR),
+            "--db", str(DEFAULT_DB_PATH)
         ]
 
     @patch("scripts.ingest.subprocess.run")
@@ -97,13 +128,13 @@ class TestIngestMain:
             from scripts.ingest import main
             main()
 
-        # Verify only scrape script was called
+        # Verify only scrape script was called with default paths
         mock_run.assert_called_once()
         scrape_call = mock_run.call_args_list[0]
         assert scrape_call[0][0] == [
             "uv", "run", "python", "scripts/scrape_wikisource.py",
             "--author", TEST_AUTHOR,
-            "--output-dir", TEST_RAW_DIR
+            "--output-dir", str(DEFAULT_RAW_DIR)
         ]
 
     @patch("scripts.ingest.check_ollama_available")
@@ -125,7 +156,7 @@ class TestIngestMain:
         mock_ollama.assert_called_once()
 
         # Should call scripts twice per author (scrape + embed)
-        assert mock_run.call_count == len(ALL_AUTHORS) * 2
+        assert mock_run.call_count == len(INGEST_CONFIGS) * 2
 
     @patch("scripts.ingest.check_ollama_available")
     @patch("scripts.ingest.subprocess.run")

@@ -9,6 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
+from src.configs.common import DEFAULT_RAW_DIR
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.document_loaders.wikisource_loader import WikisourceLoader
 from src.utils.io import save_documents_to_disk
@@ -82,8 +83,8 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="data/raw",
-        help="Base directory for saving scraped documents (default: data/raw)"
+        default=str(DEFAULT_RAW_DIR),
+        help=f"Base directory for saving scraped documents (default: {DEFAULT_RAW_DIR})"
     )
 
     args = parser.parse_args()

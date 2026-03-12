@@ -7,12 +7,13 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from langchain_core.documents import Document
 
+from src.configs.common import DEFAULT_RAW_DIR
+from src.configs.loader_configs import INGEST_CONFIGS
+
 # Test constants
 TEST_AUTHOR = "voltaire"
 INVALID_AUTHOR = "nonexistent_author"
 TEST_DOCUMENT_ID = "voltaire_lettres_philosophiques-1734"
-TEST_OUTPUT_DIR = "data/raw"
-ALL_AUTHORS = ["voltaire"]  # List of all authors in INGEST_CONFIGS
 
 
 @pytest.fixture
@@ -50,13 +51,30 @@ def mock_loader(sample_documents: list[Document]) -> MagicMock:
 def mock_save_paths() -> list[Path]:
     """Create mock saved file paths."""
     return [
-        Path(f"{TEST_OUTPUT_DIR}/{TEST_DOCUMENT_ID}/page_01.json"),
-        Path(f"{TEST_OUTPUT_DIR}/{TEST_DOCUMENT_ID}/page_02.json"),
+        Path(f"test/output/{TEST_DOCUMENT_ID}/page_01.json"),
+        Path(f"test/output/{TEST_DOCUMENT_ID}/page_02.json"),
     ]
 
 
 class TestScrapWikisourceMain:
     """Test the main() function of scrape_wikisource script."""
+
+    @patch("scripts.scrape_wikisource.scrape_author")
+    def test_default_arguments(
+        self,
+        mock_scrape: MagicMock,
+    ) -> None:
+        """Test main() with default arguments."""
+        with patch("sys.argv", ["scrape_wikisource.py"]):
+            from scripts.scrape_wikisource import main
+            main()
+
+        # Verify scrape_author called for all authors (since default author is None)
+        assert mock_scrape.call_count == len(INGEST_CONFIGS)
+
+        # Verify default output directory used
+        call_args = mock_scrape.call_args[0]
+        assert call_args[1] == str(DEFAULT_RAW_DIR)
 
     @patch("scripts.scrape_wikisource.save_documents_to_disk")
     @patch("scripts.scrape_wikisource.WikisourceLoader")
@@ -233,7 +251,7 @@ class TestScrapWikisourceMain:
 
         # Verify output path combines base dir with document_id
         output_path = mock_save.call_args[0][1]
-        assert output_path == Path(TEST_OUTPUT_DIR) / TEST_DOCUMENT_ID
+        assert output_path == Path(DEFAULT_RAW_DIR) / TEST_DOCUMENT_ID
 
     @patch("scripts.scrape_wikisource.save_documents_to_disk")
     @patch("scripts.scrape_wikisource.WikisourceLoader")
@@ -256,9 +274,9 @@ class TestScrapWikisourceMain:
         main()
 
         # Should instantiate loader once per configured author
-        assert mock_loader_class.call_count == len(ALL_AUTHORS)
+        assert mock_loader_class.call_count == len(INGEST_CONFIGS)
         # Should save once per author
-        assert mock_save.call_count == len(ALL_AUTHORS)
+        assert mock_save.call_count == len(INGEST_CONFIGS)
 
     @patch("scripts.scrape_wikisource.save_documents_to_disk")
     @patch("scripts.scrape_wikisource.WikisourceLoader")
