@@ -7,15 +7,18 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from langchain_core.documents import Document
 
+from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
+from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 
 # Test constants
 TEST_AUTHOR = "voltaire"
 INVALID_AUTHOR = "nonexistent_author"
 TEST_DOCUMENT_ID = "voltaire_lettres_philosophiques-1734"
-TEST_INPUT_DIR = "data/raw"
-TEST_DB_PATH = "data/chroma_db"
-ALL_AUTHORS = ["voltaire"]  # List of all authors in INGEST_CONFIGS
+
+# Test data for helper function tests (not testing defaults)
+TEST_INPUT_DIR = "test/input"
+TEST_DB_PATH = "test/db"
 
 
 @pytest.fixture
@@ -70,6 +73,32 @@ class TestEmbedAndStoreMain:
     """Test main() function of embed_and_store script."""
 
     @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.embed_author")
+    def test_default_arguments(
+        self,
+        mock_embed: MagicMock,
+        mock_ollama: MagicMock,
+    ) -> None:
+        """Test main() with default arguments."""
+        mock_ollama.return_value = None
+        mock_embed.return_value = 5  # Mock chunk count
+
+        with patch("sys.argv", ["embed_and_store.py"]):
+            from scripts.embed_and_store import main
+            main()
+
+        # Verify Ollama check was called
+        mock_ollama.assert_called_once()
+
+        # Verify embed_author called for all authors (since default author is None)
+        assert mock_embed.call_count == len(INGEST_CONFIGS)
+
+        # Verify default directories used
+        call_args = mock_embed.call_args[0]
+        assert call_args[1] == str(DEFAULT_RAW_DIR)  # input_base_dir
+        assert call_args[2] == str(DEFAULT_DB_PATH)  # db_path
+
+    @patch("scripts.embed_and_store.check_ollama_available")
     @patch("scripts.embed_and_store.embed_and_store")
     @patch("scripts.embed_and_store.chunk_documents")
     @patch("scripts.embed_and_store.load_documents_from_disk")
@@ -94,18 +123,19 @@ class TestEmbedAndStoreMain:
         # Verify Ollama check was called
         mock_ollama.assert_called_once()
 
-        # Verify load was called with correct path
-        expected_path = Path(TEST_INPUT_DIR) / TEST_DOCUMENT_ID
+        # Verify load was called with correct default path
+        expected_path = Path(DEFAULT_RAW_DIR) / TEST_DOCUMENT_ID
         mock_load.assert_called_once_with(expected_path)
 
         # Verify chunk was called with documents
         mock_chunk.assert_called_once_with(sample_documents)
 
-        # Verify embed_and_store was called
+        # Verify embed_and_store was called with default db path
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args[1]
         assert call_kwargs["chunks"] == sample_chunks
         assert call_kwargs["collection_name"] == COLLECTION_NAME
+        assert call_kwargs["persist_dir"] == str(DEFAULT_DB_PATH)
 
     @patch("scripts.embed_and_store.check_ollama_available")
     @patch("scripts.embed_and_store.embed_and_store")
@@ -133,9 +163,9 @@ class TestEmbedAndStoreMain:
         mock_ollama.assert_called_once()
 
         # Should process all authors (currently just voltaire)
-        assert mock_load.call_count == len(ALL_AUTHORS)
-        assert mock_chunk.call_count == len(ALL_AUTHORS)
-        assert mock_embed.call_count == len(ALL_AUTHORS)
+        assert mock_load.call_count == len(INGEST_CONFIGS)
+        assert mock_chunk.call_count == len(INGEST_CONFIGS)
+        assert mock_embed.call_count == len(INGEST_CONFIGS)
 
     @patch("scripts.embed_and_store.check_ollama_available")
     @patch("scripts.embed_and_store.embed_and_store")

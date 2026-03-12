@@ -9,7 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 from src.utils.chunker import chunk_documents
@@ -91,8 +91,8 @@ def main() -> None:
     parser.add_argument(
         "--input-dir",
         type=str,
-        default="data/raw",
-        help="Base directory containing scraped documents (default: data/raw)"
+        default=str(DEFAULT_RAW_DIR),
+        help=f"Base directory containing scraped documents (default: {DEFAULT_RAW_DIR})"
     )
     parser.add_argument(
         "--db",
