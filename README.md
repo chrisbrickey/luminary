@@ -28,6 +28,7 @@ Ask Voltaire anything grounded in his writings. Here are some questions to get y
 | LangChain | LLM orchestration framework            |
 | ChromaDB | vector store for document embeddings   |
 | Pydantic | data validation and schema definitions |
+| Streamlit | web UI framework                       |
 | pytest + pytest-cov | test runner and coverage               |
 | mypy | static type checking                   |
 
@@ -69,10 +70,10 @@ QUERY (real-time via user prompt)
   raw string             prompt from user in their natural language
       │
       ▼
- retriever.py            embeds prompt, performs similarity search on ChromaDB, retrieves top-k chunks
+ retriever.py            embeds the prompt, performs similarity search on ChromaDB, retrieves top-k semantically similar chunks from vector db
       │
       ▼
- chat_chain.py           formats retrieved chunks, populates the prompt template, calls an LLM, returns structured response
+ chat_chain.py           orchestrates retrieval, context formatting with labels, and LLM call including persona prompt; returns ChatResponse
       │
       ▼
  ChatResponse            validated and structured response
@@ -84,7 +85,7 @@ QUERY (real-time via user prompt)
 luminary/
 ├── pyproject.toml           # project metadata, dependencies, and configuration
 ├── uv.lock                  # locked dependency versions
-├── docs/
+├── chat_ui.py               # web ui for chat
 │
 ├── data/                    # (gitignored)
 │   ├── chroma_db/           # ChromaDB vector store
@@ -102,6 +103,7 @@ luminary/
 │
 ├── scripts/                 # CLI entrypoints for ingestion, chat, eval, etc.
 │
+├── docs/
 └── tests/
     ├── unit/                # fast offline tests; all external boundaries mocked
     └── integration/         # tests across modules and services*
@@ -120,7 +122,11 @@ cd luminary
 ### 2. Install dependencies
 
 ```
+# Install core dependencies (CLI scripts)
 uv sync
+
+# Install with web UI support (adds Streamlit)
+uv sync --extra ui
 ```
 
 ### 3. Set up Ollama
@@ -261,3 +267,25 @@ To exit: Type `quit` or press Ctrl+C.
 | `--author` | Author to query (e.g., `voltaire`) | `voltaire` |
 | `--show-chunks` | Display retrieved chunks with IDs and contexts | `False` |
 | `--verbose` | Enable verbose logging | `False` |
+
+#### Chat via UI
+
+1. Ensure Streamlit is installed. It is an optional requirement that is not included in `uv sync`.
+
+```
+uv sync --extra ui
+```
+
+2. Launch the web interface for a more visual chat experience.
+
+```
+uv run streamlit run chat_ui.py
+```
+
+Open `http://localhost:8501` in your browser.
+- Chat interface with message history
+- Use the sidebar to change the author persona or database location.*
+- Each response adheres to the personality and perspective's of the selected author.
+- Responses display deduplicated sources as a caption.
+
+_*Changes to the database path or philosopher will automatically rebuild the chat chain and clear message history._

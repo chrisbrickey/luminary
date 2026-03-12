@@ -242,7 +242,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - All 178 tests pass (including existing tests from previous steps)
   - **Chunk ID isolation (2026-03-11):** Added test `test_chunk_ids_not_in_response_output` to verify that chunk IDs never appear in the main chat output (they should only appear in the `--show-chunks` section). This test ensures chunk IDs remain internal debugging metadata and don't leak into user-facing responses. Test count increased from 28 to 29; all 184 tests pass.
 
-## Step 10: Web UI
+## ✅ Step 10: Web UI
 - Add dependency: `uv add --optional ui streamlit`
 - Create `chat_ui.py` — chat interface with:
   - Text input for user questions
@@ -252,6 +252,23 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **Verify:** `uv run streamlit run chat_ui.py` — manual browser testing
 - **README:** Add Streamlit UI section: launch command, URL (`http://localhost:8501`), sidebar config description; update project structure diagram to add `chat_ui.py` at root
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - Created comprehensive test suite with 24 tests (vs. suggested basic mocking) covering:
+    - Helper functions: `deduplicate_sources()`, `format_sources_caption()` (5 tests)
+    - Session state initialization: empty state, existing state (2 tests)
+    - Chain rebuilding: first time, author changed, DB path changed, no change, error handling (8 tests)
+    - Main UI function: rendering, sidebar, message display, user input processing, error handling (9 tests)
+  - Added `SessionStateMock` custom test fixture to support both dictionary-style and attribute-style access for Streamlit's session_state
+  - All tests use proper mocking via `@patch` decorators with context managers for `st.chat_message`, `st.spinner`, and `st.sidebar`
+  - Enhanced UI features:
+    - Automatic chain rebuild when configuration changes (author or DB path)
+    - Message history cleared when switching authors or databases
+    - Loading spinner with "Reflecting..." message during response generation
+    - Graceful error handling with user-friendly messages for Ollama availability, configuration errors, and chain invocation failures
+    - Page configuration with custom title and icon
+    - Helpful sidebar caption explaining RAG functionality
+  - README updated with comprehensive documentation: Technology table (added Streamlit), project structure (added chat_ui.py), and detailed "Chat via Web UI" section
+  - All 208 tests pass (including new chat_ui tests); mypy type checking passes
 
 ## Step 11: Language detection utility
 - **Goal:** Standalone language detection module, decoupled from the chain (chain already has `{language}` placeholder from Step 8)
@@ -270,6 +287,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - Create `src/eval/metrics/retrieval.py`: fraction of expected_chunk_ids found in retrieved
 - Create `src/eval/metrics/faithfulness.py`: shared `_keyword_score()` helper; `faithfulness()` uses `expected_keywords_fr`; `faithfulness_en()` uses `expected_keywords_en`
 - Create `src/eval/metrics/citation.py`: expected source title substrings found in retrieved_source_titles
+- Create `src/eval/metrics/citation_placement.py`: verifies that inline citations `[source: ...]` appear AFTER sentences/claims (not at the beginning or middle of paragraphs) — uses regex to detect citations that appear at start of lines or immediately after newlines without preceding text; penalizes misplaced citations
 - Create `src/eval/metrics/language.py`: response.language == expected_language (now meaningful with Step 11 language detection working)
 - Create `src/eval/metrics/translation.py`: Jaccard overlap of chunk IDs between FR and EN responses (retrieval proxy)
 - Create `src/eval/metrics/forbidden.py`: shared `_forbidden_score()` helper; `forbidden_phrases()` / `forbidden_phrases_en()` — catches persona breaks, anachronisms
@@ -278,6 +296,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **Test:** `tests/unit/eval/test_retrieval_metric.py` — all/partial/none found, no expected IDs, empty retrieval (5 tests)
 - **Test:** `tests/unit/eval/test_faithfulness_metric.py` — FR: all/partial/none/case-insensitive/no expected; EN: all/partial/no expected (9 tests)
 - **Test:** `tests/unit/eval/test_citation_metric.py` — all/partial substrings, case insensitive, no expected, no titles (5 tests)
+- **Test:** `tests/unit/eval/test_citation_placement_metric.py` — correct placement (end of sentence), citation at line start, citation after newline without text, no citations, multiple correct placements (5 tests)
 - **Test:** `tests/unit/eval/test_language_metric.py` — matching and mismatching language (2 tests)
 - **Test:** `tests/unit/eval/test_translation_metric.py` — identical/disjoint/partial/both empty/one empty (5 tests)
 - **Test:** `tests/unit/eval/test_forbidden_metric.py` — FR: no forbidden/none triggered/triggered/case-insensitive/multi; EN: none/triggered (9 tests)
