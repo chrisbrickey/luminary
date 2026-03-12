@@ -202,6 +202,31 @@ class TestBuildChain:
         # Prompt should still instruct proper citation format (without chunk_id)
         assert "[source:" in prompt_str
 
+    def test_prompt_instructs_citations_after_sentences(
+        self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should instruct LLM to place citations AFTER sentences, not before."""
+        docs = [sample_docs["full"]]
+        mock_llm = mock_llm_with_response()
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs(docs),
+            prompt=build_voltaire_prompt(),
+            llm=mock_llm,
+        )
+
+        chain.invoke(SAMPLE_QUESTION)
+
+        # Inspect the prompt template passed to the LLM
+        llm_call_args = mock_llm.invoke.call_args[0][0]
+        prompt_str = str(llm_call_args).lower()
+
+        # Prompt should instruct placing citations after the sentence/argument
+        assert "après la phrase" in prompt_str or "after the sentence" in prompt_str
+
+        # Prompt should explicitly forbid citations at the beginning
+        assert "jamais de citation au début" in prompt_str or "never" in prompt_str and "beginning" in prompt_str
+
     def test_empty_retrieval(self, mock_retriever_with_docs, mock_llm_with_response) -> None:
         """Should handle empty retrieval gracefully."""
         chain = build_chain(

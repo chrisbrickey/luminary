@@ -1,0 +1,24 @@
+# Streamlit configuration for Luminary web ui
+
+[theme]
+# Base theme
+base = "light"
+
+# Primary color - warm amber/copper tone
+# Reminiscent of candlelight and aged book bindings
+primaryColor = "#B8860B"
+
+# Main background color - warm cream/parchment
+# Like aged paper, inviting and scholarly
+backgroundColor = "#FFF8E7"
+
+# Secondary background - warm taupe
+# Like old library wood paneling
+secondaryBackgroundColor = "#E8DCC8"
+
+# Text color - deep brown
+# Like walnut ink on parchment
+textColor = "#3E2723"
+
+# Font family - sans serif for modern readability
+font = "sans serif"
