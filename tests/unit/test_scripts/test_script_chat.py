@@ -5,12 +5,22 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from src.configs.authors import DEFAULT_AUTHOR
+from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
+from src.i18n import get_message
+from src.i18n.keys import (
+    CHAT_CHATTING_WITH,
+    CHAT_EXIT_INSTRUCTIONS,
+    CHAT_INPUT_PROMPT,
+    CHAT_WELCOME,
+    SOURCES_LABEL_CLI,
+    SOURCES_NONE,
+    STATUS_REFLECTING_VERBOSE,
+)
 from src.schemas import ChatResponse
 
 # Test constants (for use in tests - not necessarily the actual defaults)
-TEST_AUTHOR = "condorcet"
+TEST_AUTHOR = "voltaire"  # Must be a registered author
 TEST_DB_PATH = "data/chroma_db"
 TEST_QUESTION = "What progress do you foresee for humanity?"
 TEST_RESPONSE_TEXT = "Sample answer about progress and reason."
@@ -26,8 +36,6 @@ TEST_SOURCE_TITLES = [
 ]
 TEST_LANG_EN = "en"
 TEST_LANG_FR = "fr"
-REFLECTING_MSG_EN_VERBOSE = "Reflecting... (response time varies with retrieval corpus size and API latency)"
-REFLECTING_MSG_FR_VERBOSE = "Réflexion... (le temps de réponse varie selon la taille du corpus et la latence de l'API)"
 
 
 def create_mock_response(
@@ -102,23 +110,28 @@ class TestFormatSourcesFooter:
         from scripts.chat import format_sources_footer
 
         response = create_mock_response()
-        result = format_sources_footer(response)
+        result = format_sources_footer(response, language=TEST_LANG_FR)
 
-        expected = (
-            "\nSources:\n"
-            f"  - {TEST_SOURCE_TITLES[0]}\n"
-            f"  - {TEST_SOURCE_TITLES[1]}"
-        )
-        assert result == expected
+        # Should start with French sources label
+        label = get_message(SOURCES_LABEL_CLI, TEST_LANG_FR)
+        assert result.startswith(label)
+
+        # Should contain both unique source titles
+        assert TEST_SOURCE_TITLES[0] in result
+        assert TEST_SOURCE_TITLES[1] in result
 
     def test_format_with_no_sources(self) -> None:
         """Test formatting when no sources available."""
         from scripts.chat import format_sources_footer
 
         response = create_mock_response(source_titles=[])
-        result = format_sources_footer(response)
+        result = format_sources_footer(response, language=TEST_LANG_EN)
 
-        assert result == "\nSources: none"
+        # Should contain label and "none"
+        label = get_message(SOURCES_LABEL_CLI, TEST_LANG_EN)
+        none_text = get_message(SOURCES_NONE, TEST_LANG_EN)
+        assert label in result
+        assert none_text in result
 
 
 class TestFormatChunksOutput:
@@ -181,6 +194,9 @@ class TestRunInteractiveChat:
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = ["quit"]
 
+        # Get author's default language
+        _, default_lang, _ = AUTHOR_CONFIGS[TEST_AUTHOR]
+
         # Run
         run_interactive_chat(
             db_path=Path(TEST_DB_PATH),
@@ -192,21 +208,21 @@ class TestRunInteractiveChat:
         # Capture output
         captured = capsys.readouterr()
 
-        # Verify welcome text
-        assert "Welcome to Luminary!" in captured.out
-        assert "You are now chatting with Condorcet." in captured.out
-        assert "Type 'quit' or press Ctrl+C to exit." in captured.out
+        # Verify welcome text using production strings
+        assert get_message(CHAT_WELCOME, default_lang) in captured.out
+        assert get_message(CHAT_CHATTING_WITH, default_lang, author=TEST_AUTHOR.capitalize()) in captured.out
+        assert get_message(CHAT_EXIT_INSTRUCTIONS, default_lang) in captured.out
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
-    def test_user_prompt_is_you_vous(
+    def test_user_prompt_is_localized(
         self,
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
     ) -> None:
-        """Test that user prompt is 'You/Vous:'."""
+        """Test that user prompt is localized."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -214,6 +230,9 @@ class TestRunInteractiveChat:
         mock_chain = MagicMock()
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = ["quit"]
+
+        # Get author's default language
+        _, default_lang, _ = AUTHOR_CONFIGS[TEST_AUTHOR]
 
         # Run
         run_interactive_chat(
@@ -223,8 +242,9 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
-        # Verify input was called with correct prompt
-        mock_input.assert_called_with("You/Vous: ")
+        # Verify input was called with localized prompt
+        expected_prompt = get_message(CHAT_INPUT_PROMPT, default_lang)
+        mock_input.assert_called_with(expected_prompt)
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
@@ -258,7 +278,7 @@ class TestRunInteractiveChat:
         captured = capsys.readouterr()
 
         # Verify author name is capitalized and used as prompt
-        assert "Condorcet:" in captured.out
+        assert f"{TEST_AUTHOR.capitalize()}:" in captured.out
         assert TEST_RESPONSE_TEXT in captured.out
 
     @patch("scripts.chat.get_reflecting_message")
@@ -277,6 +297,9 @@ class TestRunInteractiveChat:
         """Test basic question-answer flow with language detection."""
         from scripts.chat import run_interactive_chat
 
+        # Get author's default language
+        _, default_lang, _ = AUTHOR_CONFIGS[TEST_AUTHOR]
+
         # Setup mocks
         mock_ollama.return_value = None
         mock_chain = MagicMock()
@@ -286,7 +309,8 @@ class TestRunInteractiveChat:
 
         # Mock language detection
         mock_detect_lang.return_value = TEST_LANG_EN
-        mock_get_msg.return_value = REFLECTING_MSG_EN_VERBOSE
+        reflecting_msg = get_message(STATUS_REFLECTING_VERBOSE, TEST_LANG_EN)
+        mock_get_msg.return_value = reflecting_msg
 
         # Run
         run_interactive_chat(
@@ -305,7 +329,7 @@ class TestRunInteractiveChat:
         )
 
         # Verify language was detected from question
-        mock_detect_lang.assert_called_once_with(TEST_QUESTION, default="fr")
+        mock_detect_lang.assert_called_once_with(TEST_QUESTION, default=default_lang)
 
         # Verify reflecting message was retrieved
         mock_get_msg.assert_called_once_with(TEST_LANG_EN, verbose=True)
@@ -341,7 +365,8 @@ class TestRunInteractiveChat:
 
         # Mock language detection to French
         mock_detect_lang.return_value = TEST_LANG_FR
-        mock_get_msg.return_value = REFLECTING_MSG_FR_VERBOSE
+        reflecting_msg_fr = get_message(STATUS_REFLECTING_VERBOSE, TEST_LANG_FR)
+        mock_get_msg.return_value = reflecting_msg_fr
 
         # Run
         run_interactive_chat(
@@ -355,8 +380,7 @@ class TestRunInteractiveChat:
         captured = capsys.readouterr()
 
         # Verify French reflecting message appears in output
-        assert "Réflexion..." in captured.out
-        assert "temps de réponse" in captured.out
+        assert reflecting_msg_fr in captured.out
 
     @patch("scripts.chat.get_reflecting_message")
     @patch("scripts.chat.detect_language")
@@ -384,7 +408,8 @@ class TestRunInteractiveChat:
 
         # Mock language detection
         mock_detect_lang.return_value = TEST_LANG_EN
-        mock_get_msg.return_value = REFLECTING_MSG_EN_VERBOSE
+        reflecting_msg = get_message(STATUS_REFLECTING_VERBOSE, TEST_LANG_EN)
+        mock_get_msg.return_value = reflecting_msg
 
         # Run with show_chunks=True
         run_interactive_chat(
@@ -502,7 +527,8 @@ class TestRunInteractiveChat:
 
         # Mock language detection
         mock_detect_lang.return_value = TEST_LANG_FR
-        mock_get_msg.return_value = REFLECTING_MSG_FR_VERBOSE
+        reflecting_msg = get_message(STATUS_REFLECTING_VERBOSE, TEST_LANG_FR)
+        mock_get_msg.return_value = reflecting_msg
 
         # Run
         run_interactive_chat(
@@ -516,7 +542,8 @@ class TestRunInteractiveChat:
         captured = capsys.readouterr()
 
         # Verify sources are displayed and deduplicated
-        assert "Sources:" in captured.out
+        sources_label = get_message(SOURCES_LABEL_CLI, TEST_LANG_FR)
+        assert sources_label in captured.out
         assert TEST_SOURCE_TITLES[0] in captured.out
         assert TEST_SOURCE_TITLES[1] in captured.out
 
@@ -528,8 +555,9 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Test that 'quit' command exits gracefully."""
+        """Test that 'quit' command exits gracefully with goodbye message."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -537,6 +565,9 @@ class TestRunInteractiveChat:
         mock_chain = MagicMock()
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = ["quit"]
+
+        # Get author's goodbye message
+        _, _, goodbye_msg = AUTHOR_CONFIGS[TEST_AUTHOR]
 
         # Run
         run_interactive_chat(
@@ -546,8 +577,14 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
+        # Capture output
+        captured = capsys.readouterr()
+
         # Verify chain was never invoked
         mock_chain.invoke.assert_not_called()
+
+        # Verify goodbye message displayed
+        assert goodbye_msg in captured.out
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
@@ -557,8 +594,9 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Test that Ctrl+C (KeyboardInterrupt) exits gracefully."""
+        """Test that Ctrl+C (KeyboardInterrupt) exits gracefully with goodbye message."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -566,6 +604,9 @@ class TestRunInteractiveChat:
         mock_chain = MagicMock()
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = KeyboardInterrupt()
+
+        # Get author's goodbye message
+        _, _, goodbye_msg = AUTHOR_CONFIGS[TEST_AUTHOR]
 
         # Run - should not raise
         run_interactive_chat(
@@ -575,8 +616,14 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
+        # Capture output
+        captured = capsys.readouterr()
+
         # Verify chain was never invoked
         mock_chain.invoke.assert_not_called()
+
+        # Verify goodbye message displayed
+        assert goodbye_msg in captured.out
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
@@ -586,8 +633,9 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Test that EOFError exits gracefully."""
+        """Test that EOFError exits gracefully with goodbye message."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -595,6 +643,9 @@ class TestRunInteractiveChat:
         mock_chain = MagicMock()
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = EOFError()
+
+        # Get author's goodbye message
+        _, _, goodbye_msg = AUTHOR_CONFIGS[TEST_AUTHOR]
 
         # Run - should not raise
         run_interactive_chat(
@@ -604,8 +655,14 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
+        # Capture output
+        captured = capsys.readouterr()
+
         # Verify chain was never invoked
         mock_chain.invoke.assert_not_called()
+
+        # Verify goodbye message displayed
+        assert goodbye_msg in captured.out
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
@@ -658,9 +715,13 @@ class TestRunInteractiveChat:
         mock_chain.invoke.return_value = create_mock_response()
         mock_build_chain.return_value = mock_chain
 
+        # Get author's default language
+        _, default_lang, _ = AUTHOR_CONFIGS[TEST_AUTHOR]
+
         # Mock language detection
         mock_detect_lang.return_value = TEST_LANG_EN
-        mock_get_msg.return_value = REFLECTING_MSG_EN_VERBOSE
+        reflecting_msg = get_message(STATUS_REFLECTING_VERBOSE, TEST_LANG_EN)
+        mock_get_msg.return_value = reflecting_msg
 
         questions = ["Question 1?", "Question 2?", "Question 3?", "quit"]
         mock_input.side_effect = questions
@@ -781,6 +842,9 @@ class TestRunInteractiveChat:
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = ["Question 1?", "Question 2?", "quit"]
 
+        # Get author's default language
+        _, default_lang, _ = AUTHOR_CONFIGS[TEST_AUTHOR]
+
         # Run - should not raise
         run_interactive_chat(
             db_path=Path(TEST_DB_PATH),
@@ -789,8 +853,8 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
-        # Verify error message logged
-        assert "Error: Chain error" in caplog.text
+        # Verify error message logged (in the author's default language)
+        assert "Chain error" in caplog.text
 
         # Verify chain invoked twice (error + success)
         assert mock_chain.invoke.call_count == 2
@@ -821,7 +885,8 @@ class TestRunInteractiveChat:
 
         # Mock language detection
         mock_detect_lang.return_value = TEST_LANG_FR
-        mock_get_msg.return_value = REFLECTING_MSG_FR_VERBOSE
+        reflecting_msg = get_message(STATUS_REFLECTING_VERBOSE, TEST_LANG_FR)
+        mock_get_msg.return_value = reflecting_msg
 
         # Run with verbose=True
         run_interactive_chat(

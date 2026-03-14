@@ -55,7 +55,7 @@ def build_chain(
         )
 
     # Get author-specific configuration
-    prompt_factory, author_language = AUTHOR_CONFIGS[author]
+    prompt_factory, author_language, _ = AUTHOR_CONFIGS[author]
 
     # Build retriever if not provided
     if retriever is None:

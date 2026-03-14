@@ -5,6 +5,8 @@ from unittest.mock import patch
 import pytest
 from langdetect import LangDetectException
 
+from src.i18n import get_message
+from src.i18n.keys import STATUS_REFLECTING_SHORT, STATUS_REFLECTING_VERBOSE
 from src.utils.language import detect_language, get_reflecting_message
 
 
@@ -97,37 +99,44 @@ class TestGetReflectingMessage:
     def test_english_short_message(self) -> None:
         """Should return English short message for 'en' language with verbose=False."""
         result = get_reflecting_message("en", verbose=False)
-        assert result == "Reflecting..."
+        expected = get_message(STATUS_REFLECTING_SHORT, "en")
+        assert result == expected
 
     def test_english_verbose_message(self) -> None:
         """Should return English verbose message for 'en' language with verbose=True."""
         result = get_reflecting_message("en", verbose=True)
-        assert result == "Reflecting... (response time varies with the amount of data retrieved and the connection)"
+        expected = get_message(STATUS_REFLECTING_VERBOSE, "en")
+        assert result == expected
 
     def test_french_short_message(self) -> None:
         """Should return French short message for 'fr' language with verbose=False."""
         result = get_reflecting_message("fr", verbose=False)
-        assert result == "Réflexion..."
+        expected = get_message(STATUS_REFLECTING_SHORT, "fr")
+        assert result == expected
 
     def test_french_verbose_message(self) -> None:
         """Should return French verbose message for 'fr' language with verbose=True."""
         result = get_reflecting_message("fr", verbose=True)
-        assert result == "Réflexion... (le délai dépend de la taille des données et la connexion)"
+        expected = get_message(STATUS_REFLECTING_VERBOSE, "fr")
+        assert result == expected
 
     def test_unknown_language_defaults_to_french_short(self) -> None:
         """Should default to French for unknown languages with verbose=False."""
         result = get_reflecting_message("de", verbose=False)
-        assert result == "Réflexion..."
+        expected = get_message(STATUS_REFLECTING_SHORT, "fr")
+        assert result == expected
 
     def test_unknown_language_defaults_to_french_verbose(self) -> None:
         """Should default to French for unknown languages with verbose=True."""
         result = get_reflecting_message("es", verbose=True)
-        assert result == "Réflexion... (le délai dépend de la taille des données et la connexion)"
+        expected = get_message(STATUS_REFLECTING_VERBOSE, "fr")
+        assert result == expected
 
     def test_default_verbose_is_false(self) -> None:
         """Should use short message when verbose parameter is omitted."""
         result = get_reflecting_message("en")
-        assert result == "Reflecting..."
+        expected = get_message(STATUS_REFLECTING_SHORT, "en")
+        assert result == expected
 
     def test_no_mixed_languages_in_english_verbose(self) -> None:
         """Should not contain French words in English verbose message."""

@@ -13,8 +13,19 @@ os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 from langchain_core.runnables import RunnableConfig
 
 from src.chains.chat_chain import build_chain
-from src.configs.authors import DEFAULT_AUTHOR
+from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
+from src.i18n import get_message
+from src.i18n.keys import (
+    CHAT_CHATTING_WITH,
+    CHAT_EXIT_INSTRUCTIONS,
+    CHAT_INPUT_PROMPT,
+    CHAT_WELCOME,
+    ERROR_GENERIC,
+    SOURCES_ITEM_PREFIX_CLI,
+    SOURCES_LABEL_CLI,
+    SOURCES_NONE,
+)
 from src.schemas import ChatResponse
 from src.utils.language import detect_language, get_reflecting_message
 from src.utils.ollama_health import check_ollama_available
@@ -51,19 +62,26 @@ def deduplicate_sources(response: ChatResponse) -> list[str]:
     return deduplicated
 
 
-def format_sources_footer(response: ChatResponse) -> str:
+def format_sources_footer(response: ChatResponse, language: str = "fr") -> str:
     """Format the Sources: footer with deduplicated titles.
 
     Args:
         response: ChatResponse with retrieved_source_titles
+        language: ISO 639-1 language code for localized formatting
 
     Returns:
         Formatted sources string
     """
     sources = deduplicate_sources(response)
     if not sources:
-        return "\nSources: none"
-    return "\nSources:\n" + "\n".join(f"  - {title}" for title in sources)
+        none_label = get_message(SOURCES_NONE, language)
+        label = get_message(SOURCES_LABEL_CLI, language)
+        return f"{label} {none_label}"
+
+    label = get_message(SOURCES_LABEL_CLI, language)
+    item_prefix = get_message(SOURCES_ITEM_PREFIX_CLI, language)
+    items = item_prefix.join(sources)
+    return f"{label}{item_prefix}{items}"
 
 
 def format_chunks_output(response: ChatResponse) -> str:
@@ -119,18 +137,21 @@ def run_interactive_chat(
     logger.debug(f"Using database: {db_path}")
     chain = build_chain(persist_dir=str(db_path), author=author)
 
+    # Get author config for goodbye message and default language
+    _, default_lang, goodbye_msg = AUTHOR_CONFIGS[author]
+
     # Interactive loop
-    print("\nWelcome to Luminary!")
-    print(f"\nYou are now chatting with {author.capitalize()}.")
-    print(f"Type 'quit' or press Ctrl+C to exit.\n")
+    print(f"\n{get_message(CHAT_WELCOME, default_lang)}")
+    print(f"\n{get_message(CHAT_CHATTING_WITH, default_lang, author=author.capitalize())}")
+    print(f"{get_message(CHAT_EXIT_INSTRUCTIONS, default_lang)}\n")
 
     while True:
         try:
-            question = input("You/Vous: ").strip()
+            question = input(get_message(CHAT_INPUT_PROMPT, default_lang)).strip()
 
             # Exit on quit command
             if question.lower() == "quit":
-                print("\nAu revoir.")
+                print(f"\n{goodbye_msg}")
                 break
 
             # Skip empty questions
@@ -138,7 +159,7 @@ def run_interactive_chat(
                 continue
 
             # Detect language and show localized loading message
-            detected_lang = detect_language(question, default="fr")
+            detected_lang = detect_language(question, default=default_lang)
             reflecting_msg = get_reflecting_message(detected_lang, verbose=True)
             print(f"\n⏳ {reflecting_msg}")
 
@@ -160,14 +181,15 @@ def run_interactive_chat(
                 print(format_chunks_output(response))
 
             # Always print sources footer
-            print(format_sources_footer(response))
+            print(format_sources_footer(response, language=detected_lang))
             print()  # Blank line for readability
 
         except (KeyboardInterrupt, EOFError):
-            print("\n\nAu revoir.")
+            print(f"\n\n{goodbye_msg}")
             break
         except Exception as e:
-            logger.error(f"Error: {e}")
+            error_msg = get_message(ERROR_GENERIC, default_lang, error=str(e))
+            logger.error(error_msg)
             if verbose:
                 logger.exception("Full traceback:")
 

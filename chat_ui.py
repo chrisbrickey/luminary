@@ -13,6 +13,15 @@ from langchain_core.runnables import RunnableConfig
 from src.chains.chat_chain import build_chain
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
+from src.i18n import get_message
+from src.i18n.keys import (
+    ERROR_CHAIN_NOT_INITIALIZED,
+    ERROR_GENERATING_RESPONSE,
+    SOURCES_ITEM_SEPARATOR_WEB,
+    SOURCES_LABEL_WEB,
+    SOURCES_NONE,
+    SOURCES_SUFFIX_WEB,
+)
 from src.schemas import ChatResponse
 from src.utils.language import detect_language, get_reflecting_message
 from src.utils.ollama_health import check_ollama_available
@@ -36,20 +45,28 @@ def deduplicate_sources(response: ChatResponse) -> list[str]:
     return deduplicated
 
 
-def format_sources_caption(response: ChatResponse) -> str:
+def format_sources_caption(response: ChatResponse, language: str = "fr") -> str:
     """Format sources as a compact caption.
 
     Args:
         response: ChatResponse with retrieved_source_titles
+        language: ISO 639-1 language code for localized formatting
 
     Returns:
         Formatted sources string for display as caption
     """
     sources = deduplicate_sources(response)
     if not sources:
-        return "*Sources: none*"
-    sources_list = ", ".join(sources)
-    return f"*Sources: {sources_list}*"
+        none_label = get_message(SOURCES_NONE, language)
+        label = get_message(SOURCES_LABEL_WEB, language)
+        suffix = get_message(SOURCES_SUFFIX_WEB, language)
+        return f"{label} {none_label}{suffix}"
+
+    label = get_message(SOURCES_LABEL_WEB, language)
+    separator = get_message(SOURCES_ITEM_SEPARATOR_WEB, language)
+    suffix = get_message(SOURCES_SUFFIX_WEB, language)
+    sources_list = separator.join(sources)
+    return f"{label} {sources_list}{suffix}"
 
 
 def initialize_session_state() -> None:
@@ -89,13 +106,16 @@ def rebuild_chain_if_needed(db_path: str, author: str) -> None:
             st.session_state.messages = []
 
         except ValueError as e:
-            st.error(f"Configuration error: {e}")
+            error_msg = f"Configuration error: {e}"
+            st.error(error_msg)
             st.session_state.chain = None
         except RuntimeError as e:
-            st.error(f"Ollama error: {e}")
+            error_msg = f"Ollama error: {e}"
+            st.error(error_msg)
             st.session_state.chain = None
         except Exception as e:
-            st.error(f"Unexpected error: {e}")
+            error_msg = f"Unexpected error: {e}"
+            st.error(error_msg)
             st.session_state.chain = None
 
 
@@ -159,10 +179,10 @@ def main() -> None:
     ):
         # Check if chain is available
         if st.session_state.chain is None:
-            st.error(
-                "Cannot send message: chain is not initialized. "
-                "Please check the configuration and error messages above."
-            )
+            # Use default language for error message
+            _, default_lang, _ = AUTHOR_CONFIGS.get(author, (None, "fr", ""))
+            error_msg = get_message(ERROR_CHAIN_NOT_INITIALIZED, default_lang)
+            st.error(error_msg)
             return
 
         # Display user message
@@ -184,7 +204,7 @@ def main() -> None:
                         prompt, config=cast(RunnableConfig, {"language": detected_lang})
                     )
                     st.markdown(response.text)
-                    sources_caption = format_sources_caption(response)
+                    sources_caption = format_sources_caption(response, language=detected_lang)
                     st.caption(sources_caption)
 
                     # Add assistant message to history
@@ -196,7 +216,7 @@ def main() -> None:
                         }
                     )
                 except Exception as e:
-                    error_msg = f"Error generating response: {e}"
+                    error_msg = get_message(ERROR_GENERATING_RESPONSE, detected_lang, error=str(e))
                     st.error(error_msg)
                     st.session_state.messages.append(
                         {"role": "assistant", "content": f"*{error_msg}*"}

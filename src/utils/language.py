@@ -2,6 +2,9 @@
 
 from langdetect import LangDetectException, detect_langs  # type: ignore[import-untyped]
 
+from src.i18n import get_message
+from src.i18n.keys import STATUS_REFLECTING_SHORT, STATUS_REFLECTING_VERBOSE
+
 
 def detect_language(text: str, default: str = "fr", min_length: int = 15) -> str:
     """Detect the language of the given text.
@@ -52,11 +55,10 @@ def get_reflecting_message(language: str, verbose: bool = False) -> str:
     Returns:
         Localized reflecting message
     """
-    if language == "en":
-        if verbose:
-            return "Reflecting... (response time varies with the amount of data retrieved and the connection)"
-        return "Reflecting..."
-    else:  # Default to French for "fr" or unknown languages
-        if verbose:
-            return "Réflexion... (le délai dépend de la taille des données et la connexion)"
-        return "Réflexion..."
+    # Default to French for unknown languages
+    lang = language if language in ("en", "fr") else "fr"
+
+    if verbose:
+        return get_message(STATUS_REFLECTING_VERBOSE, lang)
+    else:
+        return get_message(STATUS_REFLECTING_SHORT, lang)

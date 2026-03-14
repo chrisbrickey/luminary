@@ -1,0 +1,24 @@
+# English locale strings for Luminary chat interface
+
+chat:
+  welcome: "Welcome to Luminary!"
+  chatting_with: "You are now chatting with {author}."
+  exit_instructions: "Type 'quit' or press Ctrl+C to exit."
+  input_prompt: "You: "
+
+status:
+  reflecting_short: "Reflecting..."
+  reflecting_verbose: "Reflecting... (response time varies with the amount of data retrieved and the connection)"
+
+sources:
+  none: "none"
+  label_cli: "\nSources:"
+  label_web: "*Sources:"
+  item_prefix_cli: "\n  - "
+  item_separator_web: ", "
+  suffix_web: "*"
+
+errors:
+  chain_not_initialized: "Cannot send message: chain is not initialized. Please check the configuration and error messages above."
+  generating_response: "Error generating response: {error}"
+  generic_error: "Error: {error}"
