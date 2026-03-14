@@ -236,8 +236,22 @@ def integration_chain_setup(tmp_path: Path) -> pytest.fixture:
     embeddings = FakeEmbeddings()
     db_path = tmp_path / "chroma"
 
-    def build_test_chain(chunks, author="voltaire", default_language="fr", k=DEFAULT_K):
-        """Build a complete chain with real ChromaDB and fake LLM."""
+    def build_test_chain(
+        chunks,
+        author="voltaire",
+        default_language="fr",
+        k=DEFAULT_K,
+        detect_user_language=True,
+    ):
+        """Build a complete chain with real ChromaDB and fake LLM.
+
+        Args:
+            chunks: Documents to embed and store
+            author: Author key for filtering (default: "voltaire")
+            default_language: Fallback language when detection disabled (default: "fr")
+            k: Number of documents to retrieve (default: DEFAULT_K)
+            detect_user_language: Enable language detection from question (default: True)
+        """
         embed_and_store(chunks=chunks, persist_dir=db_path, embeddings=embeddings)
         retriever = build_retriever(
             persist_dir=db_path, embeddings=embeddings, k=k, author=author
@@ -247,7 +261,7 @@ def integration_chain_setup(tmp_path: Path) -> pytest.fixture:
             llm=FakeChatModel(),
             prompt=build_voltaire_prompt(),
             default_language=default_language,
-            detect_user_language=False,
+            detect_user_language=detect_user_language,
         )
 
     return build_test_chain
@@ -264,6 +278,7 @@ def test_full_rag_chain_with_retrieval(
     3. Prompt is formatted correctly with retrieved context
     4. Chain returns a valid ChatResponse with all expected fields
     5. Source titles include page numbers when available
+    6. Language detection detects question language and responds accordingly
     """
     # Create fixture documents
     chunks = [
@@ -293,38 +308,49 @@ def test_full_rag_chain_with_retrieval(
         ),
     ]
 
-    # Build complete chain
-    chain = integration_chain_setup(chunks)
+    # Build complete chain with language detection enabled
+    chain = integration_chain_setup(chunks, detect_user_language=True)
 
-    # Invoke chain
-    response = chain.invoke(TEST_QUESTION)
+    # Test 1: English question → English response
+    response_en = chain.invoke("What do you think about tolerance?")
 
     # Verify response structure
-    assert isinstance(response, ChatResponse)
-    assert isinstance(response.text, str)
-    assert len(response.text) > 0
+    assert isinstance(response_en, ChatResponse)
+    assert isinstance(response_en.text, str)
+    assert len(response_en.text) > 0
+
+    # Verify language detection worked for English
+    assert response_en.language == "en"
 
     # Verify retrieved metadata
-    assert len(response.retrieved_passage_ids) == 3
-    assert len(response.retrieved_contexts) == 3
-    assert len(response.retrieved_source_titles) == 3
+    assert len(response_en.retrieved_passage_ids) == 3
+    assert len(response_en.retrieved_contexts) == 3
+    assert len(response_en.retrieved_source_titles) == 3
 
     # Verify chunk IDs match what we stored
-    assert set(response.retrieved_passage_ids) == {"test_001", "test_002", "test_003"}
+    assert set(response_en.retrieved_passage_ids) == {"test_001", "test_002", "test_003"}
 
     # Verify source titles include page numbers
-    assert "Lettres philosophiques, page 5" in response.retrieved_source_titles
-    assert "Lettres philosophiques, page 6" in response.retrieved_source_titles
-    assert "Lettres philosophiques, page 7" in response.retrieved_source_titles
-
-    # Verify language
-    assert response.language == "fr"
+    assert "Lettres philosophiques, page 5" in response_en.retrieved_source_titles
+    assert "Lettres philosophiques, page 6" in response_en.retrieved_source_titles
+    assert "Lettres philosophiques, page 7" in response_en.retrieved_source_titles
 
     # Verify contexts match original content
-    contexts_set = set(response.retrieved_contexts)
+    contexts_set = set(response_en.retrieved_contexts)
     assert (
         "Tolerance is essential for civil society and peaceful coexistence." in contexts_set
     )
+
+    # Test 2: French question → French response
+    response_fr = chain.invoke("Que pensez-vous de la tolérance?")
+
+    # Verify language detection worked for French
+    assert response_fr.language == "fr"
+
+    # Verify same retrieval quality (same number of chunks retrieved)
+    assert len(response_fr.retrieved_passage_ids) == 3
+    assert len(response_fr.retrieved_contexts) == 3
+    assert len(response_fr.retrieved_source_titles) == 3
 
 
 def test_rag_chain_handles_missing_metadata(
@@ -336,6 +362,7 @@ def test_rag_chain_handles_missing_metadata(
     1. Chain gracefully handles missing page numbers
     2. Chain falls back to source URL when title is missing
     3. All documents are still retrieved and processed correctly
+    4. Explicit language mode works (detection disabled)
     """
     # Create documents with varying metadata
     chunks = [
@@ -368,8 +395,10 @@ def test_rag_chain_handles_missing_metadata(
         ),
     ]
 
-    # Build chain with English language
-    chain = integration_chain_setup(chunks, default_language="en")
+    # Build chain with explicit English language (detection disabled)
+    chain = integration_chain_setup(
+        chunks, default_language="en", detect_user_language=False
+    )
 
     # Invoke
     response = chain.invoke("test question")
@@ -381,7 +410,7 @@ def test_rag_chain_handles_missing_metadata(
     # Empty title should fall back to source URL
     assert "https://example.com/doc3" in response.retrieved_source_titles
 
-    # Verify language
+    # Verify explicit language mode (uses default_language, not detection)
     assert response.language == "en"
 
 
@@ -435,12 +464,13 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
     mock_llm = Mock()
     mock_llm.invoke.return_value = Mock(content="Mock response")
 
+    # Build chain with detection disabled to test explicit language mode
     chain = build_chain(
         retriever=retriever,
         llm=mock_llm,
         prompt=build_voltaire_prompt(),
         default_language="fr",
-        detect_user_language=False,
+        detect_user_language=False,  # Explicit language mode
     )
 
     # Invoke chain

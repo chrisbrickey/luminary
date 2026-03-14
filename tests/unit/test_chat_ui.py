@@ -14,7 +14,19 @@ from chat_ui import (
 )
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
+from src.i18n import get_message
+from src.i18n.keys import (
+    ERROR_CHAIN_NOT_INITIALIZED,
+    ERROR_GENERATING_RESPONSE,
+    SOURCES_LABEL_WEB,
+    SOURCES_NONE,
+    STATUS_REFLECTING_SHORT,
+)
 from src.schemas import ChatResponse
+
+# Test constants
+TEST_LANG_EN = "en"
+TEST_LANG_FR = "fr"
 
 
 # --- Test fixtures ---
@@ -76,9 +88,18 @@ def test_format_sources_caption_with_sources() -> None:
         language="fr",
     )
 
-    result = format_sources_caption(response)
+    result = format_sources_caption(response, language=TEST_LANG_FR)
 
-    assert result == "*Sources: Source A, Source B*"
+    # Should start with French sources label in markdown
+    label = get_message(SOURCES_LABEL_WEB, TEST_LANG_FR)
+    assert result.startswith(label)
+
+    # Should end with markdown suffix
+    assert result.endswith("*")
+
+    # Should contain both sources
+    assert "Source A" in result
+    assert "Source B" in result
 
 
 def test_format_sources_caption_empty() -> None:
@@ -91,9 +112,13 @@ def test_format_sources_caption_empty() -> None:
         language="fr",
     )
 
-    result = format_sources_caption(response)
+    result = format_sources_caption(response, language=TEST_LANG_EN)
 
-    assert result == "*Sources: none*"
+    # Should contain label and "none" in English
+    label = get_message(SOURCES_LABEL_WEB, TEST_LANG_EN)
+    none_text = get_message(SOURCES_NONE, TEST_LANG_EN)
+    assert label in result
+    assert none_text in result
 
 
 def test_format_sources_caption_deduplicates() -> None:
@@ -106,9 +131,11 @@ def test_format_sources_caption_deduplicates() -> None:
         language="fr",
     )
 
-    result = format_sources_caption(response)
+    result = format_sources_caption(response, language=TEST_LANG_FR)
 
-    assert result == "*Sources: Source A, Source B*"
+    # Should contain Source A and Source B each only once
+    assert result.count("Source A") == 1
+    assert result.count("Source B") == 1
 
 
 # --- Test session state initialization ---
@@ -571,22 +598,33 @@ def test_main_no_input_returns_early(
     mock_st.session_state["chain"].invoke.assert_not_called()
 
 
+@patch("chat_ui.get_reflecting_message")
+@patch("chat_ui.detect_language")
 @patch("chat_ui.rebuild_chain_if_needed")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_processes_user_input(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock,
+    mock_init: Mock,
+    mock_rebuild: Mock,
+    mock_detect_lang: Mock,
+    mock_get_msg: Mock,
 ) -> None:
-    """Test that main processes user input and invokes chain."""
+    """Test that main processes user input, detects language, and invokes chain."""
     mock_chain = Mock()
     mock_response = ChatResponse(
         text="Test response",
         retrieved_passage_ids=["id1"],
         retrieved_contexts=["context1"],
         retrieved_source_titles=["Source A"],
-        language="fr",
+        language=TEST_LANG_EN,
     )
     mock_chain.invoke.return_value = mock_response
+
+    # Mock language detection
+    mock_detect_lang.return_value = TEST_LANG_EN
+    reflecting_msg = get_message(STATUS_REFLECTING_SHORT, TEST_LANG_EN)
+    mock_get_msg.return_value = reflecting_msg
 
     mock_st.session_state = SessionStateMock(
         {
@@ -596,7 +634,8 @@ def test_main_processes_user_input(
             "current_db_path": str(DEFAULT_DB_PATH),
         }
     )
-    mock_st.chat_input.return_value = "What is tolerance?"
+    user_question = "What is tolerance?"
+    mock_st.chat_input.return_value = user_question
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
 
@@ -611,8 +650,19 @@ def test_main_processes_user_input(
 
     main()
 
-    # Verify chain was invoked
-    mock_chain.invoke.assert_called_once_with("What is tolerance?")
+    # Verify language was detected from user question
+    mock_detect_lang.assert_called_once_with(user_question, default="fr")
+
+    # Verify reflecting message was retrieved for detected language
+    mock_get_msg.assert_called_once_with(TEST_LANG_EN, verbose=False)
+
+    # Verify spinner was called with localized message
+    mock_st.spinner.assert_called_once_with(reflecting_msg)
+
+    # Verify chain was invoked with question and language in config
+    mock_chain.invoke.assert_called_once_with(
+        user_question, config={"language": TEST_LANG_EN}
+    )
 
     # Verify chat_message was called with correct avatars
     assert mock_st.chat_message.call_count == 2
@@ -630,7 +680,7 @@ def test_main_processes_user_input(
     # Verify messages were added to session state
     assert len(mock_st.session_state["messages"]) == 2
     assert mock_st.session_state["messages"][0]["role"] == "user"
-    assert mock_st.session_state["messages"][0]["content"] == "What is tolerance?"
+    assert mock_st.session_state["messages"][0]["content"] == user_question
     assert mock_st.session_state["messages"][1]["role"] == "assistant"
     assert mock_st.session_state["messages"][1]["content"] == "Test response"
 
@@ -700,22 +750,37 @@ def test_main_chain_not_initialized_error(
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
     mock_st.error = Mock()
 
+    # Get author's default language
+    _, default_lang, _ = AUTHOR_CONFIGS[DEFAULT_AUTHOR]
+
     main()
 
-    # Verify error was shown
+    # Verify error was shown with localized message
     mock_st.error.assert_called_once()
-    assert "not initialized" in mock_st.error.call_args[0][0]
+    expected_error = get_message(ERROR_CHAIN_NOT_INITIALIZED, default_lang)
+    mock_st.error.assert_called_with(expected_error)
 
 
+@patch("chat_ui.get_reflecting_message")
+@patch("chat_ui.detect_language")
 @patch("chat_ui.rebuild_chain_if_needed")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_chain_invocation_error(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock,
+    mock_init: Mock,
+    mock_rebuild: Mock,
+    mock_detect_lang: Mock,
+    mock_get_msg: Mock,
 ) -> None:
     """Test that main handles chain invocation errors gracefully."""
     mock_chain = Mock()
     mock_chain.invoke.side_effect = Exception("Chain error")
+
+    # Mock language detection
+    mock_detect_lang.return_value = TEST_LANG_FR
+    reflecting_msg = get_message(STATUS_REFLECTING_SHORT, TEST_LANG_FR)
+    mock_get_msg.return_value = reflecting_msg
 
     mock_st.session_state = SessionStateMock(
         {
@@ -741,11 +806,12 @@ def test_main_chain_invocation_error(
 
     main()
 
-    # Verify error was shown
+    # Verify error was shown with localized message
     mock_st.error.assert_called_once()
-    assert "Error generating response" in mock_st.error.call_args[0][0]
+    expected_error = get_message(ERROR_GENERATING_RESPONSE, TEST_LANG_FR, error="Chain error")
+    mock_st.error.assert_called_with(expected_error)
 
     # Verify error message was added to chat history
     assert len(mock_st.session_state["messages"]) == 2
     assert mock_st.session_state["messages"][1]["role"] == "assistant"
-    assert "Error generating response" in mock_st.session_state["messages"][1]["content"]
+    assert expected_error in mock_st.session_state["messages"][1]["content"]

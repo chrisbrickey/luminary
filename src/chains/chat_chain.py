@@ -1,17 +1,19 @@
 """RAG chat chain with author-specific prompts."""
 
 from pathlib import Path
+from typing import cast
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import ChatOllama
 
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH, DEFAULT_LLM_MODEL
 from src.schemas import ChatResponse
+from src.utils.language import detect_language
 from src.vectorstores.retriever import build_retriever
 
 
@@ -53,7 +55,7 @@ def build_chain(
         )
 
     # Get author-specific configuration
-    prompt_factory, author_language = AUTHOR_CONFIGS[author]
+    prompt_factory, author_language, _ = AUTHOR_CONFIGS[author]
 
     # Build retriever if not provided
     if retriever is None:
@@ -71,11 +73,12 @@ def build_chain(
     if default_language is None:
         default_language = author_language
 
-    def _run(question: str) -> ChatResponse:
+    def _run(question: str, provided_language: str | None = None) -> ChatResponse:
         """Internal function that executes the RAG pipeline.
 
         Args:
             question: User's question
+            provided_language: Pre-detected language code (if None, will detect)
 
         Returns:
             ChatResponse with answer and metadata
@@ -86,10 +89,13 @@ def build_chain(
         # Format context with source labels
         context = _format_docs_with_titles(docs)
 
-        # Detect or use default language
-        # Note: Actual language detection will be wired in Step 11
-        # For now, we just use the default_language
-        language = default_language
+        # Use provided language if available, otherwise detect
+        if provided_language:
+            language = provided_language
+        elif detect_user_language:
+            language = detect_language(question, default=default_language)
+        else:
+            language = default_language
 
         # Format the prompt
         formatted_prompt = prompt.format_messages(
@@ -125,9 +131,20 @@ def build_chain(
     class ChatChainRunnable(Runnable[str, ChatResponse]):
         """Wrapper to make _run conform to Runnable protocol."""
 
-        def invoke(self, input: str, config: dict | None = None) -> ChatResponse:  # type: ignore[override]
-            """Execute the chain."""
-            return _run(input)
+        def invoke(self, input: str, config: RunnableConfig | None = None) -> ChatResponse:  # type: ignore[override]
+            """Execute the chain.
+
+            Args:
+                input: User's question
+                config: Optional config dict. If provided with 'language' key,
+                       uses that language instead of detecting.
+
+            Returns:
+                ChatResponse with answer and metadata
+            """
+            # Extract pre-detected language from config if provided
+            provided_language = cast(str, config.get("language")) if config else None
+            return _run(input, provided_language)
 
     return ChatChainRunnable()
 
@@ -135,7 +152,7 @@ def build_chain(
 def _format_docs_with_titles(docs: list[Document]) -> str:
     """Format documents with source labels.
 
-    Each document is labeled with: [source: {title}, page {page_number}]
+    Each document is labeled with source at the end: content\n[source: {title}, page {page_number}]
 
     Args:
         docs: List of retrieved documents
@@ -161,9 +178,9 @@ def _format_docs_with_titles(docs: list[Document]) -> str:
         else:
             source_label = metadata.get("source", "unknown")
 
-        # Format: [source: title, page N]\ncontent
+        # Format: content\n[source: title, page N]
         formatted_chunks.append(
-            f"[source: {source_label}]\n{doc.page_content}"
+            f"{doc.page_content}\n[source: {source_label}]"
         )
 
     return "\n\n".join(formatted_chunks)
