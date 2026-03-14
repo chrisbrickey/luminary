@@ -54,9 +54,9 @@ def get_reflecting_message(language: str, verbose: bool = False) -> str:
     """
     if language == "en":
         if verbose:
-            return "Reflecting... (response time varies with retrieval corpus size and API latency)"
+            return "Reflecting... (response time varies with the amount of data retrieved and the connection)"
         return "Reflecting..."
     else:  # Default to French for "fr" or unknown languages
         if verbose:
-            return "Réflexion... (le temps de réponse varie selon la taille du corpus et la latence de l'API)"
+            return "Réflexion... (le délai dépend de la taille des données et la connexion)"
         return "Réflexion..."

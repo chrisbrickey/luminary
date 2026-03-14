@@ -102,10 +102,7 @@ class TestGetReflectingMessage:
     def test_english_verbose_message(self) -> None:
         """Should return English verbose message for 'en' language with verbose=True."""
         result = get_reflecting_message("en", verbose=True)
-        assert result == "Reflecting... (response time varies with retrieval corpus size and API latency)"
-        # Verify entire message is in English
-        assert "varies" in result
-        assert "corpus" in result
+        assert result == "Reflecting... (response time varies with the amount of data retrieved and the connection)"
 
     def test_french_short_message(self) -> None:
         """Should return French short message for 'fr' language with verbose=False."""
@@ -115,11 +112,7 @@ class TestGetReflectingMessage:
     def test_french_verbose_message(self) -> None:
         """Should return French verbose message for 'fr' language with verbose=True."""
         result = get_reflecting_message("fr", verbose=True)
-        assert result == "Réflexion... (le temps de réponse varie selon la taille du corpus et la latence de l'API)"
-        # Verify entire message is in French
-        assert "varie" in result
-        assert "corpus" in result
-        assert "latence" in result
+        assert result == "Réflexion... (le délai dépend de la taille des données et la connexion)"
 
     def test_unknown_language_defaults_to_french_short(self) -> None:
         """Should default to French for unknown languages with verbose=False."""
@@ -129,7 +122,7 @@ class TestGetReflectingMessage:
     def test_unknown_language_defaults_to_french_verbose(self) -> None:
         """Should default to French for unknown languages with verbose=True."""
         result = get_reflecting_message("es", verbose=True)
-        assert result == "Réflexion... (le temps de réponse varie selon la taille du corpus et la latence de l'API)"
+        assert result == "Réflexion... (le délai dépend de la taille des données et la connexion)"
 
     def test_default_verbose_is_false(self) -> None:
         """Should use short message when verbose parameter is omitted."""
@@ -141,8 +134,10 @@ class TestGetReflectingMessage:
         result = get_reflecting_message("en", verbose=True)
         # Verify no French keywords appear
         assert "réflexion" not in result.lower()
-        assert "temps de réponse" not in result.lower()
-        assert "latence de l'api" not in result.lower()
+        assert "délai" not in result.lower()
+        assert "taille" not in result.lower()
+        assert "données" not in result.lower()
+        assert "la connexion" not in result.lower()
 
     def test_no_mixed_languages_in_french_verbose(self) -> None:
         """Should not contain English words in French verbose message."""
@@ -150,4 +145,5 @@ class TestGetReflectingMessage:
         # Verify no English keywords appear (only check distinct English words)
         assert "reflecting" not in result.lower()
         assert "varies" not in result.lower()
-        assert "response time" not in result.lower()
+        assert "data retrieved" not in result.lower()
+        assert "connection" not in result.lower()

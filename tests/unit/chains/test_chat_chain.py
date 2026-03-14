@@ -151,7 +151,7 @@ class TestBuildChain:
     def test_context_formatting(
         self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
     ) -> None:
-        """Should format context with source labels but NOT chunk IDs."""
+        """Should format context with source labels AFTER content, not chunk IDs."""
         docs = [sample_docs["full"], sample_docs["no_page"]]
         mock_llm = mock_llm_with_response()
 
@@ -167,10 +167,17 @@ class TestBuildChain:
         llm_call_args = mock_llm.invoke.call_args[0][0]
         context_str = str(llm_call_args)
 
-        # Should include source labels without chunk IDs
-        assert "[source: Lettres philosophiques, page 5]" in context_str
-        assert "[source: Philosophical Letters]" in context_str
-        assert "Text about tolerance" in context_str
+        # Should include both content and source labels in correct order
+        # Check that content appears before its source
+        tolerance_idx = context_str.find("Text about tolerance")
+        tolerance_source_idx = context_str.find("[source: Lettres philosophiques, page 5]")
+        assert tolerance_idx != -1 and tolerance_source_idx != -1
+        assert tolerance_idx < tolerance_source_idx, "Source should appear AFTER content"
+
+        more_text_idx = context_str.find("More text")
+        more_source_idx = context_str.find("[source: Philosophical Letters]")
+        assert more_text_idx != -1 and more_source_idx != -1
+        assert more_text_idx < more_source_idx, "Source should appear AFTER content"
 
         # Should NOT include chunk IDs in context (they're internal metadata only)
         assert "chunk_id: abc123" not in context_str
@@ -226,6 +233,55 @@ class TestBuildChain:
 
         # Prompt should explicitly forbid citations at the beginning
         assert "jamais de citation au début" in prompt_str or "never" in prompt_str and "beginning" in prompt_str
+
+    def test_prompt_includes_format_examples(
+        self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should include explicit CORRECT/INCORRECT citation format examples."""
+        docs = [sample_docs["full"]]
+        mock_llm = mock_llm_with_response()
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs(docs),
+            prompt=build_voltaire_prompt(),
+            llm=mock_llm,
+        )
+
+        chain.invoke(SAMPLE_QUESTION)
+
+        # Inspect the prompt template passed to the LLM
+        llm_call_args = mock_llm.invoke.call_args[0][0]
+        prompt_str = str(llm_call_args)
+
+        # Should include examples section with correct/incorrect markers
+        assert "CORRECT" in prompt_str or "correct" in prompt_str.lower()
+        assert "INCORRECT" in prompt_str or "incorrect" in prompt_str.lower()
+
+        # Should show source citation format in examples
+        assert "[source:" in prompt_str
+
+    def test_prompt_instructs_concision(
+        self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should instruct LLM to limit responses to short paragraphs."""
+        docs = [sample_docs["full"]]
+        mock_llm = mock_llm_with_response()
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs(docs),
+            prompt=build_voltaire_prompt(),
+            llm=mock_llm,
+        )
+
+        chain.invoke(SAMPLE_QUESTION)
+
+        # Inspect the prompt template passed to the LLM
+        llm_call_args = mock_llm.invoke.call_args[0][0]
+        prompt_str = str(llm_call_args).lower()
+
+        # Should instruct concision with paragraph/sentence limits
+        assert "court paragraphe" in prompt_str or "short paragraph" in prompt_str
+        assert "3-5" in prompt_str or "phrases" in prompt_str
 
     def test_empty_retrieval(self, mock_retriever_with_docs, mock_llm_with_response) -> None:
         """Should handle empty retrieval gracefully."""
