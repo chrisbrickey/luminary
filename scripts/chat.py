@@ -5,14 +5,18 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import cast
 
 # Disable ChromaDB telemetry before any imports that use ChromaDB
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+
+from langchain_core.runnables import RunnableConfig
 
 from src.chains.chat_chain import build_chain
 from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
 from src.schemas import ChatResponse
+from src.utils.language import detect_language, get_reflecting_message
 from src.utils.ollama_health import check_ollama_available
 
 # Configure logging
@@ -133,14 +137,19 @@ def run_interactive_chat(
             if not question:
                 continue
 
-            # Show loading message
-            print("\n⏳ Reflecting… (response time varies with retrieval corpus size and API latency)")
+            # Detect language and show localized loading message
+            detected_lang = detect_language(question, default="fr")
+            reflecting_msg = get_reflecting_message(detected_lang, verbose=True)
+            print(f"\n⏳ {reflecting_msg}")
 
-            # Invoke chain
+            # Invoke chain with pre-detected language
             if verbose:
                 logger.debug(f"Invoking chain with question: {question}")
+                logger.debug(f"Detected language: {detected_lang}")
 
-            response: ChatResponse = chain.invoke(question)
+            response: ChatResponse = chain.invoke(
+                question, config=cast(RunnableConfig, {"language": detected_lang})
+            )
 
             # Print response (overwrite loading message line)
             print(f"\r{' ' * 80}\r", end="")  # Clear the loading message

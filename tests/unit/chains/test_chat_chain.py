@@ -258,12 +258,13 @@ class TestBuildChain:
     def test_defaults_to_language_from_author(
         self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
     ) -> None:
-        """Should use author's language when default_language not provided."""
+        """Should use author's language when default_language not provided and detection disabled."""
         chain = build_chain(
             retriever=mock_retriever_with_docs([sample_docs["full"]]),
             prompt=build_voltaire_prompt(),
             llm=mock_llm_with_response("French response"),
             author="voltaire",
+            detect_user_language=False,  # Disable detection to test default
         )
 
         response = chain.invoke(SAMPLE_QUESTION)
@@ -330,3 +331,111 @@ class TestBuildChain:
         mock_llm.invoke.assert_called_once()
         assert response.text == "Injected response"
         assert response.language == "en"
+
+    @patch("src.chains.chat_chain.detect_language")
+    def test_language_detection_enabled(
+        self, mock_detect_language, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should call detect_language when detect_user_language=True."""
+        mock_detect_language.return_value = "en"
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs([sample_docs["full"]]),
+            llm=mock_llm_with_response("English response"),
+            prompt=build_voltaire_prompt(),
+            detect_user_language=True,
+        )
+
+        response = chain.invoke("What is tolerance?")
+
+        # Should call language detection
+        mock_detect_language.assert_called_once_with("What is tolerance?", default="fr")
+        # Should use detected language
+        assert response.language == "en"
+
+    @patch("src.chains.chat_chain.detect_language")
+    def test_language_detection_disabled(
+        self, mock_detect_language, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should not call detect_language when detect_user_language=False."""
+        chain = build_chain(
+            retriever=mock_retriever_with_docs([sample_docs["full"]]),
+            llm=mock_llm_with_response("French response"),
+            prompt=build_voltaire_prompt(),
+            detect_user_language=False,
+        )
+
+        response = chain.invoke("Qu'est-ce que la tolérance?")
+
+        # Should NOT call language detection
+        mock_detect_language.assert_not_called()
+        # Should use default language
+        assert response.language == "fr"
+
+    @patch("src.chains.chat_chain.detect_language")
+    def test_detected_language_passed_to_prompt(
+        self, mock_detect_language, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should pass detected language to prompt template."""
+        mock_detect_language.return_value = "en"
+        mock_llm = mock_llm_with_response("Response in English")
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs([sample_docs["full"]]),
+            llm=mock_llm,
+            prompt=build_voltaire_prompt(),
+            detect_user_language=True,
+        )
+
+        chain.invoke("What is tolerance?")
+
+        # Inspect the prompt passed to LLM
+        llm_call_args = mock_llm.invoke.call_args[0][0]
+        prompt_str = str(llm_call_args)
+
+        # Prompt should include instruction to respond in English
+        assert "en" in prompt_str
+
+    @patch("src.chains.chat_chain.detect_language")
+    def test_provided_language_via_config_skips_detection(
+        self, mock_detect_language, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should use language from config and skip detection when provided."""
+        mock_detect_language.return_value = "fr"  # Would detect French
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs([sample_docs["full"]]),
+            llm=mock_llm_with_response("English response"),
+            prompt=build_voltaire_prompt(),
+            detect_user_language=True,  # Detection enabled
+        )
+
+        # Invoke with language in config (should skip detection)
+        response = chain.invoke("Qu'est-ce que la tolérance?", config={"language": "en"})
+
+        # Should NOT call language detection when provided in config
+        mock_detect_language.assert_not_called()
+        # Should use the provided language
+        assert response.language == "en"
+
+    @patch("src.chains.chat_chain.detect_language")
+    def test_config_language_takes_precedence_over_detection(
+        self, mock_detect_language, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+    ) -> None:
+        """Should prioritize config language over detection even when detection enabled."""
+        mock_detect_language.return_value = "en"
+
+        chain = build_chain(
+            retriever=mock_retriever_with_docs([sample_docs["full"]]),
+            llm=mock_llm_with_response("French response"),
+            prompt=build_voltaire_prompt(),
+            detect_user_language=True,
+        )
+
+        # Invoke with French in config, even though detection would return English
+        response = chain.invoke("What is tolerance?", config={"language": "fr"})
+
+        # Should not call detection when language provided
+        mock_detect_language.assert_not_called()
+        # Should use config language, not detected language
+        assert response.language == "fr"

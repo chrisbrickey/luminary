@@ -13,17 +13,21 @@ from src.schemas import ChatResponse
 TEST_AUTHOR = "condorcet"
 TEST_DB_PATH = "data/chroma_db"
 TEST_QUESTION = "What progress do you foresee for humanity?"
-TEST_RESPONSE_TEXT = "Humanity will advance indefinitely through reason, science, and moral improvement."
-TEST_CHUNK_IDS = ["xyz789abc123", "def456ghi789"]
+TEST_RESPONSE_TEXT = "Sample answer about progress and reason."
+TEST_CHUNK_IDS = ["chunk_abc123", "chunk_def456"]
 TEST_CONTEXTS = [
-    "Context from first chunk about scientific advancement.",
-    "Context from second chunk about women's rights.",
+    "Context from first chunk about advancement.",
+    "Context from second chunk about rights.",
 ]
 TEST_SOURCE_TITLES = [
-    "Esquisse d'un tableau historique, Page 12",
-    "Esquisse d'un tableau historique, Page 9",
-    "Esquisse d'un tableau historique, Page 12" # duplicate
+    "Sample Work, Page 12",
+    "Sample Work, Page 9",
+    "Sample Work, Page 12"  # duplicate
 ]
+TEST_LANG_EN = "en"
+TEST_LANG_FR = "fr"
+REFLECTING_MSG_EN_VERBOSE = "Reflecting... (response time varies with retrieval corpus size and API latency)"
+REFLECTING_MSG_FR_VERBOSE = "Réflexion... (le temps de réponse varie selon la taille du corpus et la latence de l'API)"
 
 
 def create_mock_response(
@@ -66,8 +70,8 @@ class TestDeduplicateSources:
 
         # Should have 2 unique titles in order of first appearance
         assert result == [
-            "Esquisse d'un tableau historique, Page 12",
-            "Esquisse d'un tableau historique, Page 9",
+            TEST_SOURCE_TITLES[0],  # "Sample Work, Page 12"
+            TEST_SOURCE_TITLES[1],  # "Sample Work, Page 9"
         ]
 
     def test_empty_sources(self) -> None:
@@ -102,8 +106,8 @@ class TestFormatSourcesFooter:
 
         expected = (
             "\nSources:\n"
-            "  - Esquisse d'un tableau historique, Page 12\n"
-            "  - Esquisse d'un tableau historique, Page 9"
+            f"  - {TEST_SOURCE_TITLES[0]}\n"
+            f"  - {TEST_SOURCE_TITLES[1]}"
         )
         assert result == expected
 
@@ -257,6 +261,8 @@ class TestRunInteractiveChat:
         assert "Condorcet:" in captured.out
         assert TEST_RESPONSE_TEXT in captured.out
 
+    @patch("scripts.chat.get_reflecting_message")
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -265,16 +271,22 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        mock_detect_lang: MagicMock,
+        mock_get_msg: MagicMock,
     ) -> None:
-        """Test basic question-answer flow with quit."""
+        """Test basic question-answer flow with language detection."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
         mock_ollama.return_value = None
         mock_chain = MagicMock()
-        mock_chain.invoke.return_value = create_mock_response()
+        mock_chain.invoke.return_value = create_mock_response(language=TEST_LANG_EN)
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
+
+        # Mock language detection
+        mock_detect_lang.return_value = TEST_LANG_EN
+        mock_get_msg.return_value = REFLECTING_MSG_EN_VERBOSE
 
         # Run
         run_interactive_chat(
@@ -292,9 +304,62 @@ class TestRunInteractiveChat:
             persist_dir=TEST_DB_PATH, author=TEST_AUTHOR
         )
 
-        # Verify chain invoked once
-        mock_chain.invoke.assert_called_once_with(TEST_QUESTION)
+        # Verify language was detected from question
+        mock_detect_lang.assert_called_once_with(TEST_QUESTION, default="fr")
 
+        # Verify reflecting message was retrieved
+        mock_get_msg.assert_called_once_with(TEST_LANG_EN, verbose=True)
+
+        # Verify chain invoked with question and language in config
+        mock_chain.invoke.assert_called_once_with(
+            TEST_QUESTION, config={"language": TEST_LANG_EN}
+        )
+
+    @patch("scripts.chat.get_reflecting_message")
+    @patch("scripts.chat.detect_language")
+    @patch("scripts.chat.build_chain")
+    @patch("scripts.chat.check_ollama_available")
+    @patch("builtins.input")
+    def test_reflecting_message_displayed_in_detected_language(
+        self,
+        mock_input: MagicMock,
+        mock_ollama: MagicMock,
+        mock_build_chain: MagicMock,
+        mock_detect_lang: MagicMock,
+        mock_get_msg: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that reflecting message is displayed in the detected language."""
+        from scripts.chat import run_interactive_chat
+
+        # Setup mocks
+        mock_ollama.return_value = None
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = create_mock_response(language=TEST_LANG_FR)
+        mock_build_chain.return_value = mock_chain
+        mock_input.side_effect = [TEST_QUESTION, "quit"]
+
+        # Mock language detection to French
+        mock_detect_lang.return_value = TEST_LANG_FR
+        mock_get_msg.return_value = REFLECTING_MSG_FR_VERBOSE
+
+        # Run
+        run_interactive_chat(
+            db_path=Path(TEST_DB_PATH),
+            author=TEST_AUTHOR,
+            show_chunks=False,
+            verbose=False,
+        )
+
+        # Capture output
+        captured = capsys.readouterr()
+
+        # Verify French reflecting message appears in output
+        assert "Réflexion..." in captured.out
+        assert "temps de réponse" in captured.out
+
+    @patch("scripts.chat.get_reflecting_message")
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -303,6 +368,8 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        mock_detect_lang: MagicMock,
+        mock_get_msg: MagicMock,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Test that --show-chunks displays retrieved chunks."""
@@ -314,6 +381,10 @@ class TestRunInteractiveChat:
         mock_chain.invoke.return_value = create_mock_response()
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
+
+        # Mock language detection
+        mock_detect_lang.return_value = TEST_LANG_EN
+        mock_get_msg.return_value = REFLECTING_MSG_EN_VERBOSE
 
         # Run with show_chunks=True
         run_interactive_chat(
@@ -405,6 +476,8 @@ class TestRunInteractiveChat:
         for chunk_id in TEST_CHUNK_IDS:
             assert chunk_id not in lines_before_chunks_section
 
+    @patch("scripts.chat.get_reflecting_message")
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -413,6 +486,8 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        mock_detect_lang: MagicMock,
+        mock_get_msg: MagicMock,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Test that sources footer is always displayed."""
@@ -424,6 +499,10 @@ class TestRunInteractiveChat:
         mock_chain.invoke.return_value = create_mock_response()
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
+
+        # Mock language detection
+        mock_detect_lang.return_value = TEST_LANG_FR
+        mock_get_msg.return_value = REFLECTING_MSG_FR_VERBOSE
 
         # Run
         run_interactive_chat(
@@ -438,8 +517,8 @@ class TestRunInteractiveChat:
 
         # Verify sources are displayed and deduplicated
         assert "Sources:" in captured.out
-        assert " Esquisse d'un tableau historique, Page 12" in captured.out
-        assert " Esquisse d'un tableau historique, Page 9" in captured.out
+        assert TEST_SOURCE_TITLES[0] in captured.out
+        assert TEST_SOURCE_TITLES[1] in captured.out
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
@@ -557,6 +636,8 @@ class TestRunInteractiveChat:
         # Verify chain was never invoked for empty questions
         mock_chain.invoke.assert_not_called()
 
+    @patch("scripts.chat.get_reflecting_message")
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -565,6 +646,8 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        mock_detect_lang: MagicMock,
+        mock_get_msg: MagicMock,
     ) -> None:
         """Test multiple questions in sequence."""
         from scripts.chat import run_interactive_chat
@@ -574,6 +657,10 @@ class TestRunInteractiveChat:
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = create_mock_response()
         mock_build_chain.return_value = mock_chain
+
+        # Mock language detection
+        mock_detect_lang.return_value = TEST_LANG_EN
+        mock_get_msg.return_value = REFLECTING_MSG_EN_VERBOSE
 
         questions = ["Question 1?", "Question 2?", "Question 3?", "quit"]
         mock_input.side_effect = questions
@@ -589,7 +676,11 @@ class TestRunInteractiveChat:
         # Verify chain invoked 3 times (not for quit)
         assert mock_chain.invoke.call_count == 3
         mock_chain.invoke.assert_has_calls(
-            [call("Question 1?"), call("Question 2?"), call("Question 3?")]
+            [
+                call("Question 1?", config={"language": TEST_LANG_EN}),
+                call("Question 2?", config={"language": TEST_LANG_EN}),
+                call("Question 3?", config={"language": TEST_LANG_EN}),
+            ]
         )
 
     @patch("scripts.chat.build_chain")
@@ -704,6 +795,8 @@ class TestRunInteractiveChat:
         # Verify chain invoked twice (error + success)
         assert mock_chain.invoke.call_count == 2
 
+    @patch("scripts.chat.get_reflecting_message")
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -712,17 +805,23 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        mock_detect_lang: MagicMock,
+        mock_get_msg: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Test that verbose flag enables debug logging."""
+        """Test that verbose flag enables debug logging including detected language."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
         mock_ollama.return_value = None
         mock_chain = MagicMock()
-        mock_chain.invoke.return_value = create_mock_response()
+        mock_chain.invoke.return_value = create_mock_response(language=TEST_LANG_FR)
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
+
+        # Mock language detection
+        mock_detect_lang.return_value = TEST_LANG_FR
+        mock_get_msg.return_value = REFLECTING_MSG_FR_VERBOSE
 
         # Run with verbose=True
         run_interactive_chat(
@@ -735,6 +834,7 @@ class TestRunInteractiveChat:
         # Verify debug messages logged
         assert "Verbose logging enabled" in caplog.text
         assert "Invoking chain with question:" in caplog.text
+        assert f"Detected language: {TEST_LANG_FR}" in caplog.text
 
 
 class TestMain:

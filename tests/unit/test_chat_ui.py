@@ -16,6 +16,12 @@ from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
 from src.schemas import ChatResponse
 
+# Test constants
+TEST_LANG_EN = "en"
+TEST_LANG_FR = "fr"
+REFLECTING_MSG_EN = "Reflecting..."
+REFLECTING_MSG_FR = "Réflexion..."
+
 
 # --- Test fixtures ---
 
@@ -571,22 +577,32 @@ def test_main_no_input_returns_early(
     mock_st.session_state["chain"].invoke.assert_not_called()
 
 
+@patch("chat_ui.get_reflecting_message")
+@patch("chat_ui.detect_language")
 @patch("chat_ui.rebuild_chain_if_needed")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_processes_user_input(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock,
+    mock_init: Mock,
+    mock_rebuild: Mock,
+    mock_detect_lang: Mock,
+    mock_get_msg: Mock,
 ) -> None:
-    """Test that main processes user input and invokes chain."""
+    """Test that main processes user input, detects language, and invokes chain."""
     mock_chain = Mock()
     mock_response = ChatResponse(
         text="Test response",
         retrieved_passage_ids=["id1"],
         retrieved_contexts=["context1"],
         retrieved_source_titles=["Source A"],
-        language="fr",
+        language=TEST_LANG_EN,
     )
     mock_chain.invoke.return_value = mock_response
+
+    # Mock language detection
+    mock_detect_lang.return_value = TEST_LANG_EN
+    mock_get_msg.return_value = REFLECTING_MSG_EN
 
     mock_st.session_state = SessionStateMock(
         {
@@ -596,7 +612,8 @@ def test_main_processes_user_input(
             "current_db_path": str(DEFAULT_DB_PATH),
         }
     )
-    mock_st.chat_input.return_value = "What is tolerance?"
+    user_question = "What is tolerance?"
+    mock_st.chat_input.return_value = user_question
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
 
@@ -611,8 +628,19 @@ def test_main_processes_user_input(
 
     main()
 
-    # Verify chain was invoked
-    mock_chain.invoke.assert_called_once_with("What is tolerance?")
+    # Verify language was detected from user question
+    mock_detect_lang.assert_called_once_with(user_question, default="fr")
+
+    # Verify reflecting message was retrieved for detected language
+    mock_get_msg.assert_called_once_with(TEST_LANG_EN, verbose=False)
+
+    # Verify spinner was called with localized message
+    mock_st.spinner.assert_called_once_with(REFLECTING_MSG_EN)
+
+    # Verify chain was invoked with question and language in config
+    mock_chain.invoke.assert_called_once_with(
+        user_question, config={"language": TEST_LANG_EN}
+    )
 
     # Verify chat_message was called with correct avatars
     assert mock_st.chat_message.call_count == 2
@@ -630,7 +658,7 @@ def test_main_processes_user_input(
     # Verify messages were added to session state
     assert len(mock_st.session_state["messages"]) == 2
     assert mock_st.session_state["messages"][0]["role"] == "user"
-    assert mock_st.session_state["messages"][0]["content"] == "What is tolerance?"
+    assert mock_st.session_state["messages"][0]["content"] == user_question
     assert mock_st.session_state["messages"][1]["role"] == "assistant"
     assert mock_st.session_state["messages"][1]["content"] == "Test response"
 
@@ -707,15 +735,25 @@ def test_main_chain_not_initialized_error(
     assert "not initialized" in mock_st.error.call_args[0][0]
 
 
+@patch("chat_ui.get_reflecting_message")
+@patch("chat_ui.detect_language")
 @patch("chat_ui.rebuild_chain_if_needed")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_chain_invocation_error(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock,
+    mock_init: Mock,
+    mock_rebuild: Mock,
+    mock_detect_lang: Mock,
+    mock_get_msg: Mock,
 ) -> None:
     """Test that main handles chain invocation errors gracefully."""
     mock_chain = Mock()
     mock_chain.invoke.side_effect = Exception("Chain error")
+
+    # Mock language detection
+    mock_detect_lang.return_value = TEST_LANG_FR
+    mock_get_msg.return_value = REFLECTING_MSG_FR
 
     mock_st.session_state = SessionStateMock(
         {

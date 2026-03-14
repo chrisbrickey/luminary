@@ -6,7 +6,7 @@ A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges
 
 - **Grounded citations:** All responses include source references with page numbers.
 - **Deduplicated sources:** The sources footer shows each unique source only once.
-- **Bilingual support (under development):** From the user's question, the app detects the language (French/English) and responds accordingly.
+- **Bilingual support and language detection:** The app automatically detects the language of your question (French/English) and responds in the same language. English responses include translations of cited French passages.
 
 ### Example Questions
 Ask Voltaire anything grounded in his writings. Here are some questions to get you started:
@@ -17,20 +17,19 @@ Ask Voltaire anything grounded in his writings. Here are some questions to get y
 | How do you reconcile the pursuit of personal happiness with the moral duty to others? | Comment conciliez‑vous la recherche du bonheur personnel avec le devoir moral que nous avons envers autrui ? |
 | What is the proper role of the philosopher in challenging injustice? | Quel est, selon vous, le rôle propre du philosophe lorsqu'il s'agit de dénoncer et de combattre l'injustice ? |
 
-
-
 ## Technology
 
-| Dependency | Purpose                                |
-| --- |----------------------------------------|
-| Python 3.13 | language runtime                       |
-| uv | package manager                        |
-| LangChain | LLM orchestration framework            |
-| ChromaDB | vector store for document embeddings   |
-| Pydantic | data validation and schema definitions |
-| Streamlit | web UI framework                       |
+| Dependency          | Purpose                                |
+|---------------------|----------------------------------------|
+| python 3.13         | language runtime                       |
+| uv                  | package manager                        |
+| pydantic            | data validation and schema definitions |
+| langchain           | LLM orchestration framework            |
+| langdetect          | automatic language detection           |
+| chromaDB            | vector store for document embeddings   |
+| streamlit           | web UI framework                       |
 | pytest + pytest-cov | test runner and coverage               |
-| mypy | static type checking                   |
+| mypy                | static type checking                   |
 
 ## Architecture
 

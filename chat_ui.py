@@ -2,16 +2,19 @@
 
 import os
 from pathlib import Path
+from typing import cast
 
 # Disable database telemetry before any imports
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 import streamlit as st
+from langchain_core.runnables import RunnableConfig
 
 from src.chains.chat_chain import build_chain
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
 from src.schemas import ChatResponse
+from src.utils.language import detect_language, get_reflecting_message
 from src.utils.ollama_health import check_ollama_available
 
 
@@ -169,11 +172,17 @@ def main() -> None:
         # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
 
+        # Detect language and get localized reflecting message
+        detected_lang = detect_language(prompt, default="fr")
+        reflecting_msg = get_reflecting_message(detected_lang, verbose=False)
+
         # Generate response
         with st.chat_message("assistant", avatar="🪶"):
-            with st.spinner("Reflecting..."):
+            with st.spinner(reflecting_msg):
                 try:
-                    response: ChatResponse = st.session_state.chain.invoke(prompt)
+                    response: ChatResponse = st.session_state.chain.invoke(
+                        prompt, config=cast(RunnableConfig, {"language": detected_lang})
+                    )
                     st.markdown(response.text)
                     sources_caption = format_sources_caption(response)
                     st.caption(sources_caption)
