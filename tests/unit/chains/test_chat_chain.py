@@ -247,10 +247,12 @@ class TestBuildChain:
             response = chain.invoke(SAMPLE_QUESTION)
             assert response.language == "en"
 
-        def test_defaults_to_language_from_author(
+        def test_defaults_to_application_language(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
         ) -> None:
-            """Should use author's language when default_language not provided."""
+            """Should use DEFAULT_RESPONSE_LANGUAGE when default_language not provided."""
+            from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
+
             chain = build_chain(
                 retriever=mock_retriever_with_docs([sample_docs["full"]]),
                 prompt=build_voltaire_prompt(),
@@ -259,8 +261,8 @@ class TestBuildChain:
             )
 
             response = chain.invoke(SAMPLE_QUESTION)
-            # "voltaire" author's language is "fr"
-            assert response.language == "fr"
+            # Should use application-level default
+            assert response.language == DEFAULT_RESPONSE_LANGUAGE
 
     class TestComponentWiring:
         """Tests for dependency injection and component integration."""
@@ -284,7 +286,7 @@ class TestBuildChain:
             assert response.text == "Response about tolerance"
             assert response.retrieved_passage_ids == [CHUNK_ID_1]
             assert response.retrieved_source_titles == [f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}"]
-            assert response.language == "fr"
+            assert response.language == "en"
             assert len(response.retrieved_contexts) == 1
             assert response.retrieved_contexts[0] == CONTENT_FULL
 

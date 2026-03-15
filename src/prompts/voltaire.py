@@ -2,6 +2,7 @@
 
 from langchain_core.prompts import ChatPromptTemplate
 
+
 def build_voltaire_prompt() -> ChatPromptTemplate:
     """Build the Voltaire prompt with persona and multilingual support.
 

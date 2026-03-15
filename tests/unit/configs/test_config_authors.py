@@ -3,11 +3,7 @@
 import pytest
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR, AuthorConfig
-
-# Test constants
-_EXPECTED_CONFIG_TUPLE_LENGTH = 2
-_ISO_639_1_LENGTH = 2
+from src.configs.authors import AUTHOR_CONFIGS, AuthorConfig, DEFAULT_AUTHOR
 
 
 def test_author_configs_registry() -> None:
@@ -17,33 +13,24 @@ def test_author_configs_registry() -> None:
 
 
 def test_author_config_structure() -> None:
-    """Test that each author config has the correct structure and valid language codes."""
+    """Test that each author config has the correct structure."""
     for author, config in AUTHOR_CONFIGS.items():
-        # Validate config is a 2-element tuple
-        assert isinstance(config, tuple), f"Config for {author} must be a tuple"
-        assert (
-            len(config) == _EXPECTED_CONFIG_TUPLE_LENGTH
-        ), f"Config for {author} must have {_EXPECTED_CONFIG_TUPLE_LENGTH} elements"
-
-        prompt_factory, language = config
+        # Validate config is an AuthorConfig dataclass
+        assert isinstance(config, AuthorConfig), f"Config for {author} must be an AuthorConfig"
 
         # Validate types
-        assert callable(prompt_factory), f"Prompt factory for {author} must be callable"
-        assert isinstance(language, str), f"Language for {author} must be a string"
+        assert callable(config.prompt_factory), f"Prompt factory for {author} must be callable"
+        assert isinstance(config.exit_message, str), f"Exit message for {author} must be a string"
 
-        # Validate language code is ISO 639-1 format
-        assert (
-            len(language) == _ISO_639_1_LENGTH
-        ), f"Language code for {author} must be {_ISO_639_1_LENGTH} characters"
-        assert language.islower(), f"Language code for {author} must be lowercase"
-        assert language.isalpha(), f"Language code for {author} must be alphabetic"
+        # Validate exit message is non-empty
+        assert len(config.exit_message) > 0, f"Exit message for {author} must be non-empty"
 
 
 @pytest.mark.parametrize("author", list(AUTHOR_CONFIGS.keys()))
 def test_prompt_factory_returns_valid_template(author: str) -> None:
     """Test that each author's prompt factory returns ChatPromptTemplate."""
-    prompt_factory, _ = AUTHOR_CONFIGS[author]
-    prompt = prompt_factory()
+    config = AUTHOR_CONFIGS[author]
+    prompt = config.prompt_factory()
     assert isinstance(
         prompt, ChatPromptTemplate
     ), f"Prompt factory for {author} must return ChatPromptTemplate"

@@ -10,7 +10,11 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import ChatOllama
 
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_LLM_MODEL
+from src.configs.common import (
+    DEFAULT_DB_PATH,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_RESPONSE_LANGUAGE,
+)
 from src.schemas import ChatResponse
 from src.vectorstores.retriever import build_retriever
 
@@ -36,7 +40,7 @@ def build_chain(
         retriever: LangChain retriever (default: builds from persist_dir + author)
         llm: Language model (default: ChatOllama with DEFAULT_LLM_MODEL)
         prompt: Chat prompt template (default: builds from author registry)
-        default_language: Default response language ISO code (default: from author registry)
+        default_language: Default response language ISO code (default: DEFAULT_RESPONSE_LANGUAGE)
         detect_user_language: Whether to detect question language (default: True)
 
     Returns:
@@ -53,7 +57,8 @@ def build_chain(
         )
 
     # Get author-specific configuration
-    prompt_factory, author_language = AUTHOR_CONFIGS[author]
+    config = AUTHOR_CONFIGS[author]
+    prompt_factory = config.prompt_factory
 
     # Build retriever if not provided
     if retriever is None:
@@ -67,9 +72,9 @@ def build_chain(
     if llm is None:
         llm = ChatOllama(model=DEFAULT_LLM_MODEL)
 
-    # Default language from author
+    # Default language from application config
     if default_language is None:
-        default_language = author_language
+        default_language = DEFAULT_RESPONSE_LANGUAGE
 
     def _run(question: str) -> ChatResponse:
         """Internal function that executes the RAG pipeline.

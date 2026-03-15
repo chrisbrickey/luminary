@@ -10,3 +10,6 @@ DEFAULT_DB_PATH = Path("data/chroma_db")
 
 # Default LLM model for chat and generation tasks
 DEFAULT_LLM_MODEL = "mistral"
+
+# Default response language (overridden by language detected in user's prompt)
+DEFAULT_RESPONSE_LANGUAGE = "en"
