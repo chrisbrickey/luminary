@@ -59,6 +59,8 @@ def initialize_session_state() -> None:
         st.session_state.current_author = DEFAULT_AUTHOR
     if "current_db_path" not in st.session_state:
         st.session_state.current_db_path = str(DEFAULT_DB_PATH)
+    if "show_exit_message" not in st.session_state:
+        st.session_state.show_exit_message = None
 
 
 def rebuild_chain_if_needed(db_path: str, author: str) -> None:
@@ -136,11 +138,23 @@ def main() -> None:
             format_func=lambda x: x.capitalize(),
         )
 
+        # Clear conversation button
+        if st.button("Clear conversation"):
+            exit_msg = AUTHOR_CONFIGS[author].exit_message
+            st.session_state.messages = []
+            st.session_state.show_exit_message = exit_msg
+            st.rerun()
+
         st.divider()
         st.caption("Responses are generated using retrieval-augmented generation (RAG) with historical texts.")
 
     # Rebuild chain if configuration changed
     rebuild_chain_if_needed(db_path, author)
+
+    # Show exit message if conversation was just cleared
+    if st.session_state.show_exit_message:
+        st.toast(st.session_state.show_exit_message, icon="🪶")
+        st.session_state.show_exit_message = None
 
     # Display chat messages
     for message in st.session_state.messages:

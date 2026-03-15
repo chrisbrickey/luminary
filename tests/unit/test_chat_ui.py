@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from langchain_core.prompts import ChatPromptTemplate
 
 from chat_ui import (
     deduplicate_sources,
@@ -12,9 +13,24 @@ from chat_ui import (
     main,
     rebuild_chain_if_needed,
 )
-from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
+from src.configs.authors import AUTHOR_CONFIGS, AuthorConfig, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
 from src.schemas import ChatResponse
+
+
+# --- Test constants ---
+
+
+def _fake_gouges_prompt_factory() -> ChatPromptTemplate:
+    """Fake prompt factory for test author gouges."""
+    return ChatPromptTemplate.from_messages([("system", "You are {author}"), ("human", "{question}")])
+
+
+# Mock AuthorConfig for test author gouges
+GOUGES_CONFIG = AuthorConfig(
+    prompt_factory=_fake_gouges_prompt_factory,
+    exit_message="Adieu - Olympe",
+)
 
 
 # --- Test fixtures ---
@@ -31,6 +47,15 @@ class SessionStateMock(dict):
 
     def __setattr__(self, key: str, value: object) -> None:
         self[key] = value
+
+
+@pytest.fixture
+def mock_author_configs_with_gouges():
+    """Patch AUTHOR_CONFIGS with real and test authors."""
+    # Include both real voltaire config and fake gouges config
+    test_configs = {**AUTHOR_CONFIGS, "gouges": GOUGES_CONFIG}
+    with patch("chat_ui.AUTHOR_CONFIGS", test_configs):
+        yield
 
 
 # --- Test helper functions ---
@@ -125,6 +150,7 @@ def test_initialize_session_state_empty(mock_st: Mock) -> None:
     assert mock_st.session_state["chain"] is None
     assert mock_st.session_state["current_author"] == DEFAULT_AUTHOR
     assert str(DEFAULT_DB_PATH) in mock_st.session_state["current_db_path"]
+    assert mock_st.session_state["show_exit_message"] is None
 
 
 @patch("chat_ui.st")
@@ -359,11 +385,13 @@ def test_main_with_defaults(
             "chain": None,
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None  # No user input
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
 
     main()
 
@@ -393,11 +421,13 @@ def test_main_renders_title(
             "chain": None,
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None  # No user input
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
 
     main()
 
@@ -430,11 +460,13 @@ def test_main_initializes_session_state(
             "chain": None,
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
 
     main()
 
@@ -454,11 +486,13 @@ def test_main_sidebar_config(
             "chain": None,
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
     mock_st.text_input.return_value = "/custom/path"
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
 
     # Mock sidebar context manager
     mock_sidebar = MagicMock()
@@ -476,7 +510,7 @@ def test_main_sidebar_config(
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_rebuilds_chain(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs_with_gouges
 ) -> None:
     """Test that main rebuilds chain with sidebar config."""
     mock_st.session_state = SessionStateMock(
@@ -485,15 +519,88 @@ def test_main_rebuilds_chain(
             "chain": None,
             "current_author": "voltaire",
             "current_db_path": "data/chroma_db",
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
     mock_st.text_input.return_value = "/custom/path"
     mock_st.selectbox.return_value = "gouges"
+    mock_st.button.return_value = False
 
     main()
 
     mock_rebuild.assert_called_once_with("/custom/path", "gouges")
+
+
+@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_session_state")
+@patch("chat_ui.st")
+def test_main_clear_conversation_button_shows_exit_message(
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs_with_gouges
+) -> None:
+    """Test that Clear conversation button stores exit message in session state for display after rerun."""
+    mock_st.session_state = SessionStateMock(
+        {
+            "messages": [{"role": "user", "content": "Previous message"}],
+            "chain": Mock(),
+            "current_author": "gouges",
+            "current_db_path": "data/chroma_db",
+            "show_exit_message": None,
+        }
+    )
+    mock_st.chat_input.return_value = None
+    mock_st.text_input.return_value = "data/chroma_db"
+    mock_st.selectbox.return_value = "gouges"
+    mock_st.button.return_value = True  # Trigger "Clear conversation" button
+    mock_st.toast = Mock()
+    mock_st.rerun = Mock(side_effect=Exception("Rerun called"))  # Prevent actual rerun
+
+    # Run - should raise due to rerun
+    try:
+        main()
+    except Exception as e:
+        if str(e) != "Rerun called":
+            raise
+
+    # Verify exit message was stored in session state (not displayed immediately)
+    assert mock_st.session_state["show_exit_message"] == "Adieu - Olympe"
+
+    # Verify messages were cleared
+    assert mock_st.session_state["messages"] == []
+
+    # Toast should not be called during button click (it's called after rerun)
+    mock_st.toast.assert_not_called()
+
+
+@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_session_state")
+@patch("chat_ui.st")
+def test_main_shows_exit_message_toast_after_rerun(
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs_with_gouges
+) -> None:
+    """Test that exit message toast is displayed after rerun when flag is set."""
+    mock_st.session_state = SessionStateMock(
+        {
+            "messages": [],
+            "chain": Mock(),
+            "current_author": "gouges",
+            "current_db_path": "data/chroma_db",
+            "show_exit_message": "Adieu - Olympe",  # Flag set from previous run
+        }
+    )
+    mock_st.chat_input.return_value = None
+    mock_st.text_input.return_value = "data/chroma_db"
+    mock_st.selectbox.return_value = "gouges"
+    mock_st.button.return_value = False  # Button not clicked this time
+    mock_st.toast = Mock()
+
+    main()
+
+    # Verify toast was called with the exit message
+    mock_st.toast.assert_called_once_with("Adieu - Olympe", icon="🪶")
+
+    # Verify flag was cleared after displaying
+    assert mock_st.session_state["show_exit_message"] is None
 
 
 @patch("chat_ui.rebuild_chain_if_needed")
@@ -516,11 +623,13 @@ def test_main_displays_existing_messages(
             "chain": Mock(),
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False  # Don't trigger "Clear conversation" button
 
     # Mock chat_message context manager
     mock_chat_message = MagicMock()
@@ -559,11 +668,13 @@ def test_main_no_input_returns_early(
             "chain": Mock(),
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None  # No input
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
 
     main()
 
@@ -594,11 +705,13 @@ def test_main_processes_user_input(
             "chain": mock_chain,
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "What is tolerance?"
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
 
     # Mock chat_message and spinner context managers
     mock_chat_message = MagicMock()
@@ -658,11 +771,13 @@ def test_main_shows_sources_caption(
             "chain": mock_chain,
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "Test question"
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
 
     # Mock context managers
     mock_chat_message = MagicMock()
@@ -693,11 +808,13 @@ def test_main_chain_not_initialized_error(
             "chain": None,  # Chain not initialized
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "Test question"
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
     mock_st.error = Mock()
 
     main()
@@ -723,11 +840,13 @@ def test_main_chain_invocation_error(
             "chain": mock_chain,
             "current_author": DEFAULT_AUTHOR,
             "current_db_path": str(DEFAULT_DB_PATH),
+            "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "Test question"
     mock_st.text_input.return_value = str(DEFAULT_DB_PATH)
     mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.button.return_value = False
     mock_st.error = Mock()
 
     # Mock context managers
