@@ -10,7 +10,7 @@ from pathlib import Path
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 from src.chains.chat_chain import build_chain
-from src.configs.authors import DEFAULT_AUTHOR
+from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
 from src.schemas import ChatResponse
 from src.utils.ollama_health import check_ollama_available
@@ -115,6 +115,9 @@ def run_interactive_chat(
     logger.debug(f"Using database: {db_path}")
     chain = build_chain(persist_dir=str(db_path), author=author)
 
+    # Get author's exit message
+    exit_msg = AUTHOR_CONFIGS[author].exit_message
+
     # Interactive loop
     print("\nWelcome to Luminary!")
     print(f"\nYou are now chatting with {author.capitalize()}.")
@@ -126,7 +129,7 @@ def run_interactive_chat(
 
             # Exit on quit command
             if question.lower() == "quit":
-                print("\nAu revoir.")
+                print(f"\n{exit_msg}")
                 break
 
             # Skip empty questions
@@ -155,7 +158,7 @@ def run_interactive_chat(
             print()  # Blank line for readability
 
         except (KeyboardInterrupt, EOFError):
-            print("\n\nAu revoir.")
+            print(f"\n\n{exit_msg}")
             break
         except Exception as e:
             logger.error(f"Error: {e}")

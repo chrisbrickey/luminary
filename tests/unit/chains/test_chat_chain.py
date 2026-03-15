@@ -233,24 +233,26 @@ class TestBuildChain:
     class TestLanguageDetection:
         """Tests for language detection logic."""
 
-        def test_uses_default_language(
+        def test_uses_language_parameter(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
         ) -> None:
-            """Should use default_language parameter when explicitly provided."""
+            """Should use language parameter when explicitly provided."""
             chain = build_chain(
                 retriever=mock_retriever_with_docs([sample_docs["full"]]),
                 prompt=build_voltaire_prompt(),
                 llm=mock_llm_with_response("English response"),
-                default_language="en",
+                language="en",
             )
 
             response = chain.invoke(SAMPLE_QUESTION)
             assert response.language == "en"
 
-        def test_defaults_to_language_from_author(
+        def test_defaults_to_application_language(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
         ) -> None:
-            """Should use author's language when default_language not provided."""
+            """Should use DEFAULT_RESPONSE_LANGUAGE when language not provided."""
+            from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
+
             chain = build_chain(
                 retriever=mock_retriever_with_docs([sample_docs["full"]]),
                 prompt=build_voltaire_prompt(),
@@ -259,8 +261,8 @@ class TestBuildChain:
             )
 
             response = chain.invoke(SAMPLE_QUESTION)
-            # "voltaire" author's language is "fr"
-            assert response.language == "fr"
+            # Should use application-level default
+            assert response.language == DEFAULT_RESPONSE_LANGUAGE
 
     class TestComponentWiring:
         """Tests for dependency injection and component integration."""
@@ -284,7 +286,7 @@ class TestBuildChain:
             assert response.text == "Response about tolerance"
             assert response.retrieved_passage_ids == [CHUNK_ID_1]
             assert response.retrieved_source_titles == [f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}"]
-            assert response.language == "fr"
+            assert response.language == "en"
             assert len(response.retrieved_contexts) == 1
             assert response.retrieved_contexts[0] == CONTENT_FULL
 
@@ -333,7 +335,7 @@ class TestBuildChain:
                 retriever=mock_retriever,
                 llm=mock_llm,
                 prompt=build_voltaire_prompt(),
-                default_language="en",
+                language="en",
             )
 
             response = chain.invoke(SAMPLE_QUESTION)

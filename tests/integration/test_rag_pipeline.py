@@ -236,7 +236,7 @@ def integration_chain_setup(tmp_path: Path) -> pytest.fixture:
     embeddings = FakeEmbeddings()
     db_path = tmp_path / "chroma"
 
-    def build_test_chain(chunks, author="voltaire", default_language="fr", k=DEFAULT_K):
+    def build_test_chain(chunks, author="voltaire", language="fr", k=DEFAULT_K):
         """Build a complete chain with real ChromaDB and fake LLM."""
         embed_and_store(chunks=chunks, persist_dir=db_path, embeddings=embeddings)
         retriever = build_retriever(
@@ -246,7 +246,7 @@ def integration_chain_setup(tmp_path: Path) -> pytest.fixture:
             retriever=retriever,
             llm=FakeChatModel(),
             prompt=build_voltaire_prompt(),
-            default_language=default_language,
+            language=language,
             detect_user_language=False,
         )
 
@@ -369,7 +369,7 @@ def test_rag_chain_handles_missing_metadata(
     ]
 
     # Build chain with English language
-    chain = integration_chain_setup(chunks, default_language="en")
+    chain = integration_chain_setup(chunks, language="en")
 
     # Invoke
     response = chain.invoke("test question")
@@ -439,7 +439,7 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
         retriever=retriever,
         llm=mock_llm,
         prompt=build_voltaire_prompt(),
-        default_language="fr",
+        language="fr",
         detect_user_language=False,
     )
 

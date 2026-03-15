@@ -4,8 +4,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from langchain_core.prompts import ChatPromptTemplate
 
-from src.configs.authors import DEFAULT_AUTHOR
+from src.configs.authors import AuthorConfig, DEFAULT_AUTHOR
 from src.configs.common import DEFAULT_DB_PATH
 from src.schemas import ChatResponse
 
@@ -24,6 +25,18 @@ TEST_SOURCE_TITLES = [
     "Esquisse d'un tableau historique, Page 9",
     "Esquisse d'un tableau historique, Page 12" # duplicate
 ]
+
+
+def _fake_prompt_factory() -> ChatPromptTemplate:
+    """Fake prompt factory for test author."""
+    return ChatPromptTemplate.from_messages([("system", "You are {author}"), ("human", "{question}")])
+
+
+# Mock AuthorConfig for test author
+TEST_AUTHOR_CONFIG = AuthorConfig(
+    prompt_factory=_fake_prompt_factory,
+    exit_message="Au revoir - Condorcet",
+)
 
 
 def create_mock_response(
@@ -153,6 +166,13 @@ class TestFormatChunksOutput:
         result = format_chunks_output(response)
 
         assert result == "\nRetrieved chunks: none"
+
+
+@pytest.fixture(autouse=True)
+def mock_author_configs():
+    """Patch AUTHOR_CONFIGS with test author for all tests."""
+    with patch("scripts.chat.AUTHOR_CONFIGS", {TEST_AUTHOR: TEST_AUTHOR_CONFIG}):
+        yield
 
 
 class TestRunInteractiveChat:
@@ -449,8 +469,9 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Test that 'quit' command exits gracefully."""
+        """Test that 'quit' command exits gracefully and displays exit message."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -470,6 +491,10 @@ class TestRunInteractiveChat:
         # Verify chain was never invoked
         mock_chain.invoke.assert_not_called()
 
+        # Verify exit message appears in output
+        captured = capsys.readouterr()
+        assert "Au revoir - Condorcet" in captured.out
+
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -478,8 +503,9 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Test that Ctrl+C (KeyboardInterrupt) exits gracefully."""
+        """Test that Ctrl+C (KeyboardInterrupt) exits gracefully and displays exit message."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -499,6 +525,10 @@ class TestRunInteractiveChat:
         # Verify chain was never invoked
         mock_chain.invoke.assert_not_called()
 
+        # Verify exit message appears in output
+        captured = capsys.readouterr()
+        assert "Au revoir - Condorcet" in captured.out
+
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -507,8 +537,9 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Test that EOFError exits gracefully."""
+        """Test that EOFError exits gracefully and displays exit message."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -527,6 +558,10 @@ class TestRunInteractiveChat:
 
         # Verify chain was never invoked
         mock_chain.invoke.assert_not_called()
+
+        # Verify exit message appears in output
+        captured = capsys.readouterr()
+        assert "Au revoir - Condorcet" in captured.out
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")

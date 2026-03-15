@@ -199,13 +199,13 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 
 ## ✅ Step 8: Voltaire prompt + chat chain
 - Create new directories with `__init__.py`: `src/prompts/`, `src/chains/`; create `tests/unit/chains/`
-- Create `src/prompts/voltaire.py` — Voltaire system prompt (irony/wit, mandatory inline citations, responds in `{language}`, translates cited French passages when responding in English); export `RESPONSE_LANGUAGE = "fr"` and `build_voltaire_prompt() -> ChatPromptTemplate`
+- Create `src/prompts/voltaire.py` — Voltaire system prompt (irony/wit, mandatory inline citations, responds in `{language}`); export `build_voltaire_prompt() -> ChatPromptTemplate` ~~and `RESPONSE_LANGUAGE = "fr"`~~ (language is now passed dynamically via chain, not hardcoded)
   - **Bilingual from the start** — prompt includes `{language}` placeholder (improvement over rag-chat-1 which had to retrofit this later)
 - Create `src/chains/chat_chain.py`:
   - `DEFAULT_AUTHOR = "voltaire"` — canonical author key
-  - `_AUTHOR_CONFIGS: dict[str, tuple[Callable[[], ChatPromptTemplate], str]]` — extensible registry
+  - `_AUTHOR_CONFIGS: dict[str, AuthorConfig]` — extensible registry (AuthorConfig is a dataclass with `prompt_factory` and `exit_message` fields)
   - `build_default_chain(persist_dir, author=DEFAULT_AUTHOR) -> Runnable[str, ChatResponse]` — production entry point; validates author against registry; uses `ChatOllama(model="mistral")` as default LLM
-  - `build_chat_chain(retriever, llm=None, prompt=None, default_language="fr", detect_user_language=True) -> Runnable[str, ChatResponse]` — injectable helper
+  - `build_chat_chain(retriever, llm=None, prompt=None, language="fr", detect_user_language=True) -> Runnable[str, ChatResponse]` — injectable helper
   - Internal `_run(question) -> ChatResponse`: retrieves top-k docs, formats context with `[source: {title}, page {page_number}]` labels (page-specific from the start), detects question language, invokes LLM, returns structured ChatResponse
   - Helpers: `_format_docs_with_titles()`, `_extract_chunk_ids()`, `_extract_source_titles()` (combines document_title + page_number; fallback: title-only → source URL → "unknown")
 - **Test:** `tests/unit/chains/test_chat_chain.py` — mock LLM and retriever; assert chain wires retrieval + prompt correctly; test `_extract_source_titles()` with title+page, title-only, fallback to source URL, missing metadata; test empty retrieval; test unknown author raises ValueError; test language detection integration
@@ -214,13 +214,25 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
   - Created `FakeChatModel` in integration tests (similar to `FakeEmbeddings`) for testing without real LLM calls
-  - Language detection placeholder implemented — `detect_user_language` parameter is present but actual detection logic deferred to Step 11; currently uses `default_language` directly
+  - Language detection placeholder implemented — `detect_user_language` parameter is present but actual detection logic deferred to Step 11; currently uses `language` parameter directly
   - Comprehensive test coverage: 21 unit tests covering all helper functions, chain wiring, error cases, and author registry; 2 integration tests covering full end-to-end pipeline with real ChromaDB and retriever
   - All tests pass; mypy type checking passes
   - **Post-implementation refactoring:**
     - Moved `DEFAULT_AUTHOR = "voltaire"` from `chat_chain.py` to `src/configs/common.py` for consistency with Step 6 config pattern; added 2 tests; all future CLI scripts (Steps 9, 15) will import this constant for their argparse defaults
     - **Unified API:** Merged `build_default_chain()` and `build_chat_chain()` into single `build_chain()` method. This method takes all parameters with sensible defaults, supporting both production use (`build_chain()` or `build_chain(author="gouges")`) and testing use (`build_chain(retriever=mock, llm=mock, prompt=mock)`). Eliminates API confusion and reduces code duplication. Updated all 25 test call sites. Added 1 new test for injection mode. All 154 tests pass. Single public API is clearer and more maintainable.
     - **Chunk ID isolation (2026-03-11):** Removed chunk IDs from LLM-facing context and prompt instructions. Chunk IDs are internal metadata for debugging (visible only with `--show-chunks` flag) and should never be sent to the LLM or appear in responses. Changes: (1) Updated `src/prompts/voltaire.py` to remove `| chunk_id: xxx` from citation format instruction, (2) Updated `src/chains/chat_chain.py::_format_docs_with_titles()` to format context as `[source: {title}, page {page}]` without chunk IDs, (3) Added unit test `test_prompt_does_not_instruct_chunk_id_citations` to verify prompt doesn't instruct chunk ID citations, (4) Updated existing `test_context_formatting` to assert chunk IDs are NOT in LLM input, (5) Added integration test `test_rag_chain_does_not_expose_chunk_ids_to_llm` to verify end-to-end pipeline isolation. All 184 tests pass.
+    - **Prompt refinement (2026-03-15, commit e372784):** Strengthened LLM prompting for better instruction clarity and citation control:
+      1. Rewrote Voltaire prompt from French to English — LLMs follow English instructions more reliably
+      2. Removed `RESPONSE_LANGUAGE` constant export from `voltaire.py` — language is now passed dynamically as a parameter via the chain, not hardcoded
+      3. Enhanced prompt with explicit formatting examples showing correct vs. incorrect citation placement (citations must appear at end of sentences, never at beginning of paragraphs)
+      4. Created dedicated test file `tests/unit/prompts/test_voltaire.py` with comprehensive prompt validation tests
+      5. Refactored and reorganized tests in `tests/unit/chains/test_chat_chain.py` for better clarity and maintainability
+    - **Personalized exit messages (2026-03-15, commit 8d9cc29):** Extended author configuration to include UI-related metadata:
+      1. Changed `AuthorConfig` from tuple `(prompt_factory, language)` to frozen dataclass with fields: `prompt_factory: Callable[[], ChatPromptTemplate]` and `exit_message: str`
+      2. Added personalized exit messages displayed when user exits interaction (e.g., "Je vous embrasse - V" for Voltaire)
+      3. CLI exit message display: shown when user exits via `quit`, Ctrl+C, or EOFError (3 additional tests in `test_script_chat.py`)
+      4. Web UI exit message display: shown via toast notification when user clicks "Clear conversation" button (2 additional tests in `test_chat_ui.py`)
+      5. This change establishes pattern for extending author config with non-LLM metadata (UI strings, personality traits, etc.) while keeping prompt logic separate
 
 ## ✅ Step 9: Chat CLI script
 - Create `scripts/chat.py` — interactive CLI chat loop; flags: `--db`, `--author`, `--show-chunks`, `--verbose`; calls `check_ollama_available()`; prints deduplicated "Sources:" footer (with page numbers); exits on `quit`, Ctrl+C, EOFError
@@ -307,7 +319,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 ## Step 13: Gouges corpus + persona + eval expansion
 - **Goal:** Add second philosopher with her own texts, prompt, and registry entry; expand eval dataset to include Gouges examples
 - Create `src/prompts/gouges.py` — Gouges system prompt (her voice, mandatory citations from her texts, responds in `{language}`, passionate advocacy for women's rights); export `build_gouges_prompt() -> ChatPromptTemplate`
-- Register `"gouges": (build_gouges_prompt, "fr")` in `_AUTHOR_CONFIGS` in `chat_chain.py`
+- Register `"gouges": AuthorConfig(prompt_factory=build_gouges_prompt, exit_message=<personalized message>)` in `_AUTHOR_CONFIGS` in `chat_chain.py`
 - Add `GOUGES_DECLARATION_CONFIG` to `src/configs/loader_configs.py`
 - Register `INGEST_CONFIGS["gouges"] = GOUGES_DECLARATION_CONFIG` in `loader_configs.py`
 - **Expand golden dataset:** Update `data/eval/golden_dataset.json` to **v2.0** — add 3-4 Gouges examples covering women's rights, social contracts; ensure both Voltaire and Gouges examples present

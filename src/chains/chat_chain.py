@@ -10,7 +10,11 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import ChatOllama
 
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_LLM_MODEL
+from src.configs.common import (
+    DEFAULT_DB_PATH,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_RESPONSE_LANGUAGE,
+)
 from src.schemas import ChatResponse
 from src.vectorstores.retriever import build_retriever
 
@@ -21,7 +25,7 @@ def build_chain(
     retriever: VectorStoreRetriever | None = None,
     llm: BaseChatModel | None = None,
     prompt: ChatPromptTemplate | None = None,
-    default_language: str | None = None,
+    language: str | None = None,
     detect_user_language: bool = True,
 ) -> Runnable[str, ChatResponse]:
     """Build a RAG chat chain with sensible defaults or custom components.
@@ -36,7 +40,7 @@ def build_chain(
         retriever: LangChain retriever (default: builds from persist_dir + author)
         llm: Language model (default: ChatOllama with DEFAULT_LLM_MODEL)
         prompt: Chat prompt template (default: builds from author registry)
-        default_language: Default response language ISO code (default: from author registry)
+        language: Response language ISO code (default: DEFAULT_RESPONSE_LANGUAGE)
         detect_user_language: Whether to detect question language (default: True)
 
     Returns:
@@ -53,7 +57,8 @@ def build_chain(
         )
 
     # Get author-specific configuration
-    prompt_factory, author_language = AUTHOR_CONFIGS[author]
+    config = AUTHOR_CONFIGS[author]
+    prompt_factory = config.prompt_factory
 
     # Build retriever if not provided
     if retriever is None:
@@ -67,9 +72,9 @@ def build_chain(
     if llm is None:
         llm = ChatOllama(model=DEFAULT_LLM_MODEL)
 
-    # Default language from author
-    if default_language is None:
-        default_language = author_language
+    # Default language from application config
+    if language is None:
+        language = DEFAULT_RESPONSE_LANGUAGE
 
     def _run(question: str) -> ChatResponse:
         """Internal function that executes the RAG pipeline.
@@ -86,12 +91,8 @@ def build_chain(
         # Format context with source labels
         context = _format_docs_with_titles(docs)
 
-        # Detect or use default language
-        # Note: Actual language detection will be wired in Step 11
-        # For now, we just use the default_language
-        language = default_language
-
         # Format the prompt
+        # Use language parameter directly for now. We will add detection of user's language.
         formatted_prompt = prompt.format_messages(
             context=context,
             question=question,
