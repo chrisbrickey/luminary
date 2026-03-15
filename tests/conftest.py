@@ -120,3 +120,10 @@ def make_test_document() -> Callable[..., Document]:
         return Document(page_content=content, metadata=metadata)
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def clear_i18n_cache() -> None:
+    """Clear i18n message cache before each test to ensure isolation."""
+    from src.i18n import clear_cache
+    clear_cache()

@@ -12,6 +12,7 @@ dependencies = [
     "langchain-core>=1.2.16",
     "langchain-ollama>=1.0.1",
     "pydantic>=2.12.5",
+    "pyyaml>=6.0.2",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +25,7 @@ dev = [
     "mypy>=1.19.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
+    "types-pyyaml>=6.0.12.20250915",
     "types-requests>=2.32.4.20260107",
 ]
 

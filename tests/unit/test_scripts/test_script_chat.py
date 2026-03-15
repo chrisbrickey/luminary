@@ -67,68 +67,6 @@ def create_mock_response(
     )
 
 
-class TestDeduplicateSources:
-    """Test deduplicate_sources() helper function."""
-
-    def test_deduplicate_preserves_order(self) -> None:
-        """Test that deduplication preserves first appearance order."""
-        from scripts.chat import deduplicate_sources
-
-        response = create_mock_response()
-        result = deduplicate_sources(response)
-
-        # Should have 2 unique titles in order of first appearance
-        assert result == [
-            "Esquisse d'un tableau historique, Page 12",
-            "Esquisse d'un tableau historique, Page 9",
-        ]
-
-    def test_empty_sources(self) -> None:
-        """Test deduplication with empty sources list."""
-        from scripts.chat import deduplicate_sources
-
-        response = create_mock_response(source_titles=[])
-        result = deduplicate_sources(response)
-
-        assert result == []
-
-    def test_all_unique_sources(self) -> None:
-        """Test deduplication when all sources are unique."""
-        from scripts.chat import deduplicate_sources
-
-        unique_sources = ["Source A", "Source B", "Source C"]
-        response = create_mock_response(source_titles=unique_sources)
-        result = deduplicate_sources(response)
-
-        assert result == unique_sources
-
-
-class TestFormatSourcesFooter:
-    """Test format_sources_footer() helper function."""
-
-    def test_format_with_sources(self) -> None:
-        """Test formatting with deduplicated sources."""
-        from scripts.chat import format_sources_footer
-
-        response = create_mock_response()
-        result = format_sources_footer(response)
-
-        expected = (
-            "\nSources:\n"
-            "  - Esquisse d'un tableau historique, Page 12\n"
-            "  - Esquisse d'un tableau historique, Page 9"
-        )
-        assert result == expected
-
-    def test_format_with_no_sources(self) -> None:
-        """Test formatting when no sources available."""
-        from scripts.chat import format_sources_footer
-
-        response = create_mock_response(source_titles=[])
-        result = format_sources_footer(response)
-
-        assert result == "\nSources: none"
-
 
 class TestFormatChunksOutput:
     """Test format_chunks_output() helper function."""
@@ -216,13 +154,13 @@ class TestRunInteractiveChat:
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
-    def test_user_prompt_is_you_vous(
+    def test_user_prompt_is_localized(
         self,
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
     ) -> None:
-        """Test that user prompt is 'You/Vous:'."""
+        """Test that user prompt uses localized message from DEFAULT_RESPONSE_LANGUAGE."""
         from scripts.chat import run_interactive_chat
 
         # Setup mocks
@@ -239,8 +177,8 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
-        # Verify input was called with correct prompt
-        mock_input.assert_called_with("You/Vous: ")
+        # Verify input was called with localized prompt (from DEFAULT_RESPONSE_LANGUAGE)
+        mock_input.assert_called_with("You: ")
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
@@ -456,10 +394,15 @@ class TestRunInteractiveChat:
         # Capture output
         captured = capsys.readouterr()
 
-        # Verify sources are displayed and deduplicated
-        assert "Sources:" in captured.out
-        assert " Esquisse d'un tableau historique, Page 12" in captured.out
-        assert " Esquisse d'un tableau historique, Page 9" in captured.out
+        # Verify sources are displayed with correct markdown format and deduplicated
+        assert "**Sources:**" in captured.out  # Bold marker (uses DEFAULT_RESPONSE_LANGUAGE: en)
+        assert "- Esquisse d'un tableau historique, Page 12" in captured.out  # Bullet format
+        assert "- Esquisse d'un tableau historique, Page 9" in captured.out   # Bullet format
+
+        # Verify deduplication: Page 12 appears in sources only once (duplicate removed)
+        # Count appearances of "Page 12" in the sources section after "**Sources"
+        sources_section = captured.out.split("**Sources")[1] if "**Sources" in captured.out else ""
+        assert sources_section.count("Page 12") == 1, "Duplicate source should be removed"
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")

@@ -100,12 +100,15 @@ luminary/
 │   ├── chroma_db/           # ChromaDB vector store
 │   └── raw/                 # scraped documents saved as JSON, organised by document_id
 │
+├── locales/                 # user-facing messages that should adapt to detected language
+│
 ├── src/
 │   ├── schemas.py           # shared Pydantic data models to validate data structures
 │   │
-│   ├── configs/             # configurations shared across modules
 │   ├── chains/              # RAG chain orchestration with retrieval + LLM
+│   ├── configs/             # configurations shared across modules
 │   ├── document_loaders/    # fetch and parse data, returning standardised LangChain Documents
+│   ├── i18n/                # localization keys and message loading
 │   ├── prompts/             # author-specific persona prompts (e.g., Voltaire, Gouges)
 │   ├── utils/               # shared utility functions
 │   └── vectorstores/        # ingestion-time storage and query-time retrieval operations

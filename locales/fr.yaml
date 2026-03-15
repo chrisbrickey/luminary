@@ -1,0 +1,18 @@
+# French locale strings for Luminary chat thread
+
+chat:
+  chatting_with: "Vous discutez maintenant avec {author}."
+  exit_instructions: "Tapez 'quit' ou appuyez sur Ctrl+C pour quitter."
+  input_prompt: "Vous : "
+
+status:
+  reflecting: "Réflexion... (le délai dépend de la taille des données et la connexion)"
+
+sources:
+  none: "aucune"
+  label: "**Sources :**"
+
+errors:
+  generic_error: "Erreur : {error}"
+  chain_not_initialized: "Impossible d'envoyer le message : la chaîne n'est pas initialisée. Veuillez vérifier la configuration et les messages d'erreur ci-dessus."
+  generating_response: "Erreur lors de la génération de la réponse : {error}"
