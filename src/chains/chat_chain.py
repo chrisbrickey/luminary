@@ -161,9 +161,9 @@ def _format_docs_with_titles(docs: list[Document]) -> str:
         else:
             source_label = metadata.get("source", "unknown")
 
-        # Format: [source: title, page N]\ncontent
+        # Format: content\n[source: title, page N]
         formatted_chunks.append(
-            f"[source: {source_label}]\n{doc.page_content}"
+            f"{doc.page_content}\n[source: {source_label}]"
         )
 
     return "\n\n".join(formatted_chunks)
