@@ -7,8 +7,6 @@ import pytest
 from langchain_core.prompts import ChatPromptTemplate
 
 from chat_ui import (
-    deduplicate_sources,
-    format_sources_caption,
     initialize_session_state,
     main,
     rebuild_chain_if_needed,
@@ -56,84 +54,6 @@ def mock_author_configs_with_gouges():
     test_configs = {**AUTHOR_CONFIGS, "gouges": GOUGES_CONFIG}
     with patch("chat_ui.AUTHOR_CONFIGS", test_configs):
         yield
-
-
-# --- Test helper functions ---
-
-
-def test_deduplicate_sources() -> None:
-    """Test that sources are deduplicated while preserving order."""
-    response = ChatResponse(
-        text="Test response",
-        retrieved_passage_ids=["id1", "id2", "id3"],
-        retrieved_contexts=["ctx1", "ctx2", "ctx3"],
-        retrieved_source_titles=["Source A", "Source B", "Source A", "Source C"],
-        language="fr",
-    )
-
-    result = deduplicate_sources(response)
-
-    assert result == ["Source A", "Source B", "Source C"]
-
-
-def test_deduplicate_sources_empty() -> None:
-    """Test deduplication with no sources."""
-    response = ChatResponse(
-        text="Test",
-        retrieved_passage_ids=[],
-        retrieved_contexts=[],
-        retrieved_source_titles=[],
-        language="fr",
-    )
-
-    result = deduplicate_sources(response)
-
-    assert result == []
-
-
-def test_format_sources_caption_with_sources() -> None:
-    """Test sources caption formatting with multiple sources."""
-    response = ChatResponse(
-        text="Test",
-        retrieved_passage_ids=["id1", "id2"],
-        retrieved_contexts=["ctx1", "ctx2"],
-        retrieved_source_titles=["Source A", "Source B"],
-        language="fr",
-    )
-
-    result = format_sources_caption(response)
-
-    assert result == "*Sources: Source A, Source B*"
-
-
-def test_format_sources_caption_empty() -> None:
-    """Test sources caption formatting with no sources."""
-    response = ChatResponse(
-        text="Test",
-        retrieved_passage_ids=[],
-        retrieved_contexts=[],
-        retrieved_source_titles=[],
-        language="fr",
-    )
-
-    result = format_sources_caption(response)
-
-    assert result == "*Sources: none*"
-
-
-def test_format_sources_caption_deduplicates() -> None:
-    """Test that caption formatting deduplicates sources."""
-    response = ChatResponse(
-        text="Test",
-        retrieved_passage_ids=["id1", "id2", "id3"],
-        retrieved_contexts=["ctx1", "ctx2", "ctx3"],
-        retrieved_source_titles=["Source A", "Source B", "Source A"],
-        language="fr",
-    )
-
-    result = format_sources_caption(response)
-
-    assert result == "*Sources: Source A, Source B*"
 
 
 # --- Test session state initialization ---
@@ -790,9 +710,15 @@ def test_main_shows_sources_caption(
 
     main()
 
-    # Verify caption was called with sources
-    caption_calls = [call[0][0] for call in mock_st.caption.call_args_list]
-    assert any("Source A" in call for call in caption_calls)
+    # Verify markdown was called with properly formatted sources
+    markdown_calls = [call[0][0] for call in mock_st.markdown.call_args_list]
+
+    # Find the sources call (should contain bold markers and bullets)
+    sources_calls = [call for call in markdown_calls if "**Sources" in call]
+    assert len(sources_calls) == 1, f"Expected 1 sources call, got {len(sources_calls)}"
+
+    # Uses DEFAULT_RESPONSE_LANGUAGE (en), so no space before colon
+    assert sources_calls[0] == "**Sources:**\n- Source A\n- Source B"
 
 
 @patch("chat_ui.rebuild_chain_if_needed")

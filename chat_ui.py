@@ -1,7 +1,6 @@
 """Streamlit web UI for chatting with Enlightenment philosophers."""
 
 import os
-from pathlib import Path
 
 # Disable database telemetry before any imports
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
@@ -10,43 +9,16 @@ import streamlit as st
 
 from src.chains.chat_chain import build_chain
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RESPONSE_LANGUAGE
+from src.i18n import get_message
+from src.i18n.keys import (
+    ERROR_CHAIN_NOT_INITIALIZED,
+    ERROR_GENERATING_RESPONSE,
+    STATUS_REFLECTING,
+)
 from src.schemas import ChatResponse
+from src.utils.formatting import format_sources
 from src.utils.ollama_health import check_ollama_available
-
-
-def deduplicate_sources(response: ChatResponse) -> list[str]:
-    """Deduplicate source titles while preserving order.
-
-    Args:
-        response: ChatResponse with retrieved_source_titles
-
-    Returns:
-        List of deduplicated source titles in order of first appearance
-    """
-    seen = set()
-    deduplicated = []
-    for title in response.retrieved_source_titles:
-        if title not in seen:
-            seen.add(title)
-            deduplicated.append(title)
-    return deduplicated
-
-
-def format_sources_caption(response: ChatResponse) -> str:
-    """Format sources as a compact caption.
-
-    Args:
-        response: ChatResponse with retrieved_source_titles
-
-    Returns:
-        Formatted sources string for display as caption
-    """
-    sources = deduplicate_sources(response)
-    if not sources:
-        return "*Sources: none*"
-    sources_list = ", ".join(sources)
-    return f"*Sources: {sources_list}*"
 
 
 def initialize_session_state() -> None:
@@ -170,10 +142,7 @@ def main() -> None:
     ):
         # Check if chain is available
         if st.session_state.chain is None:
-            st.error(
-                "Cannot send message: chain is not initialized. "
-                "Please check the configuration and error messages above."
-            )
+            st.error(get_message(ERROR_CHAIN_NOT_INITIALIZED, DEFAULT_RESPONSE_LANGUAGE))
             return
 
         # Display user message
@@ -185,12 +154,12 @@ def main() -> None:
 
         # Generate response
         with st.chat_message("assistant", avatar="🪶"):
-            with st.spinner("Reflecting..."):
+            with st.spinner(get_message(STATUS_REFLECTING, DEFAULT_RESPONSE_LANGUAGE)):
                 try:
                     response: ChatResponse = st.session_state.chain.invoke(prompt)
                     st.markdown(response.text)
-                    sources_caption = format_sources_caption(response)
-                    st.caption(sources_caption)
+                    sources_caption = format_sources(response, DEFAULT_RESPONSE_LANGUAGE)
+                    st.markdown(sources_caption)
 
                     # Add assistant message to history
                     st.session_state.messages.append(
@@ -201,7 +170,9 @@ def main() -> None:
                         }
                     )
                 except Exception as e:
-                    error_msg = f"Error generating response: {e}"
+                    error_msg = get_message(
+                        ERROR_GENERATING_RESPONSE, DEFAULT_RESPONSE_LANGUAGE, error=str(e)
+                    )
                     st.error(error_msg)
                     st.session_state.messages.append(
                         {"role": "assistant", "content": f"*{error_msg}*"}

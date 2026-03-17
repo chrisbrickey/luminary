@@ -282,7 +282,61 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - README updated with comprehensive documentation: Technology table (added Streamlit), project structure (added chat_ui.py), and detailed "Chat via Web UI" section
   - All 208 tests pass (including new chat_ui tests); mypy type checking passes
 
-## Step 11: Language detection utility
+## ✅ Step 11: User interface localization (i18n)
+- **Goal:** Provide localized user-facing strings for chat interfaces (CLI and web UI) with language-appropriate messages
+- Add dependencies: `pyyaml`, `types-pyyaml` (dev dependency for type checking)
+- Create `locales/` directory at project root with YAML files for each supported language:
+  - `locales/en.yaml` — English strings
+  - `locales/fr.yaml` — French strings
+  - Structure: nested YAML with categories (chat, status, sources, errors) containing message templates with `{placeholders}` for interpolation
+- Create `src/i18n/` package with:
+  - `messages.py` — core localization module:
+    - `SUPPORTED_LANGUAGES: frozenset[str]` — explicit set of available locales (`"en"`, `"fr"`)
+    - `load_messages(language) -> dict[str, Any]` — loads and caches YAML files; falls back to `DEFAULT_RESPONSE_LANGUAGE` if language unsupported
+    - `get_message(key, language, **kwargs) -> str` — retrieves localized string with optional interpolation; automatically capitalizes author names
+    - `clear_cache() -> None` — testing utility for cache invalidation
+    - Private helper `_get_nested_value()` for dot-notation key traversal
+  - `keys.py` — type-safe message key constants (e.g., `CHAT_CHATTING_WITH = "chat.chatting_with"`) to prevent typos and enable IDE autocomplete
+  - `key_registry.py` — dynamic registry that collects all keys from `keys.py` into `ALL_REQUIRED_KEYS: frozenset[str]` for validation purposes
+  - `__init__.py` — exports `get_message` and `clear_cache` as public API
+- Create `src/utils/formatting.py` — unified formatting utilities:
+  - `deduplicate_sources(response) -> list[str]` — preserves order of first appearance
+  - `format_sources(response, language) -> str` — markdown-formatted source citations using localized labels; works for both CLI (readable plaintext) and web UI (rendered markdown)
+- Modify `scripts/chat.py` and `chat_ui.py`:
+  - Import localization functions from `src.i18n` and `src.utils.formatting`
+  - Replace hardcoded English strings with `get_message()` calls using constants from `src.i18n.keys`
+  - Use `format_sources()` for consistent source citation formatting
+  - Messages adapt to detected response language for better user experience
+- **Test:** `tests/unit/i18n/test_messages.py` — comprehensive coverage (241 lines / 42 tests):
+  - Locale file loading with caching
+  - Fallback to default language for unsupported locales
+  - Nested key traversal with dot notation
+  - String interpolation with and without author capitalization
+  - Error handling for missing files, invalid keys, malformed YAML, non-string values
+  - Cache clearing functionality
+  - Integration test validating all registered keys exist in all locale files
+- **Test:** `tests/unit/utils/test_formatting.py` — comprehensive coverage (144 lines / 20 tests):
+  - Source deduplication while preserving order
+  - Markdown formatting for both languages
+  - Edge cases: empty sources, single source, multiple sources, duplicate sources
+- **Test:** Update `tests/unit/test_scripts/test_script_chat.py` and `tests/unit/test_chat_ui.py` — refactor to use localization (removed ~150 lines of duplicated formatting logic replaced by shared utilities)
+- **Test:** Add `tests/conftest.py` fixture: `reset_i18n_cache` for clean test isolation
+- **README:** Update project structure diagram to add `locales/` directory and `src/i18n/` package
+- **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - Localization system was not in original plan; added as enhancement after completing Step 10 (Web UI)
+  - Design benefits:
+    - **DRY principle:** Eliminates ~150 lines of duplicated string literals and formatting logic across CLI and UI modules
+    - **Type safety:** Constants in `keys.py` prevent typos and provide IDE autocomplete
+    - **Extensibility:** Adding a new language requires only a new YAML file; no code changes
+    - **Testability:** Shared formatting utilities have single test suite instead of duplicated tests
+    - **User experience:** Messages adapt to detected response language for native feel
+  - Implementation approach uses YAML instead of gettext/po files for simplicity and better support for nested message structures
+  - Key registry uses dynamic introspection to auto-discover all defined keys, reducing maintenance burden
+  - Comprehensive test coverage: 62 tests added (42 for i18n module, 20 for formatting utilities)
+  - All 270+ tests pass; mypy type checking passes
+
+## Step 12: Language detection utility
 - **Goal:** Standalone language detection module, decoupled from the chain (chain already has `{language}` placeholder from Step 8)
 - Add dependency: `langdetect` (add via `uv add langdetect`)
 - Create `src/utils/language.py`: `detect_language(text, default="fr", min_length=15) -> str` using `langdetect.detect_langs()` — returns default if text shorter than `min_length` or top language confidence < 0.7; graceful fallback on exception
@@ -292,7 +346,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **README:** Update CLI and UI sections to note auto-detected response language; add note about English responses translating French passages
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 12: Evaluation harness — schemas + deterministic metrics (Voltaire-only)
+## Step 13: Evaluation harness — schemas + deterministic metrics (Voltaire-only)
 - **Goal:** Eval data models and all pure-function deterministic metrics; establish quality baseline with Voltaire before adding more philosophers
 - Create `src/eval/` and `src/eval/metrics/` directories (with `__init__.py` in each) and `tests/unit/eval/` directory
 - Modify `src/schemas.py`: add `GoldenExample` (with `question_fr`, `question_en`, `expected_chunk_ids`, `expected_source_title_substrings`, `expected_language`, `expected_keywords_fr`, `expected_keywords_en`, `forbidden_keywords_fr`, `forbidden_keywords_en` — all lists default `[]`); `GoldenDataset` (with `version: str`, `examples: list[GoldenExample]`); `MetricResult` (name, score 0-1, details); `EvalResult` (question, metrics list, fr_response, en_response optional); `EvalReport` (dataset_version, results, per-metric averages)
@@ -300,7 +354,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - Create `src/eval/metrics/faithfulness.py`: shared `_keyword_score()` helper; `faithfulness()` uses `expected_keywords_fr`; `faithfulness_en()` uses `expected_keywords_en`
 - Create `src/eval/metrics/citation.py`: expected source title substrings found in retrieved_source_titles
 - Create `src/eval/metrics/citation_placement.py`: verifies that inline citations `[source: ...]` appear AFTER sentences/claims (not at the beginning or middle of paragraphs) — uses regex to detect citations that appear at start of lines or immediately after newlines without preceding text; penalizes misplaced citations
-- Create `src/eval/metrics/language.py`: response.language == expected_language (now meaningful with Step 11 language detection working)
+- Create `src/eval/metrics/language.py`: response.language == expected_language (now meaningful with Step 12 language detection working)
 - Create `src/eval/metrics/translation.py`: Jaccard overlap of chunk IDs between FR and EN responses (retrieval proxy)
 - Create `src/eval/metrics/forbidden.py`: shared `_forbidden_score()` helper; `forbidden_phrases()` / `forbidden_phrases_en()` — catches persona breaks, anachronisms
 - Create data directories: `data/eval/`, `data/eval/reports/`; update `.gitignore` to add `data/eval/reports/`
@@ -316,7 +370,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **README:** Update project structure diagram to add `src/eval/`. Update Architecture Overview to show EVALUATION PIPELINE.
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 13: Gouges corpus + persona + eval expansion
+## Step 14: Gouges corpus + persona + eval expansion
 - **Goal:** Add second philosopher with her own texts, prompt, and registry entry; expand eval dataset to include Gouges examples
 - Create `src/prompts/gouges.py` — Gouges system prompt (her voice, mandatory citations from her texts, responds in `{language}`, passionate advocacy for women's rights); export `build_gouges_prompt() -> ChatPromptTemplate`
 - Register `"gouges": AuthorConfig(prompt_factory=build_gouges_prompt, exit_message=<personalized message>)` in `_AUTHOR_CONFIGS` in `chat_chain.py`
@@ -329,9 +383,9 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **README:** Update Technology table if new deps; update CLI flags docs to show `gouges` as valid `--author` value; note that `scripts/ingest.py --author gouges` populates her corpus
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 14: Philosopher agents + debate
+## Step 15: Philosopher agents + debate
 - **Goal:** LangChain agents that can decide when and how to retrieve; debate orchestrator runs multiple agents against the same question
-- **Note:** Debate responses will be evaluated as part of Step 15 (eval runner + CLI); no golden dataset changes needed in this step
+- **Note:** Debate responses will be evaluated as part of Step 16 (eval runner + CLI); no golden dataset changes needed in this step
 - Add DEBATE PIPELINE to README.md Architecture Overview:
 ```
 DEBATE PIPELINE (planned)
@@ -364,9 +418,9 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 - **README:** Add debate CLI section: command with `--authors`, flags table, example question; add debate row to Example Usage table; update project structure to include `src/agents/`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 15: Evaluation harness — judge + runner + CLI
+## Step 16: Evaluation harness — judge + runner + CLI
 - **Goal:** LLM-as-judge, eval runner orchestration, and CLI for comprehensive evaluation
-- **Note:** Golden dataset already exists from Steps 12 (v1.0 Voltaire) and 13 (v2.0 + Gouges); this step wires it into a runner + CLI
+- **Note:** Golden dataset already exists from Steps 13 (v1.0 Voltaire) and 14 (v2.0 + Gouges); this step wires it into a runner + CLI
 - Create `src/eval/judge.py`: `run_llm_judge(question, response_text, contexts, llm) -> list[MetricResult]` — scores relevance, groundedness, coherence on 0-1 scale; parses structured LLM output; clamps to [0,1]; handles unparseable output gracefully
 - Create `src/eval/runner.py`:
   - `load_golden_dataset(path) -> GoldenDataset` (validates version field)
@@ -376,7 +430,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - EN metrics (when chain_en provided): language_compliance_en, faithfulness_en, forbidden_phrases_en, translation_drift
   - LLM judge on FR response; also on EN when provided
   - Aggregates per-metric averages
-  - Uses deterministic metrics from Step 12
+  - Uses deterministic metrics from Step 13
 - Create `scripts/run_eval.py`: CLI with `--db`, `--golden`, `--author`, `--output-dir`, `--llm-judge`; prints summary table + saves timestamped JSON to `data/eval/reports/`
 - **Important:** Import and use `DEFAULT_AUTHOR` from `src.configs.common` as the default value for `--author` argparse argument (consistency with chat CLI and chain)
 - **Test:** `tests/unit/eval/test_judge.py` — valid scores, clamped bounds, unparseable output, missing dimension, LLM invocation (5 tests)
@@ -385,7 +439,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 - **README:** Add Evaluation section: plain-language explanation of the five harness steps; split metrics into deterministic vs. LLM-judge; score ranges and troubleshooting guide; update project structure diagram to add `data/eval/`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 16: ChromaDB server mode
+## Step 17: ChromaDB server mode
 - **Goal:** Support both embedded (local) and server (HTTP) ChromaDB modes via env vars
 - Create `src/configs/db_config.py`:
   - `ChromaMode` enum: `EMBEDDED`, `SERVER`
@@ -401,7 +455,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 - **README:** Add ChromaDB configuration section: env vars table, instructions for `chroma run`, verification command
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 17: Heroku deployment
+## Step 18: Heroku deployment
 - **Goal:** Make the app deployable to Heroku with configurable LLM/embedding providers
 - Create `Procfile`: `web: streamlit run chat_ui.py --server.port=$PORT --server.address=0.0.0.0`
 - Create `runtime.txt`: pin Python 3.14
@@ -429,13 +483,14 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 8. **Step 8** (Voltaire prompt + chat chain) — wires retriever + LLM; core feature; bilingual prompt from the start
 9. **Step 9** (chat CLI script) — interactive CLI over the chain; separated for reviewability
 10. **Step 10** (Streamlit UI) — visual interface over the chain
-11. **Step 11** (language detection) — standalone utility wired into chain; makes eval metrics meaningful
-12. **Step 12** (eval schemas + metrics) — establishes quality baseline with Voltaire-only golden dataset (v1.0); deterministic metrics ready for use
-13. **Step 13** (Gouges corpus + eval expansion) — second philosopher + expand golden dataset to v2.0 with Gouges examples
-14. **Step 14** (debate agents) — multi-philosopher debate mode; depends on both philosophers registered
-15. **Step 15** (eval runner + CLI) — orchestration and CLI for running evals; adds LLM-as-judge; uses metrics from Step 12 and dataset from Steps 12-13
-16. **Step 16** (ChromaDB server mode) — isolated infrastructure; prerequisite for Heroku
-17. **Step 17** (Heroku deployment) — requires server mode + provider abstraction
+11. **Step 11** (i18n localization) — user-facing strings for CLI and UI; eliminates duplicated formatting logic; establishes extensible localization pattern
+12. **Step 12** (language detection) — standalone utility wired into chain; makes eval metrics meaningful
+13. **Step 13** (eval schemas + metrics) — establishes quality baseline with Voltaire-only golden dataset (v1.0); deterministic metrics ready for use
+14. **Step 14** (Gouges corpus + eval expansion) — second philosopher + expand golden dataset to v2.0 with Gouges examples
+15. **Step 15** (debate agents) — multi-philosopher debate mode; depends on both philosophers registered
+16. **Step 16** (eval runner + CLI) — orchestration and CLI for running evals; adds LLM-as-judge; uses metrics from Step 13 and dataset from Steps 13-14
+17. **Step 17** (ChromaDB server mode) — isolated infrastructure; prerequisite for Heroku
+18. **Step 18** (Heroku deployment) — requires server mode + provider abstraction
 
 ---
 
@@ -445,11 +500,11 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 3. `uv run python scripts/ingest.py --author voltaire` — scrape + embed Voltaire
 4. `uv run python scripts/chat.py --show-chunks` → ask "Que pensez-vous de la tolérance?" → Voltaire-style French response with page-specific citations
 5. `uv run python scripts/chat.py` → ask "What do you think about tolerance?" → English response with language detection
-6. `uv run python scripts/run_eval.py --golden data/eval/golden_dataset.json --author voltaire` → eval report for Voltaire baseline (after Step 12)
+6. `uv run python scripts/run_eval.py --golden data/eval/golden_dataset.json --author voltaire` → eval report for Voltaire baseline (after Step 13)
 7. `uv run python scripts/ingest.py --author gouges` — scrape + embed Gouges
 8. `uv run python scripts/chat.py --author gouges` → ask about rights → Gouges-style response
-9. `uv run python scripts/debate.py --authors voltaire gouges` → ask about rights → two distinct grounded responses (after Step 14)
-10. `uv run python scripts/run_eval.py --golden data/eval/golden_dataset.json --llm-judge` → full eval report with both authors + judge (after Step 15)
+9. `uv run python scripts/debate.py --authors voltaire gouges` → ask about rights → two distinct grounded responses (after Step 15)
+10. `uv run python scripts/run_eval.py --golden data/eval/golden_dataset.json --llm-judge` → full eval report with both authors + judge (after Step 16)
 11. `uv run streamlit run chat_ui.py` → manual browser verification
 12. Set `CHROMA_MODE=server`, run `chroma run`, verify chat works over HTTP
 

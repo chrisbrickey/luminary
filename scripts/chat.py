@@ -11,8 +11,17 @@ os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 from src.chains.chat_chain import build_chain
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RESPONSE_LANGUAGE
+from src.i18n import get_message
+from src.i18n.keys import (
+    CHAT_CHATTING_WITH,
+    CHAT_EXIT_INSTRUCTIONS,
+    CHAT_INPUT_PROMPT,
+    ERROR_GENERIC,
+    STATUS_REFLECTING,
+)
 from src.schemas import ChatResponse
+from src.utils.formatting import format_sources
 from src.utils.ollama_health import check_ollama_available
 
 # Configure logging
@@ -29,41 +38,11 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("anthropic").setLevel(logging.WARNING)
 
 
-def deduplicate_sources(response: ChatResponse) -> list[str]:
-    """Deduplicate source titles while preserving order.
-
-    Args:
-        response: ChatResponse with retrieved_source_titles
-
-    Returns:
-        List of deduplicated source titles in order of first appearance
-    """
-    seen = set()
-    deduplicated = []
-    for title in response.retrieved_source_titles:
-        if title not in seen:
-            seen.add(title)
-            deduplicated.append(title)
-    return deduplicated
-
-
-def format_sources_footer(response: ChatResponse) -> str:
-    """Format the Sources: footer with deduplicated titles.
-
-    Args:
-        response: ChatResponse with retrieved_source_titles
-
-    Returns:
-        Formatted sources string
-    """
-    sources = deduplicate_sources(response)
-    if not sources:
-        return "\nSources: none"
-    return "\nSources:\n" + "\n".join(f"  - {title}" for title in sources)
-
-
 def format_chunks_output(response: ChatResponse) -> str:
-    """Format retrieved chunks with IDs and contexts.
+    """Format retrieved chunks with IDs and contexts when debugging.
+
+    NB: This supports a unique feature for the CLI.
+    This is called when the script is executed with --show-chunks flag.
 
     Args:
         response: ChatResponse with retrieved contexts and IDs
@@ -120,12 +99,16 @@ def run_interactive_chat(
 
     # Interactive loop
     print("\nWelcome to Luminary!")
-    print(f"\nYou are now chatting with {author.capitalize()}.")
-    print(f"Type 'quit' or press Ctrl+C to exit.\n")
+    print(
+        f"\n{get_message(CHAT_CHATTING_WITH, DEFAULT_RESPONSE_LANGUAGE, author=author.capitalize())}"
+    )
+    print(f"{get_message(CHAT_EXIT_INSTRUCTIONS, DEFAULT_RESPONSE_LANGUAGE)}\n")
 
     while True:
         try:
-            question = input("You/Vous: ").strip()
+            question = input(
+                get_message(CHAT_INPUT_PROMPT, DEFAULT_RESPONSE_LANGUAGE)
+            ).strip()
 
             # Exit on quit command
             if question.lower() == "quit":
@@ -137,7 +120,9 @@ def run_interactive_chat(
                 continue
 
             # Show loading message
-            print("\n⏳ Reflecting… (response time varies with retrieval corpus size and API latency)")
+            print(
+                f"\n⏳ {get_message(STATUS_REFLECTING, DEFAULT_RESPONSE_LANGUAGE)}"
+            )
 
             # Invoke chain
             if verbose:
@@ -154,14 +139,17 @@ def run_interactive_chat(
                 print(format_chunks_output(response))
 
             # Always print sources footer
-            print(format_sources_footer(response))
+            print(format_sources(response, DEFAULT_RESPONSE_LANGUAGE))
             print()  # Blank line for readability
 
         except (KeyboardInterrupt, EOFError):
             print(f"\n\n{exit_msg}")
             break
         except Exception as e:
-            logger.error(f"Error: {e}")
+            error_msg = get_message(
+                ERROR_GENERIC, DEFAULT_RESPONSE_LANGUAGE, error=str(e)
+            )
+            logger.error(error_msg)
             if verbose:
                 logger.exception("Full traceback:")
 
