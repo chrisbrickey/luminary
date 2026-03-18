@@ -127,3 +127,21 @@ def clear_i18n_cache() -> None:
     """Clear i18n message cache before each test to ensure isolation."""
     from src.i18n import clear_cache
     clear_cache()
+
+
+def pytest_collection_modifyitems(
+    session: pytest.Session, config: pytest.Config, items: List[pytest.Item]
+) -> None:
+    """Print banner when running external tests."""
+    # Check if any collected items have the external marker
+    has_external_tests = any(
+        item.get_closest_marker("external") is not None
+        for item in items
+    )
+
+    if has_external_tests:
+        print("\n" + "=" * 70)
+        print("RUNNING EXTERNAL TESTS")
+        print("=" * 70)
+        print("These tests make real HTTP calls and may take several minutes.")
+        print("=" * 70 + "\n")

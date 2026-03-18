@@ -18,8 +18,12 @@ from src.i18n.keys import (
 )
 from src.schemas import ChatResponse
 from src.utils.formatting import format_sources
+from src.utils.language import detect_language
 from src.utils.ollama_health import check_ollama_available
 
+author_avatar: str = "🪶"
+user_avatar: str = "👤"
+product_emoji: str = "💡"
 
 def initialize_session_state() -> None:
     """Initialize Streamlit session state variables."""
@@ -33,11 +37,15 @@ def initialize_session_state() -> None:
         st.session_state.show_exit_message = None
 
 
-def rebuild_chain_if_needed(author: str) -> None:
-    """Rebuild chain if configuration has changed.
+def initialize_or_rebuild_chain(author: str) -> None:
+    """Build the chat chain prior to invoking it and save it to the state
+    so that it can be later invoked.
+
+    This method will be called again if the chain needs to be rebuilt
+    (e.g. if user changes selection of author in the browser).
 
     Args:
-        author: Author key (e.g., "voltaire")
+        author: name of the selected author
     """
     if (
         st.session_state.chain is None
@@ -69,11 +77,11 @@ def main() -> None:
     """Run the Streamlit chat UI."""
     st.set_page_config(
         page_title="Luminary - Debate Enlightenment Thinkers",
-        page_icon="💡",
+        page_icon=product_emoji,
         layout="centered",
     )
 
-    st.title("💡 Luminary")
+    st.title(f"{product_emoji} Luminary")
     st.caption("Debate Enlightenment Thinkers")
 
     # Initialize session state
@@ -109,17 +117,16 @@ def main() -> None:
         st.divider()
         st.caption("Responses are generated using retrieval-augmented generation (RAG) with historical texts.")
 
-    # Rebuild chain if configuration changed
-    rebuild_chain_if_needed(author)
+    initialize_or_rebuild_chain(author)
 
     # Show exit message if conversation was just cleared
     if st.session_state.show_exit_message:
-        st.toast(st.session_state.show_exit_message, icon="🪶")
+        st.toast(st.session_state.show_exit_message, icon=author_avatar)
         st.session_state.show_exit_message = None
 
     # Display chat messages
     for message in st.session_state.messages:
-        avatar = "💬" if message["role"] == "user" else "🪶"
+        avatar = user_avatar if message["role"] == "user" else author_avatar
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
             if "sources" in message:
@@ -135,19 +142,28 @@ def main() -> None:
             return
 
         # Display user message
-        with st.chat_message("user", avatar="💬"):
+        with st.chat_message("user", avatar=user_avatar):
             st.markdown(prompt)
 
         # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # Generate response
-        with st.chat_message("assistant", avatar="🪶"):
-            with st.spinner(get_message(STATUS_REFLECTING, DEFAULT_RESPONSE_LANGUAGE)):
+        # Detect language before generating response
+        detected_lang = detect_language(prompt)
+
+        # Generate response with localized spinner and detected language
+        with st.chat_message("assistant", avatar=author_avatar):
+            with st.spinner(get_message(STATUS_REFLECTING, detected_lang)):
                 try:
-                    response: ChatResponse = st.session_state.chain.invoke(prompt)
+
+                    # Invoke the chat chain, which calls the LLM, with the prompt and detected language
+                    response: ChatResponse = st.session_state.chain.invoke(
+                        prompt, language=detected_lang
+                    )
                     st.markdown(response.text)
-                    sources_caption = format_sources(response, DEFAULT_RESPONSE_LANGUAGE)
+
+                    # Format sources including some hard-coded strings localized by detected language
+                    sources_caption = format_sources(response, detected_lang)
                     st.markdown(sources_caption)
 
                     # Add assistant message to history
@@ -160,7 +176,7 @@ def main() -> None:
                     )
                 except Exception as e:
                     error_msg = get_message(
-                        ERROR_GENERATING_RESPONSE, DEFAULT_RESPONSE_LANGUAGE, error=str(e)
+                        ERROR_GENERATING_RESPONSE, detected_lang, error=str(e)
                     )
                     st.error(error_msg)
                     st.session_state.messages.append(

@@ -1,7 +1,7 @@
 """Message loading and retrieval for internationalization (i18n).
 
-This module provides functions to load locale-specific strings from YAML files
-and retrieve them with optional string interpolation.
+This module provides functions to load locale-specific static strings
+from YAML files and retrieve them with optional string interpolation.
 
 This module is aware of DEFAULT_RESPONSE_LANGUAGE to safely fallback to defaults.
 """
@@ -13,7 +13,7 @@ import yaml
 
 from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
 
-# Explicitly declare supported languages for constant-time lookup
+# Explicitly declare supported languages for static strings; facilitates constant-time lookup
 SUPPORTED_LANGUAGES: frozenset[str] = frozenset({"en", "fr"})
 
 # Cache for loaded locale data to avoid re-reading files

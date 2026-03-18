@@ -4,7 +4,7 @@ This file tests the integration of real components:
 - ChromaDB vectorstore (embed_and_store)
 - Retriever (build_retriever)
 - Chat chain (build_chain)
-- Prompts (build_voltaire_prompt)
+- Prompts
 
 External dependencies (LLM, embeddings) are faked to avoid network calls.
 """
@@ -14,13 +14,15 @@ from pathlib import Path
 import pytest
 
 from src.chains.chat_chain import build_chain
-from src.prompts.voltaire import build_voltaire_prompt
 from src.schemas import ChatResponse
 from src.vectorstores.chroma import embed_and_store
 from src.vectorstores.retriever import build_retriever
 from tests.conftest import FakeChatModel, FakeEmbeddings
+from src.configs.authors import DEFAULT_AUTHOR
 
 # Test constants
+AUTHOR_1 = "test-author-1"
+AUTHOR_2 = "test-author-2"
 DEFAULT_K = 5
 TEST_QUESTION = "What do you think about tolerance?"
 
@@ -64,7 +66,7 @@ def test_vectorstore_round_trip_storage_and_retrieval(
     """
     db_path, embeddings = setup_test_db
 
-    # Create sample documents
+    # Create sample documents: 3 chunks with specific metadata to verify preservation
     original_chunks = [
         make_test_document(
             content="Discussion of tolerance and reason in Enlightenment thought.",
@@ -72,7 +74,7 @@ def test_vectorstore_round_trip_storage_and_retrieval(
             chunk_index=0,
             doc_id="test-document-1",
             title="Test Philosophical Text",
-            author="test-author",
+            author=AUTHOR_1,
             page_number=1,
         ),
         make_test_document(
@@ -81,7 +83,7 @@ def test_vectorstore_round_trip_storage_and_retrieval(
             chunk_index=1,
             doc_id="test-document-1",
             title="Test Philosophical Text",
-            author="test-author",
+            author=AUTHOR_1,
             page_number=2,
         ),
         make_test_document(
@@ -90,7 +92,7 @@ def test_vectorstore_round_trip_storage_and_retrieval(
             chunk_index=0,
             doc_id="test-document-2",
             title="Another Test Text",
-            author="test-author",
+            author=AUTHOR_1,
             page_number=1,
         ),
     ]
@@ -99,7 +101,7 @@ def test_vectorstore_round_trip_storage_and_retrieval(
     embed_and_store(chunks=original_chunks, embeddings=embeddings)
 
     # Build retriever from same database
-    retriever = build_retriever(embeddings=embeddings, k=5)
+    retriever = build_retriever(embeddings=embeddings, k=DEFAULT_K)
 
     # Retrieve documents
     retrieved_docs = retriever.invoke("test query")
@@ -143,14 +145,14 @@ def test_vectorstore_author_filtering(setup_test_db, make_test_document) -> None
     """
     db_path, embeddings = setup_test_db
 
-    # Create documents from two different authors
+    # Create documents from 2 different authors: 4 chunks (2 per author) to test filtering logic
     chunks = [
         make_test_document(
             content="First author's perspective on philosophy.",
             chunk_id="author1_chunk001",
             chunk_index=0,
             doc_id="author1-doc",
-            author="author-one",
+            author=AUTHOR_1,
             page_number=None,
         ),
         make_test_document(
@@ -158,7 +160,7 @@ def test_vectorstore_author_filtering(setup_test_db, make_test_document) -> None
             chunk_id="author1_chunk002",
             chunk_index=1,
             doc_id="author1-doc",
-            author="author-one",
+            author=AUTHOR_1,
             page_number=None,
         ),
         make_test_document(
@@ -166,7 +168,7 @@ def test_vectorstore_author_filtering(setup_test_db, make_test_document) -> None
             chunk_id="author2_chunk001",
             chunk_index=0,
             doc_id="author2-doc",
-            author="author-two",
+            author=AUTHOR_2,
             page_number=None,
         ),
         make_test_document(
@@ -174,7 +176,7 @@ def test_vectorstore_author_filtering(setup_test_db, make_test_document) -> None
             chunk_id="author2_chunk002",
             chunk_index=1,
             doc_id="author2-doc",
-            author="author-two",
+            author=AUTHOR_2,
             page_number=None,
         ),
     ]
@@ -182,27 +184,27 @@ def test_vectorstore_author_filtering(setup_test_db, make_test_document) -> None
     # Embed and store all chunks
     embed_and_store(chunks=chunks, embeddings=embeddings)
 
-    # Test 1: Retrieve only author-one's documents
+    # Test 1: Retrieve only documents from specified author
     retriever_author1 = build_retriever(
-        embeddings=embeddings, k=5, author="author-one"
+        embeddings=embeddings, k=DEFAULT_K, author=AUTHOR_1
     )
 
     results_author1 = retriever_author1.invoke("philosophy")
     assert len(results_author1) == 2
-    assert all(doc.metadata["author"] == "author-one" for doc in results_author1)
+    assert all(doc.metadata["author"] == AUTHOR_1 for doc in results_author1)
 
-    # Test 2: Retrieve only author-two's documents
+    # Test 2: Retrieve only documents from specified author
     retriever_author2 = build_retriever(
-        embeddings=embeddings, k=5, author="author-two"
+        embeddings=embeddings, k=DEFAULT_K, author=AUTHOR_2
     )
 
     results_author2 = retriever_author2.invoke("philosophy")
     assert len(results_author2) == 2
-    assert all(doc.metadata["author"] == "author-two" for doc in results_author2)
+    assert all(doc.metadata["author"] == AUTHOR_2 for doc in results_author2)
 
     # Test 3: Retrieve without filter (should get all)
     retriever_all = build_retriever(
-        embeddings=embeddings, k=5, author=None
+        embeddings=embeddings, k=DEFAULT_K, author=None
     )
 
     results_all = retriever_all.invoke("philosophy")
@@ -221,13 +223,15 @@ def test_vectorstore_persistence_across_sessions(
     db_path, embeddings = setup_test_db
 
     # Session 1: Ingest documents
+
+    # Create document: 1 chunk to verify database persistence
     chunks = [
         make_test_document(
             content="Persistent content that should survive.",
             chunk_id="persist_001",
             chunk_index=0,
             doc_id="persistent-doc",
-            author="test-author",
+            author=AUTHOR_1,
             page_number=None,
         ),
     ]
@@ -235,7 +239,7 @@ def test_vectorstore_persistence_across_sessions(
     embed_and_store(chunks=chunks, embeddings=embeddings)
 
     # Session 2: Create new retriever (simulating separate execution)
-    retriever = build_retriever(embeddings=embeddings, k=5)
+    retriever = build_retriever(embeddings=embeddings, k=DEFAULT_K)
 
     # Should retrieve the previously stored document
     results = retriever.invoke("persistent")
@@ -253,18 +257,16 @@ def integration_chain_setup(setup_test_db) -> pytest.fixture:
     """Set up ChromaDB, embeddings, and helper function for full RAG chain tests."""
     db_path, embeddings = setup_test_db
 
-    def build_test_chain(chunks, author="voltaire", language="fr", k=DEFAULT_K):
+    def build_test_chain(chunks, author=DEFAULT_AUTHOR, k=DEFAULT_K):
         """Build a complete chain with real ChromaDB and fake LLM."""
         embed_and_store(chunks=chunks, embeddings=embeddings)
         retriever = build_retriever(
             embeddings=embeddings, k=k, author=author
         )
         return build_chain(
+            author=author,
             retriever=retriever,
             llm=FakeChatModel(),
-            prompt=build_voltaire_prompt(),
-            language=language,
-            detect_user_language=False,
         )
 
     return build_test_chain
@@ -282,7 +284,7 @@ def test_full_rag_chain_with_retrieval(
     4. Chain returns a valid ChatResponse with all expected fields
     5. Source titles include page numbers when available
     """
-    # Create fixture documents
+    # Create documents: 3 "Lettres philosophiques" chunks with page numbers
     chunks = [
         make_test_document(
             content="Tolerance is essential for civil society and peaceful coexistence.",
@@ -313,8 +315,8 @@ def test_full_rag_chain_with_retrieval(
     # Build complete chain
     chain = integration_chain_setup(chunks)
 
-    # Invoke chain
-    response = chain.invoke(TEST_QUESTION)
+    # Invoke chain with language parameter to override language detection
+    response = chain.invoke(TEST_QUESTION, language="fr")
 
     # Verify response structure
     assert isinstance(response, ChatResponse)
@@ -354,7 +356,7 @@ def test_rag_chain_handles_missing_metadata(
     2. Chain falls back to source URL when title is missing
     3. All documents are still retrieved and processed correctly
     """
-    # Create documents with varying metadata
+    #Create documents (3 chunks) with varying metadata completeness
     chunks = [
         # Full metadata with page number
         make_test_document(
@@ -385,11 +387,11 @@ def test_rag_chain_handles_missing_metadata(
         ),
     ]
 
-    # Build chain with English language
-    chain = integration_chain_setup(chunks, language="en")
+    # Build chain
+    chain = integration_chain_setup(chunks)
 
-    # Invoke
-    response = chain.invoke("test question")
+    # Invoke with English language
+    response = chain.invoke("test question", language="en")
 
     # Verify all source titles are present with appropriate fallbacks
     assert len(response.retrieved_source_titles) == 3
@@ -419,7 +421,7 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
 
     db_path, embeddings = setup_test_db
 
-    # Create documents with known chunk IDs
+    # Create documents with known chunk IDs to verify IDs don't leak to LLM
     chunks = [
         make_test_document(
             content="First passage about philosophy.",
@@ -444,7 +446,7 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
 
     # Build retriever
     retriever = build_retriever(
-        embeddings=embeddings, k=5, author="voltaire"
+        embeddings=embeddings, k=DEFAULT_K, author=DEFAULT_AUTHOR
     )
 
     # Build chain with mock LLM to inspect what it receives
@@ -452,15 +454,13 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
     mock_llm.invoke.return_value = Mock(content="Mock response")
 
     chain = build_chain(
+        author=DEFAULT_AUTHOR,
         retriever=retriever,
         llm=mock_llm,
-        prompt=build_voltaire_prompt(),
-        language="fr",
-        detect_user_language=False,
     )
 
-    # Invoke chain
-    response = chain.invoke("test question")
+    # Invoke chain with French language
+    response = chain.invoke("test question", language="fr")
 
     # VERIFY: Chunk IDs ARE available in the response metadata (for --show-chunks)
     assert "secret_id_001" in response.retrieved_passage_ids
