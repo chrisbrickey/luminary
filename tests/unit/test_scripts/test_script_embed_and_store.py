@@ -1,13 +1,12 @@
 """Unit tests for scripts/embed_and_store.py."""
 
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.documents import Document
 
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
+from src.configs.common import DEFAULT_RAW_DIR
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 
@@ -96,7 +95,6 @@ class TestEmbedAndStoreMain:
         # Verify default directories used
         call_args = mock_embed.call_args[0]
         assert call_args[1] == str(DEFAULT_RAW_DIR)  # input_base_dir
-        assert call_args[2] == str(DEFAULT_DB_PATH)  # db_path
 
     @patch("scripts.embed_and_store.check_ollama_available")
     @patch("scripts.embed_and_store.embed_and_store")
@@ -130,12 +128,11 @@ class TestEmbedAndStoreMain:
         # Verify chunk was called with documents
         mock_chunk.assert_called_once_with(sample_documents)
 
-        # Verify embed_and_store was called with default db path
+        # Verify embed_and_store was called (db path from environment)
         mock_embed.assert_called_once()
         call_kwargs = mock_embed.call_args[1]
         assert call_kwargs["chunks"] == sample_chunks
         assert call_kwargs["collection_name"] == COLLECTION_NAME
-        assert call_kwargs["persist_dir"] == str(DEFAULT_DB_PATH)
 
     @patch("scripts.embed_and_store.check_ollama_available")
     @patch("scripts.embed_and_store.embed_and_store")
@@ -197,74 +194,6 @@ class TestEmbedAndStoreMain:
         # Verify load was called with custom input path
         expected_path = Path(custom_input) / TEST_DOCUMENT_ID
         mock_load.assert_called_once_with(expected_path)
-
-    @patch("scripts.embed_and_store.check_ollama_available")
-    @patch("scripts.embed_and_store.embed_and_store")
-    @patch("scripts.embed_and_store.chunk_documents")
-    @patch("scripts.embed_and_store.load_documents_from_disk")
-    def test_custom_database_path(
-        self,
-        mock_load: MagicMock,
-        mock_chunk: MagicMock,
-        mock_embed: MagicMock,
-        mock_ollama: MagicMock,
-        sample_documents: list[Document],
-        sample_chunks: list[Document],
-    ) -> None:
-        """Test using custom database path."""
-        custom_db = "custom/db"
-        mock_load.return_value = sample_documents
-        mock_chunk.return_value = sample_chunks
-        mock_ollama.return_value = None
-
-        with patch("sys.argv", [
-            "embed_and_store.py",
-            "--author", TEST_AUTHOR,
-            "--db", custom_db
-        ]):
-            from scripts.embed_and_store import main
-            main()
-
-        # Verify embed_and_store was called with custom db path
-        mock_embed.assert_called_once()
-        call_kwargs = mock_embed.call_args[1]
-        assert call_kwargs["persist_dir"] == custom_db
-
-    @patch("scripts.embed_and_store.check_ollama_available")
-    @patch("scripts.embed_and_store.embed_and_store")
-    @patch("scripts.embed_and_store.chunk_documents")
-    @patch("scripts.embed_and_store.load_documents_from_disk")
-    def test_all_custom_arguments(
-        self,
-        mock_load: MagicMock,
-        mock_chunk: MagicMock,
-        mock_embed: MagicMock,
-        mock_ollama: MagicMock,
-        sample_documents: list[Document],
-        sample_chunks: list[Document],
-    ) -> None:
-        """Test using all custom arguments together."""
-        custom_input = "custom/input"
-        custom_db = "custom/db"
-        mock_load.return_value = sample_documents
-        mock_chunk.return_value = sample_chunks
-        mock_ollama.return_value = None
-
-        with patch("sys.argv", [
-            "embed_and_store.py",
-            "--author", TEST_AUTHOR,
-            "--input-dir", custom_input,
-            "--db", custom_db
-        ]):
-            from scripts.embed_and_store import main
-            main()
-
-        # Verify all custom paths used
-        expected_input = Path(custom_input) / TEST_DOCUMENT_ID
-        mock_load.assert_called_once_with(expected_input)
-
-        call_kwargs = mock_embed.call_args[1]
-        assert call_kwargs["persist_dir"] == custom_db
 
     @patch("scripts.embed_and_store.check_ollama_available")
     def test_invalid_author_exits_with_error(
@@ -356,7 +285,7 @@ class TestEmbedAuthor:
         mock_chunk.return_value = sample_chunks
 
         from scripts.embed_and_store import embed_author
-        num_chunks = embed_author(TEST_AUTHOR, TEST_INPUT_DIR, TEST_DB_PATH)
+        num_chunks = embed_author(TEST_AUTHOR, TEST_INPUT_DIR)
 
         assert num_chunks == len(sample_chunks)
 
@@ -369,7 +298,7 @@ class TestEmbedAuthor:
         from scripts.embed_and_store import embed_author
 
         with pytest.raises(ValueError, match="Unknown author"):
-            embed_author(INVALID_AUTHOR, TEST_INPUT_DIR, TEST_DB_PATH)
+            embed_author(INVALID_AUTHOR, TEST_INPUT_DIR)
 
         # Load should not be called for invalid author
         mock_load.assert_not_called()
@@ -390,15 +319,10 @@ class TestEmbedAuthor:
         mock_chunk.return_value = sample_chunks
 
         custom_input = "custom/input"
-        custom_db = "custom/db"
 
         from scripts.embed_and_store import embed_author
-        embed_author(TEST_AUTHOR, custom_input, custom_db)
+        embed_author(TEST_AUTHOR, custom_input)
 
         # Verify correct input path
         expected_input = Path(custom_input) / TEST_DOCUMENT_ID
         mock_load.assert_called_once_with(expected_input)
-
-        # Verify correct db path
-        call_kwargs = mock_embed.call_args[1]
-        assert call_kwargs["persist_dir"] == custom_db

@@ -1,12 +1,12 @@
+
 """Unit tests for scripts/ingest.py."""
 
 import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
+from src.configs.common import DEFAULT_RAW_DIR
 from src.configs.loader_configs import INGEST_CONFIGS
 
 # Test constants
@@ -44,7 +44,6 @@ class TestIngestMain:
         # Verify default directories used
         call_kwargs = mock_ingest.call_args[1]
         assert call_kwargs["raw_dir"] == str(DEFAULT_RAW_DIR)
-        assert call_kwargs["db_dir"] == str(DEFAULT_DB_PATH)
         assert call_kwargs["skip_scrape"] is False
         assert call_kwargs["skip_embed"] is False
 
@@ -78,13 +77,12 @@ class TestIngestMain:
         ]
         assert scrape_call[1]["check"] is True
 
-        # Verify embed script called with default paths
+        # Verify embed script called with default paths (no --db flag)
         embed_call = mock_run.call_args_list[1]
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", str(DEFAULT_RAW_DIR),
-            "--db", str(DEFAULT_DB_PATH)
+            "--input-dir", str(DEFAULT_RAW_DIR)
         ]
         assert embed_call[1]["check"] is True
 
@@ -106,14 +104,13 @@ class TestIngestMain:
         # Verify Ollama check was called (embed needs it)
         mock_ollama.assert_called_once()
 
-        # Verify only embed script was called with default paths
+        # Verify only embed script was called with default paths (no --db flag)
         mock_run.assert_called_once()
         embed_call = mock_run.call_args_list[0]
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", str(DEFAULT_RAW_DIR),
-            "--db", str(DEFAULT_DB_PATH)
+            "--input-dir", str(DEFAULT_RAW_DIR)
         ]
 
     @patch("scripts.ingest.subprocess.run")
@@ -203,22 +200,20 @@ class TestIngestMain:
 
     @patch("scripts.ingest.check_ollama_available")
     @patch("scripts.ingest.subprocess.run")
-    def test_custom_directories(
+    def test_custom_raw_directory(
         self,
         mock_run: MagicMock,
         mock_ollama: MagicMock,
     ) -> None:
-        """Test using custom raw-dir and db paths."""
+        """Test using custom raw-dir."""
         custom_raw = "custom/raw"
-        custom_db = "custom/db"
         mock_ollama.return_value = None
         mock_run.return_value = MagicMock(returncode=0)
 
         with patch("sys.argv", [
             "ingest.py",
             "--author", TEST_AUTHOR,
-            "--raw-dir", custom_raw,
-            "--db", custom_db
+            "--raw-dir", custom_raw
         ]):
             from scripts.ingest import main
             main()
@@ -235,8 +230,7 @@ class TestIngestMain:
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", custom_raw,
-            "--db", custom_db
+            "--input-dir", custom_raw
         ]
 
     @patch("scripts.ingest.check_ollama_available")
@@ -319,7 +313,6 @@ class TestIngestAuthor:
         ingest_author(
             author=TEST_AUTHOR,
             raw_dir=TEST_RAW_DIR,
-            db_dir=TEST_DB_PATH,
             skip_scrape=False,
             skip_embed=False
         )
@@ -339,7 +332,6 @@ class TestIngestAuthor:
         ingest_author(
             author=TEST_AUTHOR,
             raw_dir=TEST_RAW_DIR,
-            db_dir=TEST_DB_PATH,
             skip_scrape=True,
             skip_embed=False
         )
@@ -361,7 +353,6 @@ class TestIngestAuthor:
         ingest_author(
             author=TEST_AUTHOR,
             raw_dir=TEST_RAW_DIR,
-            db_dir=TEST_DB_PATH,
             skip_scrape=False,
             skip_embed=True
         )
@@ -379,26 +370,23 @@ class TestIngestAuthor:
             ingest_author(
                 author=INVALID_AUTHOR,
                 raw_dir=TEST_RAW_DIR,
-                db_dir=TEST_DB_PATH,
                 skip_scrape=False,
                 skip_embed=False
             )
 
     @patch("scripts.ingest.subprocess.run")
-    def test_custom_directories_passed_through(
+    def test_custom_directory_passed_through(
         self,
         mock_run: MagicMock,
     ) -> None:
-        """Test that custom directories are passed to scripts."""
+        """Test that custom directory is passed to scripts."""
         custom_raw = "custom/raw"
-        custom_db = "custom/db"
         mock_run.return_value = MagicMock(returncode=0)
 
         from scripts.ingest import ingest_author
         ingest_author(
             author=TEST_AUTHOR,
             raw_dir=custom_raw,
-            db_dir=custom_db,
             skip_scrape=False,
             skip_embed=False
         )
@@ -411,5 +399,3 @@ class TestIngestAuthor:
         embed_call = mock_run.call_args_list[1]
         assert "--input-dir" in embed_call[0][0]
         assert custom_raw in embed_call[0][0]
-        assert "--db" in embed_call[0][0]
-        assert custom_db in embed_call[0][0]

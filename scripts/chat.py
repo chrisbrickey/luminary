@@ -4,14 +4,13 @@ import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 
 # Disable ChromaDB telemetry before any imports that use ChromaDB
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 from src.chains.chat_chain import build_chain
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RESPONSE_LANGUAGE
+from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
 from src.i18n import get_message
 from src.i18n.keys import (
     CHAT_CHATTING_WITH,
@@ -63,7 +62,6 @@ def format_chunks_output(response: ChatResponse) -> str:
 
 
 def run_interactive_chat(
-    db_path: Path,
     author: str,
     show_chunks: bool,
     verbose: bool,
@@ -71,7 +69,6 @@ def run_interactive_chat(
     """Run interactive chat loop.
 
     Args:
-        db_path: Path to ChromaDB directory
         author: Author key (e.g., "voltaire")
         show_chunks: Whether to display retrieved chunks
         verbose: Whether to enable verbose logging
@@ -91,8 +88,7 @@ def run_interactive_chat(
 
     # Build the chain
     logger.debug(f"Loading chain for author: {author}")
-    logger.debug(f"Using database: {db_path}")
-    chain = build_chain(persist_dir=str(db_path), author=author)
+    chain = build_chain(author=author)
 
     # Get author's exit message
     exit_msg = AUTHOR_CONFIGS[author].exit_message
@@ -160,12 +156,6 @@ def main() -> None:
         description="Interactive CLI chat with Enlightenment philosophers"
     )
     parser.add_argument(
-        "--db",
-        type=Path,
-        default=DEFAULT_DB_PATH,
-        help=f"Path to ChromaDB directory (default: {DEFAULT_DB_PATH})",
-    )
-    parser.add_argument(
         "--author",
         type=str,
         default=DEFAULT_AUTHOR,
@@ -186,7 +176,6 @@ def main() -> None:
 
     try:
         run_interactive_chat(
-            db_path=args.db,
             author=args.author,
             show_chunks=args.show_chunks,
             verbose=args.verbose,

@@ -1,6 +1,5 @@
 """ChromaDB vectorstore operations for embeddings storage and retrieval."""
 
-from pathlib import Path
 from typing import Sequence
 
 from langchain_chroma import Chroma
@@ -8,6 +7,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_ollama import OllamaEmbeddings
 
+from src.configs.common import DEFAULT_DB_PATH
 from src.configs.vectorstore_config import COLLECTION_NAME, EMBEDDING_MODEL
 
 
@@ -51,7 +51,6 @@ def _extract_and_validate_chunk_ids(chunks: Sequence[Document]) -> list[str]:
 
 def embed_and_store(
     chunks: Sequence[Document],
-    persist_dir: Path | str,
     collection_name: str = COLLECTION_NAME,
     embeddings: Embeddings | None = None,
 ) -> Chroma:
@@ -60,7 +59,6 @@ def embed_and_store(
     Args:
         chunks: List of Document chunks to embed and store. Each chunk must
             have a 'chunk_id' in its metadata.
-        persist_dir: Directory path where ChromaDB will persist the vector store
         collection_name: Name of the ChromaDB collection (default: COLLECTION_NAME)
         embeddings: Embeddings instance to use. If None, defaults to
             OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -74,11 +72,9 @@ def embed_and_store(
     Notes:
         - Uses chunk_id as document ID for idempotent upserts on re-run
         - Re-running with same chunks will update existing embeddings, not duplicate
-        - persist_dir is created automatically if it doesn't exist
     """
     embeddings_instance = _get_embeddings_instance(embeddings)
     chunk_ids = _extract_and_validate_chunk_ids(chunks)
-    persist_path = Path(persist_dir)
 
     # Create vectorstore with explicit IDs for idempotent upserts
     vectorstore = Chroma.from_documents(
@@ -86,7 +82,7 @@ def embed_and_store(
         embedding=embeddings_instance,
         ids=chunk_ids,
         collection_name=collection_name,
-        persist_directory=str(persist_path),
+        persist_directory=str(DEFAULT_DB_PATH),
     )
 
     return vectorstore

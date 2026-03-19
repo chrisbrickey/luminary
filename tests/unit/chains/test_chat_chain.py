@@ -293,9 +293,14 @@ class TestBuildChain:
         @patch("src.chains.chat_chain.build_retriever")
         @patch("src.chains.chat_chain.ChatOllama")
         def test_build_chain_with_defaults_wires_components(
-            self, mock_chat_ollama: Mock, mock_build_retriever: Mock, sample_docs
+            self, mock_chat_ollama: Mock, mock_build_retriever: Mock, sample_docs, monkeypatch
         ) -> None:
             """Should wire retriever, LLM, and prompt correctly when using defaults."""
+            # Patch DEFAULT_DB_PATH in the retriever module (called by build_chain)
+            from pathlib import Path
+            test_db = Path("test_db")
+            monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", test_db)
+
             # Mock retriever
             mock_retriever = Mock()
             mock_retriever.invoke.return_value = [sample_docs["full"]]
@@ -307,7 +312,7 @@ class TestBuildChain:
             mock_chat_ollama.return_value = mock_llm_instance
 
             # Build chain with defaults
-            chain = build_chain(persist_dir="test_db", author="voltaire")
+            chain = build_chain(author="voltaire")
 
             # Invoke
             response = chain.invoke(SAMPLE_QUESTION)
@@ -315,7 +320,6 @@ class TestBuildChain:
             # Verify components were instantiated
             mock_build_retriever.assert_called_once()
             call_kwargs = mock_build_retriever.call_args[1]
-            assert call_kwargs["persist_dir"] == "test_db"
             assert call_kwargs["author"] == "voltaire"
 
             mock_chat_ollama.assert_called_once_with(model=DEFAULT_LLM_MODEL)

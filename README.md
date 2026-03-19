@@ -79,7 +79,7 @@ QUERY (real-time via user prompt)
   raw string             prompt from user in their natural language
       │
       ▼
- retriever.py            embeds the prompt, performs similarity search on ChromaDB, retrieves top-k semantically similar chunks from vector db
+ retriever.py            embeds the prompt, performs similarity search on the vector database and retrieves top-k semantically similar chunks
       │
       ▼
  chat_chain.py           orchestrates retrieval, context formatting with labels, and LLM call including persona prompt; returns ChatResponse
@@ -97,7 +97,7 @@ luminary/
 ├── chat_ui.py               # web ui for chat
 │
 ├── data/                    # (gitignored)
-│   ├── chroma_db/           # ChromaDB vector store
+│   ├── chroma_db/           # ChromaDB vector database
 │   └── raw/                 # scraped documents saved as JSON, organised by document_id
 │
 ├── locales/                 # user-facing messages that should adapt to detected language
@@ -182,13 +182,12 @@ uv run python scripts/ingest.py
 _If you only need to run a portion of the pipeline, see the Troubleshooting section for lower-level scripts._
 
 **What it does:**
-1. **Scrape phase:** Fetches source data from online sources, parses HTML, and saves documents as JSON files to `data/raw/<document_id>/`
-2. **Embed phase:** Loads documents from storage, splits them into overlapping chunks with added metadata, embeds the chunks, and stores in a vector database at `data/chroma_db/`
+1. **Scrape phase:** Fetches source data from online sources, parses HTML, and saves documents as JSON files to target (at `data/raw/<document_id>/` in local env)
+2. **Embed phase:** Loads documents from storage, splits them into overlapping chunks with added metadata, embeds the chunks, and stores in a vector database (at `data/chroma_db/` in local env)
 
 **Options:**
 - `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
 - `--raw-dir` (optional): Base directory for scraped documents (default: `data/raw`)
-- `--db` (optional): ChromaDB persist directory (default: `data/chroma_db`)
 - `--skip-scrape` (optional): Skip scraping phase and use existing scraped documents
 - `--skip-embed` (optional): Skip embedding phase (only scrape documents)
 
@@ -209,7 +208,7 @@ uv run python scripts/ingest.py --skip-scrape
 #### Prerequisites
 - Ollama must be running.
 - Both models must be pulled: nomic-embed-text (for embedding queries), mistral (for LLM responses).
-- ChromaDB must be populated by the ingestion script.
+- Vector database (chromaDB) must be populated by the ingestion script.
 
 
 #### Chat via CLI
@@ -232,7 +231,6 @@ To exit: Type `quit` or press Ctrl+C.
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--db` | Path to ChromaDB directory | `data/chroma_db` |
 | `--author` | Author to query (e.g., `voltaire`) | `voltaire` |
 | `--show-chunks` | Display retrieved chunks with IDs and contexts | `False` |
 | `--verbose` | Enable verbose logging | `False` |
@@ -253,11 +251,11 @@ uv run streamlit run chat_ui.py
 
 Open `http://localhost:8501` in your browser.
 - Chat interface with message history
-- Use the sidebar to change the author persona or database location.*
+- Use the sidebar to change the author persona or clear the conversation.*
 - Each response adheres to the personality and perspective's of the selected author.
 - Responses display deduplicated sources as a caption.
 
-_*Changes to the database path or philosopher will automatically rebuild the chat chain and clear message history._
+_*Changes of author will automatically rebuild the chat chain and clear message history._
 
 ## Troubleshooting
 
@@ -287,7 +285,7 @@ Documents are saved to `data/raw/<document_id>/` as `page_NN.json` files contain
 **Script 2 of 2 — Embed and Store:** loads JSON files from disk that were persisted in Step 1,
 splits each letter into overlapping chunks,
 converts each chunk into a vector using Ollama nomic-embed-text (a small neural network that captures the meaning of text as a list of numbers),
-and stores both the vectors and the original text in ChromaDB at data/chroma_db/.
+and stores both the vectors and the original text in the vector database (at `data/chroma_db/` in local env).
 Once stored, chunks can be retrieved by semantic similarity — the basis for RAG.
 
 ```
@@ -299,7 +297,6 @@ uv run python scripts/embed_and_store.py --author voltaire
 **Options:**
 - `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
 - `--input-dir` (optional): Base directory containing scraped documents (default: `data/raw`)
-- `--db` (optional): ChromaDB persist directory (default: `data/chroma_db`)
 
 **Output location:**
-Embeddings are stored in the ChromaDB vector database at `data/chroma_db/` with collection name "philosophes".
+Embeddings are stored in the ChromaDB vector database (at `data/chroma_db/` in local env) with collection name `philosophes`.
