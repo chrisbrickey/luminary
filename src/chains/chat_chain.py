@@ -1,7 +1,5 @@
 """RAG chat chain with author-specific prompts."""
 
-from pathlib import Path
-
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
@@ -20,7 +18,6 @@ from src.vectorstores.retriever import build_retriever
 
 
 def build_chain(
-    persist_dir: Path | str = DEFAULT_DB_PATH,
     author: str = DEFAULT_AUTHOR,
     retriever: VectorStoreRetriever | None = None,
     llm: BaseChatModel | None = None,
@@ -35,9 +32,8 @@ def build_chain(
     - Testing: build_chain(retriever=mock, llm=mock, prompt=mock)
 
     Args:
-        persist_dir: Path to ChromaDB vectorstore (default: DEFAULT_DB_PATH)
         author: Author key for filtering and prompt selection (default: DEFAULT_AUTHOR)
-        retriever: LangChain retriever (default: builds from persist_dir + author)
+        retriever: LangChain retriever (default: builds from author)
         llm: Language model (default: ChatOllama with DEFAULT_LLM_MODEL)
         prompt: Chat prompt template (default: builds from author registry)
         language: Response language ISO code (default: DEFAULT_RESPONSE_LANGUAGE)
@@ -62,7 +58,7 @@ def build_chain(
 
     # Build retriever if not provided
     if retriever is None:
-        retriever = build_retriever(persist_dir=persist_dir, author=author)
+        retriever = build_retriever(author=author)
 
     # Build prompt if not provided
     if prompt is None:

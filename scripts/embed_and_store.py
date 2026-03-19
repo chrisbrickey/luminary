@@ -9,7 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
+from src.configs.common import DEFAULT_RAW_DIR
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 from src.utils.chunker import chunk_documents
@@ -24,13 +24,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def embed_author(author: str, input_base_dir: str, db_path: str) -> int:
+def embed_author(author: str, input_base_dir: str) -> int:
     """Embed and store documents for a single author.
 
     Args:
         author: Author key to process
         input_base_dir: Base directory containing scraped documents
-        db_path: ChromaDB persist directory
 
     Returns:
         Number of chunks stored
@@ -52,7 +51,6 @@ def embed_author(author: str, input_base_dir: str, db_path: str) -> int:
     logger.info(f"\nConfiguration:")
     logger.info(f"  Author: {author}")
     logger.info(f"  Input: {document_dir}")
-    logger.info(f"  Database: {db_path}")
 
     # Load documents from disk
     logger.info(f"\nLoading documents from {document_dir}...")
@@ -69,7 +67,6 @@ def embed_author(author: str, input_base_dir: str, db_path: str) -> int:
     logger.info(f"  (This may take a few minutes)")
     embed_and_store(
         chunks=chunks,
-        persist_dir=db_path,
         collection_name=COLLECTION_NAME
     )
     logger.info(f"✓ Stored {len(chunks)} chunks in ChromaDB")
@@ -93,12 +90,6 @@ def main() -> None:
         type=str,
         default=str(DEFAULT_RAW_DIR),
         help=f"Base directory containing scraped documents (default: {DEFAULT_RAW_DIR})"
-    )
-    parser.add_argument(
-        "--db",
-        type=str,
-        default=str(DEFAULT_DB_PATH),
-        help=f"ChromaDB persist directory (default: {DEFAULT_DB_PATH})"
     )
 
     args = parser.parse_args()
@@ -127,13 +118,12 @@ def main() -> None:
     try:
         total_chunks = 0
         for author in authors_to_process:
-            num_chunks = embed_author(author, args.input_dir, args.db)
+            num_chunks = embed_author(author, args.input_dir)
             total_chunks += num_chunks
 
         logger.info(f"\n{'='*70}")
         logger.info(f"✓ EMBEDDING COMPLETE")
         logger.info(f"  Total chunks stored: {total_chunks}")
-        logger.info(f"  Database location: {args.db}")
         logger.info(f"{'='*70}\n")
 
     except ValueError as e:

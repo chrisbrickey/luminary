@@ -59,14 +59,16 @@ def sample_chunks() -> list[Document]:
 
 def test_embed_and_store_basic(
     temp_db_dir: Path,
-    sample_chunks: list[Document]
+    sample_chunks: list[Document],
+    monkeypatch
 ) -> None:
     """Test basic embedding and storage of chunks."""
+    # Patch DEFAULT_DB_PATH in chroma module
+    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", temp_db_dir)
     embeddings = FakeEmbeddings()
 
     vectorstore = embed_and_store(
         chunks=sample_chunks,
-        persist_dir=temp_db_dir,
         embeddings=embeddings
     )
 
@@ -85,22 +87,23 @@ def test_embed_and_store_basic(
 
 def test_embed_and_store_idempotent(
     temp_db_dir: Path,
-    sample_chunks: list[Document]
+    sample_chunks: list[Document],
+    monkeypatch
 ) -> None:
     """Test that re-running with same IDs does not create duplicates."""
+    # Patch DEFAULT_DB_PATH in chroma module
+    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", temp_db_dir)
     embeddings = FakeEmbeddings()
 
     # First run
     embed_and_store(
         chunks=sample_chunks,
-        persist_dir=temp_db_dir,
         embeddings=embeddings
     )
 
     # Second run with same chunks
     vectorstore = embed_and_store(
         chunks=sample_chunks,
-        persist_dir=temp_db_dir,
         embeddings=embeddings
     )
 
@@ -111,14 +114,16 @@ def test_embed_and_store_idempotent(
 
 def test_embed_and_store_custom_collection_name(
     temp_db_dir: Path,
-    sample_chunks: list[Document]
+    sample_chunks: list[Document],
+    monkeypatch
 ) -> None:
     """Test using a custom collection name."""
+    # Patch DEFAULT_DB_PATH in chroma module
+    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", temp_db_dir)
     embeddings = FakeEmbeddings()
 
     vectorstore = embed_and_store(
         chunks=sample_chunks,
-        persist_dir=temp_db_dir,
         collection_name="test_collection",
         embeddings=embeddings
     )
@@ -130,14 +135,16 @@ def test_embed_and_store_custom_collection_name(
 
 def test_embed_and_store_persist_dir_as_string(
     temp_db_dir: Path,
-    sample_chunks: list[Document]
+    sample_chunks: list[Document],
+    monkeypatch
 ) -> None:
-    """Test that persist_dir can be passed as string."""
+    """Test that persist_dir can be set as string via environment."""
+    # Patch DEFAULT_DB_PATH in chroma module
+    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", temp_db_dir)
     embeddings = FakeEmbeddings()
 
     vectorstore = embed_and_store(
         chunks=sample_chunks,
-        persist_dir=str(temp_db_dir),  # Pass as string
         embeddings=embeddings
     )
 
@@ -146,7 +153,7 @@ def test_embed_and_store_persist_dir_as_string(
     assert len(results) == 1
 
 
-def test_embed_and_store_missing_chunk_id() -> None:
+def test_embed_and_store_missing_chunk_id(monkeypatch) -> None:
     """Test that missing chunk_id raises ValueError."""
     embeddings = FakeEmbeddings()
 
@@ -161,18 +168,22 @@ def test_embed_and_store_missing_chunk_id() -> None:
     ]
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Patch DEFAULT_DB_PATH in chroma module
+        monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", Path(tmpdir))
         with pytest.raises(ValueError, match="missing 'chunk_id'"):
             embed_and_store(
                 chunks=chunks,
-                persist_dir=tmpdir,
                 embeddings=embeddings
             )
 
 
 def test_embed_and_store_preserves_all_metadata(
-    temp_db_dir: Path
+    temp_db_dir: Path,
+    monkeypatch
 ) -> None:
     """Test that all metadata fields are preserved in vectorstore."""
+    # Patch DEFAULT_DB_PATH in chroma module
+    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", temp_db_dir)
     embeddings = FakeEmbeddings()
 
     chunk = Document(
@@ -191,7 +202,6 @@ def test_embed_and_store_preserves_all_metadata(
 
     vectorstore = embed_and_store(
         chunks=[chunk],
-        persist_dir=temp_db_dir,
         embeddings=embeddings
     )
 

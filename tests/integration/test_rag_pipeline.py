@@ -26,12 +26,33 @@ TEST_QUESTION = "What do you think about tolerance?"
 
 
 # =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def setup_test_db(tmp_path: Path, monkeypatch) -> tuple[Path, FakeEmbeddings]:
+    """Set up temporary ChromaDB with monkeypatched paths and fake embeddings.
+
+    Returns:
+        tuple: (db_path, embeddings)
+    """
+    db_path = tmp_path / "chroma"
+    # Patch DEFAULT_DB_PATH in all modules that import it
+    monkeypatch.setattr("src.configs.common.DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", db_path)
+    embeddings = FakeEmbeddings()
+    return db_path, embeddings
+
+
+# =============================================================================
 # Vectorstore Operations (storage, retrieval, filtering, persistence)
 # =============================================================================
 
 
 def test_vectorstore_round_trip_storage_and_retrieval(
-    tmp_path: Path, make_test_document
+    setup_test_db, make_test_document
 ) -> None:
     """Test full round-trip: embed documents then retrieve them.
 
@@ -41,8 +62,7 @@ def test_vectorstore_round_trip_storage_and_retrieval(
     3. The retriever can successfully retrieve the stored documents
     4. All metadata is preserved through the round-trip
     """
-    db_path = tmp_path / "chroma"
-    embeddings = FakeEmbeddings()
+    db_path, embeddings = setup_test_db
 
     # Create sample documents
     original_chunks = [
@@ -76,10 +96,10 @@ def test_vectorstore_round_trip_storage_and_retrieval(
     ]
 
     # Embed and store
-    embed_and_store(chunks=original_chunks, persist_dir=db_path, embeddings=embeddings)
+    embed_and_store(chunks=original_chunks, embeddings=embeddings)
 
     # Build retriever from same database
-    retriever = build_retriever(persist_dir=db_path, embeddings=embeddings, k=5)
+    retriever = build_retriever(embeddings=embeddings, k=5)
 
     # Retrieve documents
     retrieved_docs = retriever.invoke("test query")
@@ -113,7 +133,7 @@ def test_vectorstore_round_trip_storage_and_retrieval(
         assert retrieved_doc.metadata["page_number"] == original_chunk.metadata["page_number"]
 
 
-def test_vectorstore_author_filtering(tmp_path: Path, make_test_document) -> None:
+def test_vectorstore_author_filtering(setup_test_db, make_test_document) -> None:
     """Test retriever author filtering across full pipeline.
 
     Verifies that:
@@ -121,8 +141,7 @@ def test_vectorstore_author_filtering(tmp_path: Path, make_test_document) -> Non
     2. Retriever correctly filters by author metadata
     3. No cross-contamination between author filters
     """
-    db_path = tmp_path / "chroma"
-    embeddings = FakeEmbeddings()
+    db_path, embeddings = setup_test_db
 
     # Create documents from two different authors
     chunks = [
@@ -161,11 +180,11 @@ def test_vectorstore_author_filtering(tmp_path: Path, make_test_document) -> Non
     ]
 
     # Embed and store all chunks
-    embed_and_store(chunks=chunks, persist_dir=db_path, embeddings=embeddings)
+    embed_and_store(chunks=chunks, embeddings=embeddings)
 
     # Test 1: Retrieve only author-one's documents
     retriever_author1 = build_retriever(
-        persist_dir=db_path, embeddings=embeddings, k=5, author="author-one"
+        embeddings=embeddings, k=5, author="author-one"
     )
 
     results_author1 = retriever_author1.invoke("philosophy")
@@ -174,7 +193,7 @@ def test_vectorstore_author_filtering(tmp_path: Path, make_test_document) -> Non
 
     # Test 2: Retrieve only author-two's documents
     retriever_author2 = build_retriever(
-        persist_dir=db_path, embeddings=embeddings, k=5, author="author-two"
+        embeddings=embeddings, k=5, author="author-two"
     )
 
     results_author2 = retriever_author2.invoke("philosophy")
@@ -183,7 +202,7 @@ def test_vectorstore_author_filtering(tmp_path: Path, make_test_document) -> Non
 
     # Test 3: Retrieve without filter (should get all)
     retriever_all = build_retriever(
-        persist_dir=db_path, embeddings=embeddings, k=5, author=None
+        embeddings=embeddings, k=5, author=None
     )
 
     results_all = retriever_all.invoke("philosophy")
@@ -191,7 +210,7 @@ def test_vectorstore_author_filtering(tmp_path: Path, make_test_document) -> Non
 
 
 def test_vectorstore_persistence_across_sessions(
-    tmp_path: Path, make_test_document
+    setup_test_db, make_test_document
 ) -> None:
     """Test retriever works across separate sessions.
 
@@ -199,8 +218,7 @@ def test_vectorstore_persistence_across_sessions(
     1. Documents are ingested and stored in one session
     2. Later, a retriever is created to query the stored data
     """
-    db_path = tmp_path / "chroma"
-    embeddings = FakeEmbeddings()
+    db_path, embeddings = setup_test_db
 
     # Session 1: Ingest documents
     chunks = [
@@ -214,10 +232,10 @@ def test_vectorstore_persistence_across_sessions(
         ),
     ]
 
-    embed_and_store(chunks=chunks, persist_dir=db_path, embeddings=embeddings)
+    embed_and_store(chunks=chunks, embeddings=embeddings)
 
     # Session 2: Create new retriever (simulating separate execution)
-    retriever = build_retriever(persist_dir=db_path, embeddings=embeddings, k=5)
+    retriever = build_retriever(embeddings=embeddings, k=5)
 
     # Should retrieve the previously stored document
     results = retriever.invoke("persistent")
@@ -231,16 +249,15 @@ def test_vectorstore_persistence_across_sessions(
 
 
 @pytest.fixture
-def integration_chain_setup(tmp_path: Path) -> pytest.fixture:
+def integration_chain_setup(setup_test_db) -> pytest.fixture:
     """Set up ChromaDB, embeddings, and helper function for full RAG chain tests."""
-    embeddings = FakeEmbeddings()
-    db_path = tmp_path / "chroma"
+    db_path, embeddings = setup_test_db
 
     def build_test_chain(chunks, author="voltaire", language="fr", k=DEFAULT_K):
         """Build a complete chain with real ChromaDB and fake LLM."""
-        embed_and_store(chunks=chunks, persist_dir=db_path, embeddings=embeddings)
+        embed_and_store(chunks=chunks, embeddings=embeddings)
         retriever = build_retriever(
-            persist_dir=db_path, embeddings=embeddings, k=k, author=author
+            embeddings=embeddings, k=k, author=author
         )
         return build_chain(
             retriever=retriever,
@@ -386,7 +403,7 @@ def test_rag_chain_handles_missing_metadata(
 
 
 def test_rag_chain_does_not_expose_chunk_ids_to_llm(
-    tmp_path: Path, make_test_document
+    setup_test_db, make_test_document
 ) -> None:
     """Test that chunk IDs never reach the LLM in the full RAG pipeline.
 
@@ -400,8 +417,7 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
     """
     from unittest.mock import Mock
 
-    db_path = tmp_path / "chroma"
-    embeddings = FakeEmbeddings()
+    db_path, embeddings = setup_test_db
 
     # Create documents with known chunk IDs
     chunks = [
@@ -424,11 +440,11 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
     ]
 
     # Embed and store
-    embed_and_store(chunks=chunks, persist_dir=db_path, embeddings=embeddings)
+    embed_and_store(chunks=chunks, embeddings=embeddings)
 
     # Build retriever
     retriever = build_retriever(
-        persist_dir=db_path, embeddings=embeddings, k=5, author="voltaire"
+        embeddings=embeddings, k=5, author="voltaire"
     )
 
     # Build chain with mock LLM to inspect what it receives

@@ -9,7 +9,7 @@ import streamlit as st
 
 from src.chains.chat_chain import build_chain
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RESPONSE_LANGUAGE
+from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
 from src.i18n import get_message
 from src.i18n.keys import (
     ERROR_CHAIN_NOT_INITIALIZED,
@@ -29,32 +29,27 @@ def initialize_session_state() -> None:
         st.session_state.chain = None
     if "current_author" not in st.session_state:
         st.session_state.current_author = DEFAULT_AUTHOR
-    if "current_db_path" not in st.session_state:
-        st.session_state.current_db_path = str(DEFAULT_DB_PATH)
     if "show_exit_message" not in st.session_state:
         st.session_state.show_exit_message = None
 
 
-def rebuild_chain_if_needed(db_path: str, author: str) -> None:
+def rebuild_chain_if_needed(author: str) -> None:
     """Rebuild chain if configuration has changed.
 
     Args:
-        db_path: Path to database directory
         author: Author key (e.g., "voltaire")
     """
     if (
         st.session_state.chain is None
         or st.session_state.current_author != author
-        or st.session_state.current_db_path != db_path
     ):
         try:
             # Check Ollama availability
             check_ollama_available()
 
             # Build chain
-            st.session_state.chain = build_chain(persist_dir=db_path, author=author)
+            st.session_state.chain = build_chain(author=author)
             st.session_state.current_author = author
-            st.session_state.current_db_path = db_path
 
             # Clear message history when switching authors
             st.session_state.messages = []
@@ -88,12 +83,6 @@ def main() -> None:
     with st.sidebar:
         st.header("Configuration")
 
-        db_path = st.text_input(
-            "Database Path",
-            value=str(DEFAULT_DB_PATH),
-            help="Path to the database directory containing embedded documents",
-        )
-
         # Get available authors
         available_authors = sorted(AUTHOR_CONFIGS.keys())
         author_index = (
@@ -121,7 +110,7 @@ def main() -> None:
         st.caption("Responses are generated using retrieval-augmented generation (RAG) with historical texts.")
 
     # Rebuild chain if configuration changed
-    rebuild_chain_if_needed(db_path, author)
+    rebuild_chain_if_needed(author)
 
     # Show exit message if conversation was just cleared
     if st.session_state.show_exit_message:

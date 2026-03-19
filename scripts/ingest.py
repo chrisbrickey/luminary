@@ -9,9 +9,8 @@ import argparse
 import logging
 import subprocess
 import sys
-from pathlib import Path
 
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_RAW_DIR
+from src.configs.common import DEFAULT_RAW_DIR
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.utils.ollama_health import check_ollama_available
 
@@ -72,13 +71,12 @@ def _run_scrape_phase(author: str, raw_dir: str) -> None:
     subprocess.run(scrape_cmd, check=True)
 
 
-def _run_embed_phase(author: str, raw_dir: str, db_dir: str) -> None:
+def _run_embed_phase(author: str, raw_dir: str) -> None:
     """Run the embedding phase for a single author.
 
     Args:
         author: Author key to process
         raw_dir: Base directory containing scraped documents
-        db_dir: ChromaDB persist directory
 
     Raises:
         subprocess.CalledProcessError: If embedding script fails
@@ -88,8 +86,7 @@ def _run_embed_phase(author: str, raw_dir: str, db_dir: str) -> None:
     embed_cmd = [
         "uv", "run", "python", "scripts/embed_and_store.py",
         "--author", author,
-        "--input-dir", raw_dir,
-        "--db", db_dir
+        "--input-dir", raw_dir
     ]
     subprocess.run(embed_cmd, check=True)
 
@@ -97,7 +94,6 @@ def _run_embed_phase(author: str, raw_dir: str, db_dir: str) -> None:
 def ingest_author(
     author: str,
     raw_dir: str,
-    db_dir: str,
     skip_scrape: bool,
     skip_embed: bool
 ) -> None:
@@ -106,7 +102,6 @@ def ingest_author(
     Args:
         author: Author key to process
         raw_dir: Base directory for saving scraped documents
-        db_dir: ChromaDB persist directory
         skip_scrape: If True, skip scraping step
         skip_embed: If True, skip embedding step
 
@@ -128,7 +123,7 @@ def ingest_author(
 
     # Embedding phase
     if not skip_embed:
-        _run_embed_phase(author, raw_dir, db_dir)
+        _run_embed_phase(author, raw_dir)
     else:
         logger.info(f"\n⏭  Skipping embed phase for {author}")
 
@@ -153,12 +148,6 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         type=str,
         default=str(DEFAULT_RAW_DIR),
         help=f"Base directory for scraped documents (default: {DEFAULT_RAW_DIR})"
-    )
-    parser.add_argument(
-        "--db",
-        type=str,
-        default=str(DEFAULT_DB_PATH),
-        help=f"ChromaDB persist directory (default: {DEFAULT_DB_PATH})"
     )
     parser.add_argument(
         "--skip-scrape",
@@ -209,13 +198,12 @@ def main() -> None:
             ingest_author(
                 author=author,
                 raw_dir=args.raw_dir,
-                db_dir=args.db,
                 skip_scrape=args.skip_scrape,
                 skip_embed=args.skip_embed
             )
 
         # Final summary
-        _log_section_header("✓ INGESTION COMPLETE", f"  Database location: {args.db}")
+        _log_section_header("✓ INGESTION COMPLETE")
         logger.info("")  # Add trailing newline
 
     except ValueError as e:

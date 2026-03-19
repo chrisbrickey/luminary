@@ -12,10 +12,13 @@ from tests.conftest import FakeEmbeddings
 
 
 @pytest.fixture
-def fixture_db_dir() -> Path:
+def fixture_db_dir(monkeypatch) -> Path:
     """Create a temporary directory with a populated ChromaDB."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir)
+        # Patch DEFAULT_DB_PATH in both chroma and retriever modules
+        monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", db_path)
 
         # Create sample chunks from two different authors
         chunks = [
@@ -68,7 +71,6 @@ def fixture_db_dir() -> Path:
         # Embed and store all chunks
         embed_and_store(
             chunks=chunks,
-            persist_dir=db_path,
             embeddings=FakeEmbeddings()
         )
 
@@ -78,7 +80,6 @@ def fixture_db_dir() -> Path:
 def test_build_retriever_basic(fixture_db_dir: Path) -> None:
     """Test basic retrieval returns relevant chunks with intact metadata."""
     retriever = build_retriever(
-        persist_dir=fixture_db_dir,
         embeddings=FakeEmbeddings(),
         k=3
     )
@@ -101,7 +102,6 @@ def test_build_retriever_basic(fixture_db_dir: Path) -> None:
 def test_build_retriever_with_author_filter(fixture_db_dir: Path) -> None:
     """Test author filter returns only chunks from specified author."""
     retriever = build_retriever(
-        persist_dir=fixture_db_dir,
         embeddings=FakeEmbeddings(),
         k=5,
         author="voltaire"
@@ -119,7 +119,6 @@ def test_build_retriever_with_author_filter(fixture_db_dir: Path) -> None:
 def test_build_retriever_different_author_filter(fixture_db_dir: Path) -> None:
     """Test author filter works for different author."""
     retriever = build_retriever(
-        persist_dir=fixture_db_dir,
         embeddings=FakeEmbeddings(),
         k=5,
         author="gouges"
@@ -137,7 +136,6 @@ def test_build_retriever_different_author_filter(fixture_db_dir: Path) -> None:
 def test_build_retriever_without_filter_returns_all(fixture_db_dir: Path) -> None:
     """Test retriever without author filter can return chunks from any author."""
     retriever = build_retriever(
-        persist_dir=fixture_db_dir,
         embeddings=FakeEmbeddings(),
         k=5,
         author=None  # No filter
@@ -160,7 +158,6 @@ def test_build_retriever_without_filter_returns_all(fixture_db_dir: Path) -> Non
 def test_build_retriever_respects_k_parameter(fixture_db_dir: Path) -> None:
     """Test that k parameter limits the number of results."""
     retriever = build_retriever(
-        persist_dir=fixture_db_dir,
         embeddings=FakeEmbeddings(),
         k=2  # Limit to 2 results
     )
@@ -190,14 +187,12 @@ def test_build_retriever_custom_collection_name(fixture_db_dir: Path) -> None:
 
     embed_and_store(
         chunks=chunks,
-        persist_dir=fixture_db_dir,
         collection_name="custom_collection",
         embeddings=FakeEmbeddings()
     )
 
     # Build retriever for custom collection
     retriever = build_retriever(
-        persist_dir=fixture_db_dir,
         collection_name="custom_collection",
         embeddings=FakeEmbeddings(),
         k=1
@@ -212,7 +207,7 @@ def test_build_retriever_custom_collection_name(fixture_db_dir: Path) -> None:
 def test_build_retriever_persist_dir_as_string(fixture_db_dir: Path) -> None:
     """Test that persist_dir can be passed as string."""
     retriever = build_retriever(
-        persist_dir=str(fixture_db_dir),  # Pass as string
+        
         embeddings=FakeEmbeddings(),
         k=3
     )
