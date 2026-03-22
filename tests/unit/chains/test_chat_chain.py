@@ -7,14 +7,14 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 
 from src.chains.chat_chain import build_chain
-from src.configs.common import DEFAULT_LLM_MODEL
-from src.prompts.voltaire import build_voltaire_prompt
+from src.configs.common import DEFAULT_DB_PATH, DEFAULT_LLM_MODEL, DEFAULT_RESPONSE_LANGUAGE
+from src.configs.authors import DEFAULT_AUTHOR
 
 # Test constants
-SAMPLE_QUESTION = "What is tolerance?"
+SAMPLE_QUESTION = "What do you think is the most important question in philosophy?"
 
 # Generic test data constants
-AUTHOR = "test-author"
+AUTHOR = "voltaire"
 CHUNK_ID_1 = "test_chunk_001"
 CHUNK_ID_2 = "test_chunk_002"
 CHUNK_ID_3 = "test_chunk_003"
@@ -22,6 +22,7 @@ CHUNK_ID_4 = "test_chunk_004"
 DOC_TITLE_FULL = "Sample Document A"
 DOC_TITLE_NO_PAGE = "Sample Document B"
 PAGE_NUMBER = 42
+SAMPLE_RESPONSE = "It seems to me that"
 SOURCE_URL_FULL = "https://example.com/doc-a"
 SOURCE_URL_NO_PAGE = "https://example.com/doc-b"
 SOURCE_URL_NO_TITLE = "https://example.com/doc-c"
@@ -91,8 +92,8 @@ class TestBuildChain:
         ) -> None:
             """Should extract source titles correctly with various metadata levels."""
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs([sample_docs[doc_key]]),
-                prompt=build_voltaire_prompt(),
                 llm=mock_llm_with_response(),
             )
 
@@ -105,8 +106,8 @@ class TestBuildChain:
             """Should handle multiple documents with different metadata completeness."""
             docs = [sample_docs["full"], sample_docs["no_page"], sample_docs["no_title"]]
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs(docs),
-                prompt=build_voltaire_prompt(),
                 llm=mock_llm_with_response(),
             )
 
@@ -125,8 +126,8 @@ class TestBuildChain:
             """Should extract chunk IDs into retrieved_passage_ids."""
             docs = [sample_docs["full"], sample_docs["no_page"]]
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs(docs),
-                prompt=build_voltaire_prompt(),
                 llm=mock_llm_with_response(),
             )
 
@@ -137,8 +138,8 @@ class TestBuildChain:
             """Should use 'unknown' for missing chunk_id."""
             doc_no_chunk_id = Document(page_content="test", metadata={})
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs([doc_no_chunk_id]),
-                prompt=build_voltaire_prompt(),
                 llm=mock_llm_with_response(),
             )
 
@@ -157,8 +158,8 @@ class TestBuildChain:
             mock_llm = mock_llm_with_response()
 
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs(docs),
-                prompt=build_voltaire_prompt(),
                 llm=mock_llm,
             )
 
@@ -183,20 +184,19 @@ class TestBuildChain:
             assert f"chunk_id: {CHUNK_ID_1}" not in context_str
             assert f"chunk_id: {CHUNK_ID_2}" not in context_str
 
-    class TestPromptIntegration:
-        """Tests for prompt integration in the chain (prompt-agnostic)."""
+    class TestPersonaPromptBehavior:
+        """Tests that verify the persona prompts are correctly integrated."""
 
-        def test_chain_uses_provided_prompt(
+        def test_chain_invokes_llm_with_author_prompt(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
         ) -> None:
-            """Should use the provided prompt template when invoking the chain."""
+            """Should invoke LLM with author's persona prompt from registry."""
             docs = [sample_docs["full"]]
             mock_llm = mock_llm_with_response()
-            custom_prompt = build_voltaire_prompt()
 
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs(docs),
-                prompt=custom_prompt,
                 llm=mock_llm,
             )
 
@@ -204,21 +204,22 @@ class TestBuildChain:
 
             # Verify LLM was invoked (prompt was used)
             mock_llm.invoke.assert_called_once()
+
             # Verify the call included messages (indicating prompt was applied)
             llm_call_args = mock_llm.invoke.call_args[0][0]
             assert llm_call_args is not None
             assert len(llm_call_args) > 0
 
-        def test_chain_passes_context_to_prompt(
+        def test_chain_includes_context_in_formatted_prompt(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
         ) -> None:
-            """Should pass retrieved context to the prompt."""
+            """Should include retrieved context in the formatted prompt."""
             docs = [sample_docs["full"]]
             mock_llm = mock_llm_with_response()
 
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs(docs),
-                prompt=build_voltaire_prompt(),
                 llm=mock_llm,
             )
 
@@ -227,80 +228,19 @@ class TestBuildChain:
             # Verify the retrieved document content was passed to the LLM
             llm_call_args = mock_llm.invoke.call_args[0][0]
             messages_str = str(llm_call_args)
+
             # The document content should appear somewhere in the formatted messages
             assert CONTENT_FULL in messages_str
-
-    class TestLanguageDetection:
-        """Tests for language detection logic."""
-
-        def test_uses_language_parameter(
-            self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
-        ) -> None:
-            """Should use language parameter when explicitly provided."""
-            chain = build_chain(
-                retriever=mock_retriever_with_docs([sample_docs["full"]]),
-                prompt=build_voltaire_prompt(),
-                llm=mock_llm_with_response("English response"),
-                language="en",
-            )
-
-            response = chain.invoke(SAMPLE_QUESTION)
-            assert response.language == "en"
-
-        def test_defaults_to_application_language(
-            self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
-        ) -> None:
-            """Should use DEFAULT_RESPONSE_LANGUAGE when language not provided."""
-            from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
-
-            chain = build_chain(
-                retriever=mock_retriever_with_docs([sample_docs["full"]]),
-                prompt=build_voltaire_prompt(),
-                llm=mock_llm_with_response("French response"),
-                author="voltaire",
-            )
-
-            response = chain.invoke(SAMPLE_QUESTION)
-            # Should use application-level default
-            assert response.language == DEFAULT_RESPONSE_LANGUAGE
 
     class TestComponentWiring:
         """Tests for dependency injection and component integration."""
 
-        def test_chain_invokes_retriever_and_llm(
-            self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
-        ) -> None:
-            """Should wire retriever and LLM correctly."""
-            # Build chain
-            chain = build_chain(
-                retriever=mock_retriever_with_docs([sample_docs["full"]]),
-                prompt=build_voltaire_prompt(),
-                llm=mock_llm_with_response("Response about tolerance"),
-                detect_user_language=False,
-            )
-
-            # Invoke
-            response = chain.invoke(SAMPLE_QUESTION)
-
-            # Assertions
-            assert response.text == "Response about tolerance"
-            assert response.retrieved_passage_ids == [CHUNK_ID_1]
-            assert response.retrieved_source_titles == [f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}"]
-            assert response.language == "en"
-            assert len(response.retrieved_contexts) == 1
-            assert response.retrieved_contexts[0] == CONTENT_FULL
-
         @patch("src.chains.chat_chain.build_retriever")
         @patch("src.chains.chat_chain.ChatOllama")
         def test_build_chain_with_defaults_wires_components(
-            self, mock_chat_ollama: Mock, mock_build_retriever: Mock, sample_docs, monkeypatch
+            self, mock_chat_ollama: Mock, mock_build_retriever: Mock, sample_docs
         ) -> None:
             """Should wire retriever, LLM, and prompt correctly when using defaults."""
-            # Patch DEFAULT_DB_PATH in the retriever module (called by build_chain)
-            from pathlib import Path
-            test_db = Path("test_db")
-            monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", test_db)
-
             # Mock retriever
             mock_retriever = Mock()
             mock_retriever.invoke.return_value = [sample_docs["full"]]
@@ -308,47 +248,62 @@ class TestBuildChain:
 
             # Mock LLM
             mock_llm_instance = Mock()
-            mock_llm_instance.invoke.return_value = AIMessage(content="Test response")
+            mock_llm_instance.invoke.return_value = AIMessage(content=SAMPLE_RESPONSE)
             mock_chat_ollama.return_value = mock_llm_instance
 
             # Build chain with defaults
             chain = build_chain(author="voltaire")
 
-            # Invoke
+            # Invoke the chain
             response = chain.invoke(SAMPLE_QUESTION)
 
-            # Verify components were instantiated
-            mock_build_retriever.assert_called_once()
+            # Verify all default components (author, retriever, llm) were recorded or instantiated.
             call_kwargs = mock_build_retriever.call_args[1]
             assert call_kwargs["author"] == "voltaire"
 
             mock_chat_ollama.assert_called_once_with(model=DEFAULT_LLM_MODEL)
 
-            # Verify response
-            assert response.text == "Test response"
-
-        def test_build_chain_with_injected_components(
+        def test_build_chain_accepts_custom_components(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
         ) -> None:
-            """Should use injected components when provided (testing mode)."""
-            mock_retriever = mock_retriever_with_docs([sample_docs["full"]])
-            mock_llm = mock_llm_with_response("Injected response")
+            """Should accept and use custom retriever and LLM parameters."""
 
-            # Build chain with all injected
+            mock_retriever = mock_retriever_with_docs([sample_docs["full"]])
+            mock_llm = mock_llm_with_response(SAMPLE_RESPONSE)
+
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever,
                 llm=mock_llm,
-                prompt=build_voltaire_prompt(),
-                language="en",
+            )
+
+            # Use language parameter in invoke
+            response = chain.invoke(SAMPLE_QUESTION, language="de")
+
+            # Verify custom components were used
+            mock_retriever.invoke.assert_called_once_with(SAMPLE_QUESTION)
+            mock_llm.invoke.assert_called_once()
+            assert response.language == "de"
+
+        def test_chain_end_to_end_with_documents(
+            self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+        ) -> None:
+            """Should correctly extract and structure document metadata into response."""
+
+            chain = build_chain(
+                author=AUTHOR,
+                retriever=mock_retriever_with_docs([sample_docs["full"]]),
+                llm=mock_llm_with_response(SAMPLE_RESPONSE),
             )
 
             response = chain.invoke(SAMPLE_QUESTION)
 
-            # Verify injected components were used
-            mock_retriever.invoke.assert_called_once_with(SAMPLE_QUESTION)
-            mock_llm.invoke.assert_called_once()
-            assert response.text == "Injected response"
-            assert response.language == "en"
+            # Verify complete response structure
+            assert response.text == SAMPLE_RESPONSE
+            assert response.retrieved_passage_ids == [CHUNK_ID_1]
+            assert response.retrieved_source_titles == [f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}"]
+            assert response.retrieved_contexts == [CONTENT_FULL]
+            assert len(response.retrieved_contexts) == 1
 
     class TestEdgeCases:
         """Tests for error handling and edge cases."""
@@ -356,8 +311,8 @@ class TestBuildChain:
         def test_empty_retrieval(self, mock_retriever_with_docs, mock_llm_with_response) -> None:
             """Should handle empty retrieval gracefully."""
             chain = build_chain(
+                author=AUTHOR,
                 retriever=mock_retriever_with_docs([]),
-                prompt=build_voltaire_prompt(),
                 llm=mock_llm_with_response("No relevant sources found"),
             )
 
@@ -367,7 +322,9 @@ class TestBuildChain:
             assert response.retrieved_source_titles == []
             assert response.retrieved_contexts == []
 
-        def test_unknown_author_raises_error(self) -> None:
-            """Should raise ValueError for unknown author."""
-            with pytest.raises(ValueError, match="Unknown author: 'unknown'"):
-                build_chain(author="unknown")
+        def test_unsupported_author_raises_error(self) -> None:
+            """Should raise ValueError for unsupported author."""
+
+            unsupported_author = "unsupported author"
+            with pytest.raises(ValueError, match=f"Unknown author: '{unsupported_author}'"):
+                build_chain(author=unsupported_author)

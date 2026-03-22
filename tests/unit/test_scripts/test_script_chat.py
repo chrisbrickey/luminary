@@ -225,6 +225,7 @@ class TestRunInteractiveChat:
         assert "Condorcet:" in captured.out
         assert TEST_RESPONSE_TEXT in captured.out
 
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -233,18 +234,16 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
+        mock_detect: MagicMock,
     ) -> None:
-        """Test basic question-answer flow with quit."""
+        """Test basic question-answer flow with language detection."""
         from scripts.chat import run_interactive_chat
-
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
+        mock_detect.return_value = "fr"
         mock_chain = MagicMock()
-        mock_chain.invoke.return_value = create_mock_response()
+        mock_chain.invoke.return_value = create_mock_response(language="fr")
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
 
@@ -261,8 +260,13 @@ class TestRunInteractiveChat:
         # Verify chain built with correct params
         mock_build_chain.assert_called_once_with(author=TEST_AUTHOR)
 
-        # Verify chain invoked once
-        mock_chain.invoke.assert_called_once_with(TEST_QUESTION)
+        # Verify language detection was called
+        mock_detect.assert_called_once_with(TEST_QUESTION)
+
+        # Verify chain invoked with detected language
+        mock_chain.invoke.assert_called_once_with(
+            TEST_QUESTION, language="fr"
+        )
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
@@ -383,6 +387,7 @@ class TestRunInteractiveChat:
         for chunk_id in TEST_CHUNK_IDS:
             assert chunk_id not in lines_before_chunks_section
 
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -391,10 +396,11 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        mock_detect: MagicMock,
         capsys: pytest.CaptureFixture[str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test that sources footer is always displayed."""
+        """Test that sources footer uses detected language for formatting."""
         from scripts.chat import run_interactive_chat
 
         # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
@@ -402,8 +408,10 @@ class TestRunInteractiveChat:
 
         # Setup mocks
         mock_ollama.return_value = None
+        mock_detect.return_value = "en"  # Detect English
         mock_chain = MagicMock()
-        mock_chain.invoke.return_value = create_mock_response()
+        # Response language matches detected language
+        mock_chain.invoke.return_value = create_mock_response(language="en")
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
 
@@ -417,8 +425,8 @@ class TestRunInteractiveChat:
         # Capture output
         captured = capsys.readouterr()
 
-        # Verify sources are displayed with correct markdown format and deduplicated
-        assert "**Sources:**" in captured.out  # Bold marker (uses DEFAULT_RESPONSE_LANGUAGE: en)
+        # Verify sources are displayed with English formatting (detected language)
+        assert "**Sources:**" in captured.out  # English label (from response.language="en")
         assert "- Esquisse d'un tableau historique, Page 12" in captured.out  # Bullet format
         assert "- Esquisse d'un tableau historique, Page 9" in captured.out   # Bullet format
 
@@ -570,6 +578,7 @@ class TestRunInteractiveChat:
         # Verify chain was never invoked for empty questions
         mock_chain.invoke.assert_not_called()
 
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -578,18 +587,16 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
+        mock_detect: MagicMock,
     ) -> None:
-        """Test multiple questions in sequence."""
+        """Test multiple questions with language detection for each."""
         from scripts.chat import run_interactive_chat
-
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
+        mock_detect.return_value = "en"
         mock_chain = MagicMock()
-        mock_chain.invoke.return_value = create_mock_response()
+        mock_chain.invoke.return_value = create_mock_response(language="en")
         mock_build_chain.return_value = mock_chain
 
         questions = ["Question 1?", "Question 2?", "Question 3?", "quit"]
@@ -602,10 +609,17 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
-        # Verify chain invoked 3 times (not for quit)
+        # Verify language detection called 3 times (once per question)
+        assert mock_detect.call_count == 3
+
+        # Verify chain invoked 3 times (not for quit) with language parameter
         assert mock_chain.invoke.call_count == 3
         mock_chain.invoke.assert_has_calls(
-            [call("Question 1?"), call("Question 2?"), call("Question 3?")]
+            [
+                call("Question 1?", language="en"),
+                call("Question 2?", language="en"),
+                call("Question 3?", language="en"),
+            ]
         )
 
     @patch("scripts.chat.build_chain")

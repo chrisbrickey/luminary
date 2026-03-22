@@ -8,7 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from chat_ui import (
     initialize_session_state,
     main,
-    rebuild_chain_if_needed,
+    initialize_or_rebuild_chain,
 )
 from src.configs.authors import AUTHOR_CONFIGS, AuthorConfig, DEFAULT_AUTHOR
 from src.schemas import ChatResponse
@@ -98,7 +98,7 @@ def test_initialize_session_state_existing(mock_st: Mock) -> None:
 @patch("chat_ui.check_ollama_available")
 @patch("chat_ui.build_chain")
 @patch("chat_ui.st")
-def test_rebuild_chain_if_needed_first_time(
+def test_initialize_or_rebuild_chain_first_time(
     mock_st: Mock, mock_build_chain: Mock, mock_check_ollama: Mock
 ) -> None:
     """Test chain is built on first call with default configs."""
@@ -112,7 +112,7 @@ def test_rebuild_chain_if_needed_first_time(
     mock_chain = Mock()
     mock_build_chain.return_value = mock_chain
 
-    rebuild_chain_if_needed(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
 
     mock_check_ollama.assert_called_once()
     mock_build_chain.assert_called_once_with(author=DEFAULT_AUTHOR)
@@ -122,7 +122,7 @@ def test_rebuild_chain_if_needed_first_time(
 @patch("chat_ui.check_ollama_available")
 @patch("chat_ui.build_chain")
 @patch("chat_ui.st")
-def test_rebuild_chain_if_needed_author_changed(
+def test_initialize_or_rebuild_chain_author_changed(
     mock_st: Mock, mock_build_chain: Mock, mock_check_ollama: Mock
 ) -> None:
     """Test chain is rebuilt when author changes."""
@@ -137,7 +137,7 @@ def test_rebuild_chain_if_needed_author_changed(
     new_chain = Mock()
     mock_build_chain.return_value = new_chain
 
-    rebuild_chain_if_needed("gouges")
+    initialize_or_rebuild_chain("gouges")
 
     mock_check_ollama.assert_called_once()
     mock_build_chain.assert_called_once_with(author="gouges")
@@ -150,7 +150,7 @@ def test_rebuild_chain_if_needed_author_changed(
 @patch("chat_ui.check_ollama_available")
 @patch("chat_ui.build_chain")
 @patch("chat_ui.st")
-def test_rebuild_chain_if_needed_no_change(
+def test_initialize_or_rebuild_chain_no_change(
     mock_st: Mock, mock_build_chain: Mock, mock_check_ollama: Mock
 ) -> None:
     """Test chain is not rebuilt when default configs remain unchanged."""
@@ -163,7 +163,7 @@ def test_rebuild_chain_if_needed_no_change(
         }
     )
 
-    rebuild_chain_if_needed(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
 
     # Should not rebuild
     mock_check_ollama.assert_not_called()
@@ -190,7 +190,7 @@ def test_rebuild_chain_value_error(
     mock_st.error = Mock()
     mock_build_chain.side_effect = ValueError("Invalid author")
 
-    rebuild_chain_if_needed("invalid_author")
+    initialize_or_rebuild_chain("invalid_author")
 
     mock_st.error.assert_called_once()
     assert "Configuration error" in mock_st.error.call_args[0][0]
@@ -214,7 +214,7 @@ def test_rebuild_chain_runtime_error(
     mock_st.error = Mock()
     mock_check_ollama.side_effect = RuntimeError("Ollama not running")
 
-    rebuild_chain_if_needed(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
 
     mock_st.error.assert_called_once()
     assert "Ollama error" in mock_st.error.call_args[0][0]
@@ -238,7 +238,7 @@ def test_rebuild_chain_unexpected_error(
     mock_st.error = Mock()
     mock_build_chain.side_effect = Exception("Unexpected error")
 
-    rebuild_chain_if_needed(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
 
     mock_st.error.assert_called_once()
     assert "Unexpected error" in mock_st.error.call_args[0][0]
@@ -248,7 +248,7 @@ def test_rebuild_chain_unexpected_error(
 # --- Test main UI ---
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_with_defaults(
@@ -269,7 +269,7 @@ def test_main_with_defaults(
 
     main()
 
-    # Verify rebuild_chain_if_needed called with default values
+    # Verify initialize_or_rebuild_chain called with default values
     mock_rebuild.assert_called_once_with(DEFAULT_AUTHOR)
 
     # Verify available authors come from production config
@@ -282,7 +282,7 @@ def test_main_with_defaults(
     assert available_authors[author_index] == DEFAULT_AUTHOR
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_renders_title(
@@ -319,7 +319,7 @@ def test_main_renders_title(
     mock_st.chat_input.assert_called_once_with(expected_placeholder)
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_initializes_session_state(
@@ -343,7 +343,7 @@ def test_main_initializes_session_state(
     mock_init.assert_called_once()
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_sidebar_config(
@@ -373,7 +373,7 @@ def test_main_sidebar_config(
     mock_st.selectbox.assert_called_once()
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_rebuilds_chain(
@@ -397,7 +397,7 @@ def test_main_rebuilds_chain(
     mock_rebuild.assert_called_once_with("gouges")
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_clear_conversation_button_shows_exit_message(
@@ -435,7 +435,7 @@ def test_main_clear_conversation_button_shows_exit_message(
     mock_st.toast.assert_not_called()
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_shows_exit_message_toast_after_rerun(
@@ -464,7 +464,7 @@ def test_main_shows_exit_message_toast_after_rerun(
     assert mock_st.session_state["show_exit_message"] is None
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_displays_existing_messages(
@@ -500,10 +500,10 @@ def test_main_displays_existing_messages(
     # Verify chat_message was called for each message with correct avatars
     assert mock_st.chat_message.call_count == 2
 
-    # First call should be user message with speech bubble avatar
+    # First call should be user message with user avatar
     first_call = mock_st.chat_message.call_args_list[0]
     assert first_call[0][0] == "user"
-    assert first_call[1]["avatar"] == "💬"
+    assert first_call[1]["avatar"] == "👤"
 
     # Second call should be assistant message with feather avatar
     second_call = mock_st.chat_message.call_args_list[1]
@@ -514,7 +514,7 @@ def test_main_displays_existing_messages(
     assert mock_st.markdown.call_count >= 2
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_no_input_returns_early(
@@ -539,13 +539,15 @@ def test_main_no_input_returns_early(
     mock_st.session_state["chain"].invoke.assert_not_called()
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.detect_language")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_processes_user_input(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_detect: Mock
 ) -> None:
-    """Test that main processes user input and invokes chain."""
+    """Test that main processes user input with language detection."""
+    mock_detect.return_value = "fr"
     mock_chain = Mock()
     mock_response = ChatResponse(
         text="Test response",
@@ -579,16 +581,21 @@ def test_main_processes_user_input(
 
     main()
 
-    # Verify chain was invoked
-    mock_chain.invoke.assert_called_once_with("What is tolerance?")
+    # Verify language was detected
+    mock_detect.assert_called_once_with("What is tolerance?")
+
+    # Verify chain was invoked with detected language
+    mock_chain.invoke.assert_called_once_with(
+        "What is tolerance?", language="fr"
+    )
 
     # Verify chat_message was called with correct avatars
     assert mock_st.chat_message.call_count == 2
 
-    # First call should be user message with speech bubble avatar
+    # First call should be user message with user avatar
     first_call = mock_st.chat_message.call_args_list[0]
     assert first_call[0][0] == "user"
-    assert first_call[1]["avatar"] == "💬"
+    assert first_call[1]["avatar"] == "👤"
 
     # Second call should be assistant message with feather avatar
     second_call = mock_st.chat_message.call_args_list[1]
@@ -603,13 +610,15 @@ def test_main_processes_user_input(
     assert mock_st.session_state["messages"][1]["content"] == "Test response"
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.detect_language")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_shows_sources_caption(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_detect: Mock
 ) -> None:
-    """Test that main displays sources caption with response."""
+    """Test that main displays sources caption using detected language."""
+    mock_detect.return_value = "fr"
     mock_chain = Mock()
     mock_response = ChatResponse(
         text="Test response",
@@ -650,11 +659,11 @@ def test_main_shows_sources_caption(
     sources_calls = [call for call in markdown_calls if "**Sources" in call]
     assert len(sources_calls) == 1, f"Expected 1 sources call, got {len(sources_calls)}"
 
-    # Uses DEFAULT_RESPONSE_LANGUAGE (en), so no space before colon
-    assert sources_calls[0] == "**Sources:**\n- Source A\n- Source B"
+    # Uses response.language (fr), so space before colon (French punctuation)
+    assert sources_calls[0] == "**Sources :**\n- Source A\n- Source B"
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_chain_not_initialized_error(
@@ -681,13 +690,15 @@ def test_main_chain_not_initialized_error(
     assert "not initialized" in mock_st.error.call_args[0][0]
 
 
-@patch("chat_ui.rebuild_chain_if_needed")
+@patch("chat_ui.detect_language")
+@patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_chain_invocation_error(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_detect: Mock
 ) -> None:
-    """Test that main handles chain invocation errors gracefully."""
+    """Test that main handles chain invocation errors with localized messages."""
+    mock_detect.return_value = "en"
     mock_chain = Mock()
     mock_chain.invoke.side_effect = Exception("Chain error")
 
@@ -715,7 +726,10 @@ def test_main_chain_invocation_error(
 
     main()
 
-    # Verify error was shown
+    # Verify language was detected (even though chain fails)
+    mock_detect.assert_called_once_with("Test question")
+
+    # Verify error was shown (English localized message)
     mock_st.error.assert_called_once()
     assert "Error generating response" in mock_st.error.call_args[0][0]
 

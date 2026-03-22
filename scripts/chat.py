@@ -21,6 +21,7 @@ from src.i18n.keys import (
 )
 from src.schemas import ChatResponse
 from src.utils.formatting import format_sources
+from src.utils.language import detect_language
 from src.utils.ollama_health import check_ollama_available
 
 # Configure logging
@@ -35,7 +36,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("anthropic").setLevel(logging.WARNING)
-
 
 def format_chunks_output(response: ChatResponse) -> str:
     """Format retrieved chunks with IDs and contexts when debugging.
@@ -94,7 +94,7 @@ def run_interactive_chat(
     exit_msg = AUTHOR_CONFIGS[author].exit_message
 
     # Interactive loop
-    print("\nWelcome to Luminary!")
+    print("\n💡 Welcome to Luminary!")
     print(
         f"\n{get_message(CHAT_CHATTING_WITH, DEFAULT_RESPONSE_LANGUAGE, author=author.capitalize())}"
     )
@@ -115,28 +115,35 @@ def run_interactive_chat(
             if not question:
                 continue
 
-            # Show loading message
-            print(
-                f"\n⏳ {get_message(STATUS_REFLECTING, DEFAULT_RESPONSE_LANGUAGE)}"
-            )
+            # 1. Show loading icon immediately
+            print("\n⏳ ", end="", flush=True)
 
-            # Invoke chain
+            # 2. Detect language
+            detected_lang = detect_language(question)
+
+            # 3. Show localized loading message
+            print(get_message(STATUS_REFLECTING, detected_lang))
+
+            # 4. Invoke chain with detected language
             if verbose:
                 logger.debug(f"Invoking chain with question: {question}")
+                logger.debug(f"Detected language: {detected_lang}")
 
-            response: ChatResponse = chain.invoke(question)
+            response: ChatResponse = chain.invoke(
+                question, language=detected_lang
+            )
 
-            # Print response (overwrite loading message line)
-            print(f"\r{' ' * 80}\r", end="")  # Clear the loading message
+            # Clear loading message and print out response
+            print(f"\r{' ' * 80}\r", end="")
             print(f"\n{author.capitalize()}:\n{response.text}")
 
             # Print chunks if requested
             if show_chunks:
                 print(format_chunks_output(response))
 
-            # Always print sources footer
-            print(format_sources(response, DEFAULT_RESPONSE_LANGUAGE))
-            print()  # Blank line for readability
+            # Always print sources footer in detected language (if language is supported)
+            print(format_sources(response, detected_lang))
+            print()
 
         except (KeyboardInterrupt, EOFError):
             print(f"\n\n{exit_msg}")

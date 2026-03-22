@@ -3,7 +3,7 @@
 ## Context
 Luminary is a RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges) answer questions grounded in their historical texts. 
 It will feature an ingestion pipeline (initially integrated with Wikisource), retrieval-augmented chat with per-philosopher persona prompts, bilingual support (French/English), a multi-philosopher debate mode with LangChain agents, a deterministic + LLM-as-judge evaluation harness, and deployment to Heroku with configurable LLM/embedding providers. 
-This plan covers the complete system from project scaffolding through production deployment.
+This plan covers the complete system from project scaffolding through production deployment. This plan is intended to be read by coding agents. It is intentionally not optimized for human readers.
 
 ## Hosting target: Heroku
 
@@ -213,13 +213,13 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 
 ## ✅ Step 8: Voltaire prompt + chat chain
 - Create new directories with `__init__.py`: `src/prompts/`, `src/chains/`; create `tests/unit/chains/`
-- Create `src/prompts/voltaire.py` — Voltaire system prompt (irony/wit, mandatory inline citations, responds in `{language}`); export `build_voltaire_prompt() -> ChatPromptTemplate` ~~and `RESPONSE_LANGUAGE = "fr"`~~ (language is now passed dynamically via chain, not hardcoded)
+- Create `src/prompts/voltaire.py` — Voltaire system prompt (irony/wit, mandatory inline citations, responds in `{language}`); export `build_voltaire_prompt() -> ChatPromptTemplate`
   - **Bilingual from the start** — prompt includes `{language}` placeholder (improvement over rag-chat-1 which had to retrofit this later)
 - Create `src/chains/chat_chain.py`:
   - `DEFAULT_AUTHOR = "voltaire"` — canonical author key
   - `_AUTHOR_CONFIGS: dict[str, AuthorConfig]` — extensible registry (AuthorConfig is a dataclass with `prompt_factory` and `exit_message` fields)
-  - `build_chain(author=DEFAULT_AUTHOR, retriever=None, llm=None, prompt=None, language="fr", detect_user_language=True) -> Runnable[str, ChatResponse]` — unified API supporting both production use (with defaults) and testing use (with mocks); uses `DEFAULT_DB_PATH` from config (no user-facing persist_dir parameter)
-  - Internal `_run(question) -> ChatResponse`: retrieves top-k docs, formats context with `[source: {title}, page {page_number}]` labels (page-specific from the start), detects question language, invokes LLM, returns structured ChatResponse
+  - `build_chain(author=DEFAULT_AUTHOR, retriever=None, llm=None, prompt=None) -> Runnable[dict, ChatResponse]` — unified API supporting both production use (with defaults) and testing use (with mocks); uses `DEFAULT_DB_PATH` from config (no user-facing persist_dir parameter); chain accepts dict input `{"question": str, "language": str}` via `.invoke()`
+  - Internal `_run(question, language) -> ChatResponse`: retrieves top-k docs, formats context with `[source: {title}, page {page_number}]` labels (page-specific from the start), invokes LLM with language parameter, returns structured ChatResponse
   - Helpers: `_format_docs_with_titles()`, `_extract_chunk_ids()`, `_extract_source_titles()` (combines document_title + page_number; fallback: title-only → source URL → "unknown")
 - **Test:** `tests/unit/chains/test_chat_chain.py` — mock LLM and retriever; assert chain wires retrieval + prompt correctly; test `_extract_source_titles()` with title+page, title-only, fallback to source URL, missing metadata; test empty retrieval; test unknown author raises ValueError; test language detection integration
 - **Test:** `tests/integration/test_chat_chain_integration.py` — wire small fixture ChromaDB (FakeEmbeddings) → real retriever → real prompt → FakeChatModel; assert full chain returns ChatResponse with correct retrieved_source_titles and non-empty text
@@ -227,7 +227,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
   - Created `FakeChatModel` in integration tests (similar to `FakeEmbeddings`) for testing without real LLM calls
-  - Language detection placeholder implemented — `detect_user_language` parameter is present but actual detection logic deferred to Step 11; currently uses `language` parameter directly
+  - Language detection support added to chain API — chain accepts `language` parameter via `.invoke({"question": str, "language": str})`, but actual detection logic implemented later in Step 12 at call site (CLI/UI), not inside chain
   - Comprehensive test coverage: 21 unit tests covering all helper functions, chain wiring, error cases, and author registry; 2 integration tests covering full end-to-end pipeline with real ChromaDB and retriever
   - All tests pass; mypy type checking passes
   - **Post-implementation refactoring:**
@@ -236,10 +236,9 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
     - **Chunk ID isolation (2026-03-11):** Removed chunk IDs from LLM-facing context and prompt instructions. Chunk IDs are internal metadata for debugging (visible only with `--show-chunks` flag) and should never be sent to the LLM or appear in responses. Changes: (1) Updated `src/prompts/voltaire.py` to remove `| chunk_id: xxx` from citation format instruction, (2) Updated `src/chains/chat_chain.py::_format_docs_with_titles()` to format context as `[source: {title}, page {page}]` without chunk IDs, (3) Added unit test `test_prompt_does_not_instruct_chunk_id_citations` to verify prompt doesn't instruct chunk ID citations, (4) Updated existing `test_context_formatting` to assert chunk IDs are NOT in LLM input, (5) Added integration test `test_rag_chain_does_not_expose_chunk_ids_to_llm` to verify end-to-end pipeline isolation. All 184 tests pass.
     - **Prompt refinement (2026-03-15, commit e372784):** Strengthened LLM prompting for better instruction clarity and citation control:
       1. Rewrote Voltaire prompt from French to English — LLMs follow English instructions more reliably
-      2. Removed `RESPONSE_LANGUAGE` constant export from `voltaire.py` — language is now passed dynamically as a parameter via the chain, not hardcoded
-      3. Enhanced prompt with explicit formatting examples showing correct vs. incorrect citation placement (citations must appear at end of sentences, never at beginning of paragraphs)
-      4. Created dedicated test file `tests/unit/prompts/test_voltaire.py` with comprehensive prompt validation tests
-      5. Refactored and reorganized tests in `tests/unit/chains/test_chat_chain.py` for better clarity and maintainability
+      2. Enhanced prompt with explicit formatting examples showing correct vs. incorrect citation placement (citations must appear at end of sentences, never at beginning of paragraphs)
+      3. Created dedicated test file `tests/unit/prompts/test_voltaire.py` with comprehensive prompt validation tests
+      4. Refactored and reorganized tests in `tests/unit/chains/test_chat_chain.py` for better clarity and maintainability
     - **Personalized exit messages (2026-03-15, commit 8d9cc29):** Extended author configuration to include UI-related metadata:
       1. Changed `AuthorConfig` from tuple `(prompt_factory, language)` to frozen dataclass with fields: `prompt_factory: Callable[[], ChatPromptTemplate]` and `exit_message: str`
       2. Added personalized exit messages displayed when user exits interaction (e.g., "Je vous embrasse - V" for Voltaire)
@@ -352,15 +351,27 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - Comprehensive test coverage: 62 tests added (42 for i18n module, 20 for formatting utilities)
   - All 270+ tests pass; mypy type checking passes
 
-## Step 12: Language detection utility
+## ✅ Step 12: Language detection utility
 - **Goal:** Standalone language detection module, decoupled from the chain (chain already has `{language}` placeholder from Step 8)
 - Add dependency: `langdetect` (add via `uv add langdetect`)
 - Create `src/utils/language.py`: `detect_language(text, default="fr", min_length=15) -> str` using `langdetect.detect_langs()` — returns default if text shorter than `min_length` or top language confidence < 0.7; graceful fallback on exception
-- Wire into `src/chains/chat_chain.py`: `_run()` calls `detect_language(question)` when `detect_user_language=True`; passes detected language to prompt and sets `ChatResponse.language`
+- Wire into CLI/UI: Both `scripts/chat.py` and `chat_ui.py` call `detect_language(question)` before invoking chain; pass detected language to `chain.invoke({"question": ..., "language": ...})`; chain sets `ChatResponse.language` from input
 - **Test:** `tests/unit/utils/test_language.py` — French/English detection, empty/whitespace → default, short text → default, low-confidence → default, exception → default
-- **Test:** `tests/unit/chains/test_chat_chain.py` — add tests: mock `detect_language`, verify English detection, detection disabled, language passed to prompt
+- **Test:** `tests/unit/chains/test_chat_chain.py` — add tests verifying chain accepts language parameter and passes it to prompt correctly
 - **README:** Update CLI and UI sections to note auto-detected response language; add note about English responses translating French passages
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - Implementation uses `confidence` parameter (default 0.7) instead of `default` parameter — `detect_language(text, min_length=15, confidence=0.7)` reads default from `DEFAULT_RESPONSE_LANGUAGE` constant for consistency with config system
+  - Chain API changes: Added `language` parameter to `chain.invoke(question, language=...)` for explicit language override; detection happens at call site (CLI/UI), not inside `_run()`. Removed `detect_user_language` boolean parameter. This design:
+    - Separates detection (caller's concern) from chain logic (LLM invocation)
+    - Makes testing simpler — inject desired language directly
+    - Allows override for use cases where language is known
+  - Comprehensive test coverage: 18 unit tests (vs. suggested 6) covering all edge cases: French, English, Spanish, Swahili, empty/whitespace, short text, custom min_length, custom confidence, low/high confidence thresholds, detection failures, exceptions
+  - Added 5 integration tests (`tests/integration/test_language_detection_integration.py`) to verify language flows through full chain with FakeChatModel: French detected, English detected, Italian (not in SUPPORTED_LANGUAGES) detected, config overrides detection, detection failure fallback
+  - Added 3 external tests (`tests/external/test_language_detection_external.py`) with real Ollama LLM to verify end-to-end behavior: French question → French response, English question → English response, Portuguese question → Portuguese response (demonstrates support for languages beyond SUPPORTED_LANGUAGES)
+  - All 290 tests pass (18 unit + 5 integration + 3 external + existing tests); mypy type checking passes
+  - README updated with language detection documentation in Architecture section and CLI/UI usage notes
+  - Created `tests/external/` directory for external-only test files (separate from integration tests which don't make real network calls)
 
 ## Step 13: Evaluation harness — schemas + deterministic metrics (Voltaire-only)
 - **Goal:** Eval data models and all pure-function deterministic metrics; establish quality baseline with Voltaire before adding more philosophers
@@ -537,6 +548,7 @@ luminary/
 │   ├── prompts/
 │   ├── chains/
 │   ├── agents/
+│   ├── i18n/
 │   └── eval/
 │       └── metrics/
 ├── scripts/
@@ -547,7 +559,9 @@ luminary/
 │       └── reports/
 ├── tests/
 │   ├── unit/
-│   └── integration/
+│   ├── integration/
+│   └── external/
+├── locales/
 ├── docs/
 └── chat_ui.py
 ```

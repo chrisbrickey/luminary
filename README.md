@@ -18,6 +18,8 @@ Both interfaces support the same core features and philosopher personas.
 - **Local-first execution:** Runs entirely locally with Ollama—no external API calls, no data sharing, no usage costs.
 - **Semantic search over historical corpus:** Uses vector similarity to find relevant passages across all texts, not just keyword matching.
 - **Transparent retrieval:** Optional debug mode shows exact text chunks and similarity scores used for each response.
+- **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. 
+- **Localized interfaces:** Chat interface formatting (labels, buttons, loading messages) available in multiple supported languages and adapts to the detected language of the user.
 
 ### Example Questions
 Ask Voltaire anything grounded in their writings. Here are some questions to get you started:
@@ -30,16 +32,17 @@ Ask Voltaire anything grounded in their writings. Here are some questions to get
 
 ## Technology
 
-| Dependency | Purpose                                |
-| --- |----------------------------------------|
-| Python 3.13 | language runtime                       |
-| uv | package manager                        |
-| LangChain | LLM orchestration framework            |
-| ChromaDB | vector store for document embeddings   |
-| Pydantic | data validation and schema definitions |
-| Streamlit | web UI framework                       |
+| Dependency          | Purpose                                |
+|---------------------|----------------------------------------|
+| python 3.13         | language runtime                       |
+| uv                  | package manager                        |
+| pydantic            | data validation and schema definitions |
+| langchain           | LLM orchestration framework            |
+| langdetect          | automatic language detection           |
+| chromaDB            | vector store for document embeddings   |
+| streamlit           | web UI framework                       |
 | pytest + pytest-cov | test runner and coverage               |
-| mypy | static type checking                   |
+| mypy                | static type checking                   |
 
 ## Architecture
 
@@ -76,16 +79,16 @@ INGESTION (one-time / on-demand via scripts)
 
 QUERY (real-time via user prompt)
 ─────────────────────────────────────────────────────────────────────
-  raw string             prompt from user in their natural language
+  raw string             input from user in their natural language on which we detect language code
       │
       ▼
  retriever.py            embeds the prompt, performs similarity search on the vector database and retrieves top-k semantically similar chunks
       │
       ▼
- chat_chain.py           orchestrates retrieval, context formatting with labels, and LLM call including persona prompt; returns ChatResponse
+ chat_chain.py           orchestrates retrieval, context formatting with labels, and LLM call including persona prompt and language; returns ChatResponse
       │
       ▼
- ChatResponse            validated and structured response
+ ChatResponse            validated and structured response in user's language
 ```
 
 ### Project Structure

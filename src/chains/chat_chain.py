@@ -1,31 +1,41 @@
-"""RAG chat chain with author-specific prompts."""
+"""RAG chat chain. Orchestrates retrieval, context formatting with labels,
+and LLM call including persona prompts. Returns ChatResponse.
+
+The chat chain uses a builder pattern with closure and implements the Runnable protocol.
+- build_chain() is a factory that creates and configures a ChatChainRunnable instance
+- inner _run() function captures dependencies (retriever, llm, prompt) in a closure
+- This creates a pre-configured, stateful callable object.
+
+Key benefit: Build once (expensive: load models, connect to DB),
+             then invoke many times (cheap: just run the chain).
+             The closure captures all the heavy setup, so each invocation is lightweight.
+
+Instructions for callers:
+  1. Call build_chain() once to construct a ChatChainRunnable configured for a specific author.
+  2. Then call runnable.invoke(user_input, detected_language) repeatedly with different questions
+"""
+
+from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import ChatOllama
 
 from src.configs.authors import AUTHOR_CONFIGS, DEFAULT_AUTHOR
-from src.configs.common import (
-    DEFAULT_DB_PATH,
-    DEFAULT_LLM_MODEL,
-    DEFAULT_RESPONSE_LANGUAGE,
-)
+from src.configs.common import DEFAULT_LLM_MODEL, DEFAULT_RESPONSE_LANGUAGE
 from src.schemas import ChatResponse
 from src.vectorstores.retriever import build_retriever
-
 
 def build_chain(
     author: str = DEFAULT_AUTHOR,
     retriever: VectorStoreRetriever | None = None,
     llm: BaseChatModel | None = None,
-    prompt: ChatPromptTemplate | None = None,
-    language: str | None = None,
-    detect_user_language: bool = True,
 ) -> Runnable[str, ChatResponse]:
-    """Build a RAG chat chain with sensible defaults or custom components.
+    """Build a RAG chat chain that takes custom components. If custom components are
+    not injected (e.g. for testing), this method constructs sensible defaults.
 
     This method supports both production use (with defaults) and testing (with injection):
     - Production: build_chain() or build_chain(author="gouges")
@@ -35,63 +45,48 @@ def build_chain(
         author: Author key for filtering and prompt selection (default: DEFAULT_AUTHOR)
         retriever: LangChain retriever (default: builds from author)
         llm: Language model (default: ChatOllama with DEFAULT_LLM_MODEL)
-        prompt: Chat prompt template (default: builds from author registry)
-        language: Response language ISO code (default: DEFAULT_RESPONSE_LANGUAGE)
-        detect_user_language: Whether to detect question language (default: True)
 
     Returns:
-        Runnable that takes a question string and returns a ChatResponse
+        Runnable that takes string from user input and returns a ChatResponse (via invoke method)
 
     Raises:
         ValueError: If author is not registered in AUTHOR_CONFIGS
     """
-    # Validate author
-    if author not in AUTHOR_CONFIGS:
-        raise ValueError(
-            f"Unknown author: {author!r}. "
-            f"Valid authors: {list(AUTHOR_CONFIGS.keys())}"
-        )
 
-    # Get author-specific configuration
+    # Validate author and retrieve that philosopher's prompt
+    if author not in AUTHOR_CONFIGS:
+        raise ValueError(f"Unknown author: {author!r}. Valid authors: {list(AUTHOR_CONFIGS.keys())}")
     config = AUTHOR_CONFIGS[author]
-    prompt_factory = config.prompt_factory
+    prompt = config.prompt_factory()
 
     # Build retriever if not provided
     if retriever is None:
         retriever = build_retriever(author=author)
 
-    # Build prompt if not provided
-    if prompt is None:
-        prompt = prompt_factory()
-
-    # Default LLM
+    # Assign default LLM if not provided
     if llm is None:
         llm = ChatOllama(model=DEFAULT_LLM_MODEL)
 
-    # Default language from application config
-    if language is None:
-        language = DEFAULT_RESPONSE_LANGUAGE
-
-    def _run(question: str) -> ChatResponse:
+    def _run(user_input: str, language: str) -> ChatResponse:
         """Internal function that executes the RAG pipeline.
 
         Args:
-            question: User's question
+            user_input: user input
+            language: ISO 639-1 language code (e.g., "en", "fr")
 
         Returns:
             ChatResponse with answer and metadata
         """
-        # Retrieve relevant documents
-        docs = retriever.invoke(question)
+        # Retrieve relevant embedded documents
+        docs = retriever.invoke(user_input)
 
         # Format context with source labels
         context = _format_docs_with_titles(docs)
 
-        # Format the prompt
-        # Use language parameter directly for now. We will add detection of user's language.
+        # Format the prompt with the specified language
         formatted_prompt = prompt.format_messages(
             context=context,
-            question=question,
+            question=user_input,
             language=language,
         )
 
@@ -120,11 +115,35 @@ def build_chain(
 
     # Return the runnable
     class ChatChainRunnable(Runnable[str, ChatResponse]):
-        """Wrapper to make _run conform to Runnable protocol."""
+        """Wrapper to make _run conform to Runnable protocol.
+        Detected language code should be passed in as an additional argument
+        to adhere to Runnable interface."""
 
-        def invoke(self, input: str, config: dict | None = None) -> ChatResponse:  # type: ignore[override]
-            """Execute the chain."""
-            return _run(input)
+        def invoke(
+            self,
+            input: str,  # noqa: A002 - 'input' shadows built-in, but required by Runnable protocol
+            config: RunnableConfig | None = None,
+            **kwargs: Any,
+        ) -> ChatResponse:
+            """Invoke the chain with optional language parameter.
+
+            The language code should be passed explicitly from the caller
+            as an additional agument for testing or after language is detected.
+            It defaults to DEFAULT_RESPONSE_LANGUAGE if not provided.
+
+            Args:
+                input: string from user (required by Runnable protocol)
+                config: optional LangChain config (unused, for Runnable compatibility)
+                **kwargs: additional arguments, including:
+                    language: ISO 639-1 language code (e.g., "en", "fr")
+
+            Returns:
+                ChatResponse with answer and metadata
+            """
+            # Parse detected language code from kwargs; falls back to default
+            language = kwargs.get("language", DEFAULT_RESPONSE_LANGUAGE)
+
+            return _run(input, language=language)
 
     return ChatChainRunnable()
 
