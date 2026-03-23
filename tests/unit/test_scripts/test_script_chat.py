@@ -7,7 +7,6 @@ import pytest
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.configs.authors import AuthorConfig, DEFAULT_AUTHOR
-from src.configs.common import DEFAULT_DB_PATH
 from src.schemas import ChatResponse
 
 # Test constants (for use in tests - not necessarily the actual defaults)

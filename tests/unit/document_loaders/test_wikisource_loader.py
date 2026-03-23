@@ -5,7 +5,6 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 
-from langchain_core.documents import Document
 
 from src.configs.loader_configs import WikisourceCollectionConfig
 from src.document_loaders.wikisource_loader import WikisourceLoader, _WikisourceHTMLExtractor

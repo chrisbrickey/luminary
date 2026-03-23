@@ -43,6 +43,7 @@ Ask Voltaire anything grounded in their writings. Here are some questions to get
 | streamlit           | web UI framework                       |
 | pytest + pytest-cov | test runner and coverage               |
 | mypy                | static type checking                   |
+| autoflake           | unused import detection                |
 
 ## Architecture
 
@@ -165,13 +166,26 @@ ollama list
 
 ```
 # Run all tests except those tagged as 'external'
+# This includes unit tests, integration tests, and linting checks (mypy, autoflake)
 uv run pytest
 
 # Run all tests including those tagged as 'external', which make network calls to confirm API contracts
 uv run pytest -m external
+```
 
-# Run type checker only
+#### Run linting checks independently
+
+Run type checks
+```
 uv run mypy
+```
+
+Run checks on unused variables
+```
+uv run pytest tests/integration/test_autoflake.py
+
+# clean up unused imports automatically
+uv run autoflake --in-place --recursive --remove-all-unused-imports --remove-unused-variables --ignore-init-module-imports src scripts tests
 ```
 
 ### 5. Run the ingestion pipeline

@@ -2,7 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
 from langdetect import LangDetectException
 
 from src.configs.common import DEFAULT_RESPONSE_LANGUAGE

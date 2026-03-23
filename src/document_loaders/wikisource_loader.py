@@ -4,7 +4,6 @@ import json
 import logging
 import time
 from html.parser import HTMLParser
-from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
