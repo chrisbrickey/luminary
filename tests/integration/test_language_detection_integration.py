@@ -21,50 +21,32 @@ ENGLISH_QUESTION = "What is your view on religious tolerance and freedom of cons
 ITALIAN_QUESTION = "Qual è la tua opinione sulla tolleranza religiosa e la libertà di coscienza?"
 
 @pytest.fixture
-def temp_chroma_db(tmp_path: Path, fake_embeddings: FakeEmbeddings, monkeypatch):
-    """Create a temporary ChromaDB with sample documents."""
-    from langchain_core.documents import Document
-
+def test_retriever(setup_test_db: tuple[Path, FakeEmbeddings], make_test_document):
+    """Build retriever with sample document for language detection tests."""
     from src.vectorstores.chroma import embed_and_store
+    from src.vectorstores.retriever import build_retriever
 
-    # Set up temp database path
-    db_path = tmp_path / "test_chroma_db"
-
-    # Patch DEFAULT_DB_PATH in all modules that import it
-    monkeypatch.setattr("src.configs.common.DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", db_path)
+    db_path, embeddings = setup_test_db
 
     # Create sample documents
     docs = [
-        Document(
-            page_content="Religious tolerance is essential for social harmony.",
-            metadata={
-                "chunk_id": "test_001",
-                "chunk_index": 0,
-                "document_id": "test-doc",
-                "document_title": "Test Document",
-                "author": DEFAULT_AUTHOR,
-                "source": "https://example.com/test",
-                "page_number": 1,
-            },
+        make_test_document(
+            content="Religious tolerance is essential for social harmony.",
+            chunk_id="test_001",
+            chunk_index=0,
+            doc_id="test-doc",
+            title="Test Document",
+            author=DEFAULT_AUTHOR,
+            page_number=1,
         ),
     ]
 
     # Embed and store
-    embed_and_store(docs, embeddings=fake_embeddings)
-
-    return db_path
-
-
-@pytest.fixture
-def test_retriever(temp_chroma_db: Path, fake_embeddings: FakeEmbeddings):
-    """Build a retriever for integration tests."""
-    from src.vectorstores.retriever import build_retriever
+    embed_and_store(docs, embeddings=embeddings)
 
     return build_retriever(
         author=DEFAULT_AUTHOR,
-        embeddings=fake_embeddings,
+        embeddings=embeddings,
     )
 
 class TestLanguageDetectionIntegration:

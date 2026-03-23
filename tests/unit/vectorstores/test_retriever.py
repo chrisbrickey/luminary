@@ -1,6 +1,5 @@
 """Tests for retriever wrapper."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -10,71 +9,67 @@ from src.vectorstores.chroma import embed_and_store
 from src.vectorstores.retriever import build_retriever
 from tests.conftest import FakeEmbeddings
 
+AUTHOR_1 = "voltaire"
+AUTHOR_2 = "gouges"
 
 @pytest.fixture
-def fixture_db_dir(monkeypatch) -> Path:
+def fixture_db_dir(test_db_path: Path) -> Path:
     """Create a temporary directory with a populated ChromaDB."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir)
-        # Patch DEFAULT_DB_PATH in both chroma and retriever modules
-        monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", db_path)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", db_path)
+    # Create sample chunks from two different authors
+    chunks = [
+        Document(
+            page_content="Discussion of religious tolerance and enlightenment ideals.",
+            metadata={
+                "chunk_id": "voltaire_001",
+                "chunk_index": 0,
+                "document_id": "lettres-philosophiques",
+                "document_title": "Lettres philosophiques",
+                "author": AUTHOR_1,
+                "source": "https://example.com/voltaire",
+            }
+        ),
+        Document(
+            page_content="Analysis of reason and scientific progress in society.",
+            metadata={
+                "chunk_id": "voltaire_002",
+                "chunk_index": 1,
+                "document_id": "lettres-philosophiques",
+                "document_title": "Lettres philosophiques",
+                "author": AUTHOR_1,
+                "source": "https://example.com/voltaire",
+            }
+        ),
+        Document(
+            page_content="Advocacy for women's rights and natural equality.",
+            metadata={
+                "chunk_id": "gouges_001",
+                "chunk_index": 0,
+                "document_id": "declaration-droits-femme",
+                "document_title": "Déclaration des droits de la femme",
+                "author": AUTHOR_2,
+                "source": "https://example.com/gouges",
+            }
+        ),
+        Document(
+            page_content="Critique of patriarchal structures and call for reform.",
+            metadata={
+                "chunk_id": "gouges_002",
+                "chunk_index": 1,
+                "document_id": "declaration-droits-femme",
+                "document_title": "Déclaration des droits de la femme",
+                "author": AUTHOR_2,
+                "source": "https://example.com/gouges",
+            }
+        ),
+    ]
 
-        # Create sample chunks from two different authors
-        chunks = [
-            Document(
-                page_content="Discussion of religious tolerance and enlightenment ideals.",
-                metadata={
-                    "chunk_id": "voltaire_001",
-                    "chunk_index": 0,
-                    "document_id": "lettres-philosophiques",
-                    "document_title": "Lettres philosophiques",
-                    "author": "voltaire",
-                    "source": "https://example.com/voltaire",
-                }
-            ),
-            Document(
-                page_content="Analysis of reason and scientific progress in society.",
-                metadata={
-                    "chunk_id": "voltaire_002",
-                    "chunk_index": 1,
-                    "document_id": "lettres-philosophiques",
-                    "document_title": "Lettres philosophiques",
-                    "author": "voltaire",
-                    "source": "https://example.com/voltaire",
-                }
-            ),
-            Document(
-                page_content="Advocacy for women's rights and natural equality.",
-                metadata={
-                    "chunk_id": "gouges_001",
-                    "chunk_index": 0,
-                    "document_id": "declaration-droits-femme",
-                    "document_title": "Déclaration des droits de la femme",
-                    "author": "gouges",
-                    "source": "https://example.com/gouges",
-                }
-            ),
-            Document(
-                page_content="Critique of patriarchal structures and call for reform.",
-                metadata={
-                    "chunk_id": "gouges_002",
-                    "chunk_index": 1,
-                    "document_id": "declaration-droits-femme",
-                    "document_title": "Déclaration des droits de la femme",
-                    "author": "gouges",
-                    "source": "https://example.com/gouges",
-                }
-            ),
-        ]
+    # Embed and store all chunks
+    embed_and_store(
+        chunks=chunks,
+        embeddings=FakeEmbeddings()
+    )
 
-        # Embed and store all chunks
-        embed_and_store(
-            chunks=chunks,
-            embeddings=FakeEmbeddings()
-        )
-
-        yield db_path
+    return test_db_path
 
 
 def test_build_retriever_basic(fixture_db_dir: Path) -> None:
@@ -104,7 +99,7 @@ def test_build_retriever_with_author_filter(fixture_db_dir: Path) -> None:
     retriever = build_retriever(
         embeddings=FakeEmbeddings(),
         k=5,
-        author="voltaire"
+        author=AUTHOR_1
     )
 
     # Retrieve documents
@@ -113,7 +108,7 @@ def test_build_retriever_with_author_filter(fixture_db_dir: Path) -> None:
     # Should only return Voltaire chunks
     assert len(results) > 0
     for doc in results:
-        assert doc.metadata["author"] == "voltaire"
+        assert doc.metadata["author"] == AUTHOR_1
 
 
 def test_build_retriever_different_author_filter(fixture_db_dir: Path) -> None:
@@ -121,7 +116,7 @@ def test_build_retriever_different_author_filter(fixture_db_dir: Path) -> None:
     retriever = build_retriever(
         embeddings=FakeEmbeddings(),
         k=5,
-        author="gouges"
+        author=AUTHOR_2
     )
 
     # Retrieve documents
@@ -130,7 +125,7 @@ def test_build_retriever_different_author_filter(fixture_db_dir: Path) -> None:
     # Should only return Gouges chunks
     assert len(results) > 0
     for doc in results:
-        assert doc.metadata["author"] == "gouges"
+        assert doc.metadata["author"] == AUTHOR_2
 
 
 def test_build_retriever_without_filter_returns_all(fixture_db_dir: Path) -> None:

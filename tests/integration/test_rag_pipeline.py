@@ -9,15 +9,13 @@ This file tests the integration of real components:
 External dependencies (LLM, embeddings) are faked to avoid network calls.
 """
 
-from pathlib import Path
-
 import pytest
 
 from src.chains.chat_chain import build_chain
 from src.schemas import ChatResponse
 from src.vectorstores.chroma import embed_and_store
 from src.vectorstores.retriever import build_retriever
-from tests.conftest import FakeChatModel, FakeEmbeddings
+from tests.conftest import FakeChatModel
 from src.configs.authors import DEFAULT_AUTHOR
 
 # Test constants
@@ -25,28 +23,6 @@ AUTHOR_1 = "test-author-1"
 AUTHOR_2 = "test-author-2"
 DEFAULT_K = 5
 TEST_QUESTION = "What do you think about tolerance?"
-
-
-# =============================================================================
-# Fixtures
-# =============================================================================
-
-
-@pytest.fixture
-def setup_test_db(tmp_path: Path, monkeypatch) -> tuple[Path, FakeEmbeddings]:
-    """Set up temporary ChromaDB with monkeypatched paths and fake embeddings.
-
-    Returns:
-        tuple: (db_path, embeddings)
-    """
-    db_path = tmp_path / "chroma"
-    # Patch DEFAULT_DB_PATH in all modules that import it
-    monkeypatch.setattr("src.configs.common.DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr("src.vectorstores.chroma.DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", db_path)
-    embeddings = FakeEmbeddings()
-    return db_path, embeddings
-
 
 # =============================================================================
 # Vectorstore Operations (storage, retrieval, filtering, persistence)

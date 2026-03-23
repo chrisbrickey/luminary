@@ -125,14 +125,10 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that welcome text is displayed correctly."""
         from scripts.chat import run_interactive_chat
-
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked,
-        # but included for consistency)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -163,13 +159,10 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that user prompt uses localized message from DEFAULT_RESPONSE_LANGUAGE."""
         from scripts.chat import run_interactive_chat
-
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -196,13 +189,10 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that author response is prefixed with capitalized author name."""
         from scripts.chat import run_interactive_chat
-
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -277,13 +267,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that --show-chunks displays retrieved chunks."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -316,13 +304,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that chunks are not shown without --show-chunks flag."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -353,13 +339,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that chunk IDs never appear in response text (only in --show-chunks mode)."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks with response that should NOT contain chunk IDs
         mock_ollama.return_value = None
@@ -398,13 +382,11 @@ class TestRunInteractiveChat:
         mock_build_chain: MagicMock,
         mock_detect: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that sources footer uses detected language for formatting."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -444,13 +426,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that 'quit' command exits gracefully and displays exit message."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -481,13 +461,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that Ctrl+C (KeyboardInterrupt) exits gracefully and displays exit message."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -518,13 +496,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that EOFError exits gracefully and displays exit message."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -554,13 +530,11 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that empty questions are skipped."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -630,13 +604,11 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that Ollama availability is checked."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -658,13 +630,11 @@ class TestRunInteractiveChat:
     def test_ollama_not_available_raises(
         self,
         mock_ollama: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that RuntimeError is raised if Ollama not available."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mock to raise
         mock_ollama.side_effect = RuntimeError("Ollama is not running")
@@ -685,13 +655,11 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that ValueError is raised for invalid author."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -715,13 +683,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         caplog: pytest.LogCaptureFixture,
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that errors during chain invocation don't exit loop."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
@@ -755,13 +721,11 @@ class TestRunInteractiveChat:
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
         caplog: pytest.LogCaptureFixture,
-        monkeypatch: pytest.MonkeyPatch,
+        test_db_path: Path,
     ) -> None:
         """Test that verbose flag enables debug logging."""
         from scripts.chat import run_interactive_chat
 
-        # Patch DEFAULT_DB_PATH (not needed for this test since build_chain is mocked)
-        monkeypatch.setattr("src.vectorstores.retriever.DEFAULT_DB_PATH", Path(TEST_DB_PATH))
 
         # Setup mocks
         mock_ollama.return_value = None
