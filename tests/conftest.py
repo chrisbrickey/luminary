@@ -1,6 +1,7 @@
 """Shared test fixtures and configuration."""
 
 import os
+from pathlib import Path
 from typing import Any, Callable, List
 from unittest.mock import Mock
 
@@ -12,6 +13,9 @@ os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 # Workaround for Python 3.14 compatibility with ChromaDB
 # Set default values for ChromaDB settings that have type inference issues
 os.environ.setdefault("CHROMA_SERVER_NOFILE", "65536")
+
+# Import modules that use DEFAULT_DB_PATH so we can reference them directly
+from src.vectorstores import chroma, retriever
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -120,6 +124,48 @@ def make_test_document() -> Callable[..., Document]:
         return Document(page_content=content, metadata=metadata)
 
     return _make
+
+
+@pytest.fixture
+def test_db_path(tmp_path: Path, monkeypatch) -> Path:
+    """Provide a temporary ChromaDB path with centralized monkeypatching.
+
+    This fixture patches DEFAULT_DB_PATH in all modules that import it,
+    ensuring test isolation without needing to repeat monkeypatch calls
+    in every test file.
+
+    Args:
+        tmp_path: pytest's temporary directory fixture
+        monkeypatch: pytest's monkeypatch fixture
+
+    Returns:
+        Path to temporary test database directory
+    """
+    db_path = tmp_path / "chroma_db"
+
+    # Patch DEFAULT_DB_PATH only in the modules that actually use it
+    # We don't patch src.configs.common because the modules import with
+    # "from src.configs.common import DEFAULT_DB_PATH" which creates local bindings
+    monkeypatch.setattr(chroma, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(retriever, "DEFAULT_DB_PATH", db_path)
+
+    return db_path
+
+
+@pytest.fixture
+def setup_test_db(test_db_path: Path, fake_embeddings: FakeEmbeddings) -> tuple[Path, FakeEmbeddings]:
+    """Provide empty ChromaDB path with FakeEmbeddings for integration tests.
+
+    This fixture provides the foundation for integration tests that need a
+    ChromaDB instance. The database is empty - tests should populate it with
+    their own documents using embed_and_store().
+
+    Returns:
+        tuple: (test_db_path, fake_embeddings) where:
+            - test_db_path: Path to temporary test database
+            - fake_embeddings: FakeEmbeddings instance for deterministic testing
+    """
+    return test_db_path, fake_embeddings
 
 
 @pytest.fixture(autouse=True)
