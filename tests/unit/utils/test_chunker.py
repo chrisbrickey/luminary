@@ -4,7 +4,6 @@ from typing import Any
 
 import pytest
 from langchain_core.documents import Document
-from pydantic import ValidationError
 
 from src.schemas import ChunkInfo
 from src.utils.chunker import _generate_chunk_id, chunk_documents

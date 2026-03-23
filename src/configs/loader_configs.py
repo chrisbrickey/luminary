@@ -2,8 +2,6 @@
 
 from pydantic import BaseModel, Field
 
-from src.configs.common import DEFAULT_DB_PATH
-
 class WikisourceCollectionConfig(BaseModel):
     document_id: str = Field(
         ...,

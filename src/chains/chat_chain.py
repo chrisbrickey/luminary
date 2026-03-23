@@ -19,7 +19,6 @@ from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import ChatOllama

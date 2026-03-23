@@ -7,8 +7,7 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 
 from src.chains.chat_chain import build_chain
-from src.configs.common import DEFAULT_DB_PATH, DEFAULT_LLM_MODEL, DEFAULT_RESPONSE_LANGUAGE
-from src.configs.authors import DEFAULT_AUTHOR
+from src.configs.common import DEFAULT_LLM_MODEL, DEFAULT_RESPONSE_LANGUAGE
 
 # Test constants
 SAMPLE_QUESTION = "What do you think is the most important question in philosophy?"
@@ -257,11 +256,11 @@ class TestBuildChain:
             # Invoke the chain
             response = chain.invoke(SAMPLE_QUESTION)
 
-            # Verify all default components (author, retriever, llm) were recorded or instantiated.
+            # Verify all default components (author, retriever, llm, language) were recorded or instantiated.
             call_kwargs = mock_build_retriever.call_args[1]
             assert call_kwargs["author"] == "voltaire"
-
             mock_chat_ollama.assert_called_once_with(model=DEFAULT_LLM_MODEL)
+            assert response.language == DEFAULT_RESPONSE_LANGUAGE
 
         def test_build_chain_accepts_custom_components(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
@@ -278,12 +277,13 @@ class TestBuildChain:
             )
 
             # Use language parameter in invoke
-            response = chain.invoke(SAMPLE_QUESTION, language="de")
+            german_code = "de"
+            response = chain.invoke(SAMPLE_QUESTION, language=german_code)
 
             # Verify custom components were used
             mock_retriever.invoke.assert_called_once_with(SAMPLE_QUESTION)
             mock_llm.invoke.assert_called_once()
-            assert response.language == "de"
+            assert response.language == german_code
 
         def test_chain_end_to_end_with_documents(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response

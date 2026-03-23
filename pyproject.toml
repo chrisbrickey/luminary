@@ -23,6 +23,7 @@ ui = [
 
 [dependency-groups]
 dev = [
+    "autoflake>=2.3.3",
     "mypy>=1.19.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
