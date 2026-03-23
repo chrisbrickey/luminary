@@ -18,7 +18,7 @@ Both interfaces support the same core features and philosopher personas.
 - **Local-first execution:** Runs entirely locally with Ollama—no external API calls, no data sharing, no usage costs.
 - **Semantic search over historical corpus:** Uses vector similarity to find relevant passages across all texts, not just keyword matching.
 - **Transparent retrieval:** Optional debug mode shows exact text chunks and similarity scores used for each response.
-- **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. 
+- **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. _Local LLMs are not deterministic. So adherence to the detected language depends on the training data available to the selected model._ 
 - **Localized interfaces:** Chat interface formatting (labels, buttons, loading messages) available in multiple supported languages and adapts to the detected language of the user.
 
 ### Example Questions
