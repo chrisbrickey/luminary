@@ -1,7 +1,9 @@
 """External tests for language detection with real LLM.
 
-These tests verify that the real Ollama LLM respects the language parameter
-in prompts and responds in the detected language.
+These tests verify that the real Ollama LLM respects the language
+parameter in prompts and responds in the detected language.
+Local LLMs are not deterministic, especially with non-major languages.
+To avoid flakiness, these tests do not use rare languages.
 
 REQUIREMENTS:
 - Ollama must be running: `ollama serve`
@@ -24,7 +26,7 @@ pytestmark = pytest.mark.external
 # Test questions in different languages
 FRENCH_QUESTION = "Selon vous,  uelle est la question la plus importante en philosophie ?"
 ENGLISH_QUESTION = "In your view, what is the most important question in philosophy?"
-PORTUGUESE_QUESTION = "Na sua opinião, qual é a questão mais importante da filosofia??"
+GERMAN_QUESTION = "Was ist Ihrer Meinung nach die wichtigste Frage in der Philosophie?"
 
 
 def assert_valid_response(response: ChatResponse, expected_language: str) -> None:
@@ -118,26 +120,25 @@ class TestRealLLMLanguageHandling:
             response.text, english_indicators, min_count=3, language_name="English"
         )
 
-    def test_portuguese_question_llm_responds_in_portuguese(self) -> None:
-        """Should detect Portuguese (unsupported UI language) and LLM should respond in Portuguese.
+    def test_german_question_llm_responds_in_german(self) -> None:
+        """Should detect German (unsupported UI language) and LLM should respond in German.
 
-        This tests that even though Portuguese is not in SUPPORTED_LANGUAGES
-        (only French and English have UI strings), the LLM still responds
-        correctly in Portuguese. The UI strings will fall back to English,
-        but the LLM response content should be in Portuguese.
+        This tests that even though German is not in SUPPORTED_LANGUAGES
+        (no localization of UI strings), the content retrieved from the LLM
+        is in the detected language. The UI strings will fall back to the
+        default language, but the LLM response content should be in German.
         """
-        portuguese_code = "pt"
+        german_code = "de"
         chain = build_chain()
-        response = chain.invoke(PORTUGUESE_QUESTION, language=portuguese_code)
+        response = chain.invoke(GERMAN_QUESTION, language=german_code)
 
         # Verify basic response properties
-        assert_valid_response(response, portuguese_code)
+        assert_valid_response(response, german_code)
 
-        # Verify response is actually in Portuguese (simple heuristic check)
-        # Portuguese text typically contains: o, a, de, que, é, os, as, para
-        portuguese_indicators = [" o ", " a ", " de ", " que ", " é ", " os ", " para "]
+        # Verify response is actually in German (simple heuristic check)
+        german_indicators = [" der ", " die ", " das ", " ist ", " eine ", " und ", " den "]
         assert_response_contains_language_indicators(
-            response.text, portuguese_indicators, min_count=2, language_name="Portuguese"
+            response.text, german_indicators, min_count=2, language_name="German"
         )
 
         # Additionally, verify it's not French or English

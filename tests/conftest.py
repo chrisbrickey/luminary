@@ -143,5 +143,5 @@ def pytest_collection_modifyitems(
         print("\n" + "=" * 70)
         print("RUNNING EXTERNAL TESTS")
         print("=" * 70)
-        print("These tests make real HTTP calls and may take several minutes.")
+        print("These tests make real rpc calls and may take several minutes.")
         print("=" * 70 + "\n")
