@@ -4,7 +4,7 @@ from pathlib import Path
 
 from src.configs.vectorstore_config import (
     COLLECTION_NAME,
-    DEFAULT_DB_PATH,
+    VECTOR_DB_PATH,
     DEFAULT_K,
     EMBEDDING_MODEL,
 )
@@ -28,7 +28,7 @@ def test_default_k_is_five() -> None:
     assert isinstance(DEFAULT_K, int)
 
 
-def test_default_db_path_imported_correctly() -> None:
-    """Test that DEFAULT_DB_PATH is re-exported from common config."""
-    assert DEFAULT_DB_PATH == Path("data/chroma_db")
-    assert isinstance(DEFAULT_DB_PATH, Path)
+def test_vector_db_path_imported_correctly() -> None:
+    """Test that VECTOR_DB_PATH is re-exported from common config."""
+    assert VECTOR_DB_PATH == Path("data/chroma_db")
+    assert isinstance(VECTOR_DB_PATH, Path)

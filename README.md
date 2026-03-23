@@ -204,7 +204,7 @@ _If you only need to run a portion of the pipeline, see the Troubleshooting sect
 
 **Options:**
 - `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
-- `--raw-dir` (optional): Base directory for scraped documents (default: `data/raw`)
+- `--raw-data-path` (optional): Base directory for scraped documents (default: `data/raw`)
 - `--skip-scrape` (optional): Skip scraping phase and use existing scraped documents
 - `--skip-embed` (optional): Skip embedding phase (only scrape documents)
 
@@ -292,7 +292,7 @@ _Output: data/raw/voltaire_lettres_philosophiques-1734/page_01.json, page_02.jso
 
 **Options:**
 - `--author` (optional): Author key to scrape. Defaults to all configured authors. Currently available: `voltaire`
-- `--output-dir` (optional): Base directory for saving scraped documents (default: `data/raw`)
+- `--output-path` (optional): Base directory for saving scraped documents (default: `data/raw`)
 
 **Output location:**
 Documents are saved to `data/raw/<document_id>/` as `page_NN.json` files containing:
@@ -313,7 +313,7 @@ uv run python scripts/embed_and_store.py --author voltaire
 ```
 **Options:**
 - `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
-- `--input-dir` (optional): Base directory containing scraped documents (default: `data/raw`)
+- `--input-path` (optional): Base directory containing scraped documents (default: `data/raw`)
 
 **Output location:**
 Embeddings are stored in the ChromaDB vector database (at `data/chroma_db/` in local env) with collection name `philosophes`.

@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_ollama import OllamaEmbeddings
 
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import VECTOR_DB_PATH
 from src.configs.vectorstore_config import COLLECTION_NAME, EMBEDDING_MODEL
 
 
@@ -82,7 +82,7 @@ def embed_and_store(
         embedding=embeddings_instance,
         ids=chunk_ids,
         collection_name=collection_name,
-        persist_directory=str(DEFAULT_DB_PATH),
+        persist_directory=str(VECTOR_DB_PATH),
     )
 
     return vectorstore

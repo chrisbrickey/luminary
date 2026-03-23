@@ -10,7 +10,7 @@ import logging
 import subprocess
 import sys
 
-from src.configs.common import DEFAULT_RAW_DIR
+from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.utils.ollama_health import check_ollama_available
 
@@ -51,12 +51,12 @@ def _log_phase_header(phase_name: str) -> None:
     logger.info(_PHASE_CHAR * _SECTION_WIDTH)
 
 
-def _run_scrape_phase(author: str, raw_dir: str) -> None:
+def _run_scrape_phase(author: str, raw_data_path: str) -> None:
     """Run the scraping phase for a single author.
 
     Args:
         author: Author key to process
-        raw_dir: Base directory for saving scraped documents
+        raw_data_path: Base directory for saving scraped documents
 
     Raises:
         subprocess.CalledProcessError: If scraping script fails
@@ -66,17 +66,17 @@ def _run_scrape_phase(author: str, raw_dir: str) -> None:
     scrape_cmd = [
         "uv", "run", "python", "scripts/scrape_wikisource.py",
         "--author", author,
-        "--output-dir", raw_dir
+        "--output-path", raw_data_path
     ]
     subprocess.run(scrape_cmd, check=True)
 
 
-def _run_embed_phase(author: str, raw_dir: str) -> None:
+def _run_embed_phase(author: str, raw_data_path: str) -> None:
     """Run the embedding phase for a single author.
 
     Args:
         author: Author key to process
-        raw_dir: Base directory containing scraped documents
+        raw_data_path: Base directory containing scraped documents
 
     Raises:
         subprocess.CalledProcessError: If embedding script fails
@@ -86,14 +86,14 @@ def _run_embed_phase(author: str, raw_dir: str) -> None:
     embed_cmd = [
         "uv", "run", "python", "scripts/embed_and_store.py",
         "--author", author,
-        "--input-dir", raw_dir
+        "--input-path", raw_data_path
     ]
     subprocess.run(embed_cmd, check=True)
 
 
 def ingest_author(
     author: str,
-    raw_dir: str,
+    raw_data_path: str,
     skip_scrape: bool,
     skip_embed: bool
 ) -> None:
@@ -101,7 +101,7 @@ def ingest_author(
 
     Args:
         author: Author key to process
-        raw_dir: Base directory for saving scraped documents
+        raw_data_path: Base directory for saving scraped documents
         skip_scrape: If True, skip scraping step
         skip_embed: If True, skip embedding step
 
@@ -117,13 +117,13 @@ def ingest_author(
 
     # Scraping phase
     if not skip_scrape:
-        _run_scrape_phase(author, raw_dir)
+        _run_scrape_phase(author, raw_data_path)
     else:
         logger.info(f"\n⏭  Skipping scrape phase for {author}")
 
     # Embedding phase
     if not skip_embed:
-        _run_embed_phase(author, raw_dir)
+        _run_embed_phase(author, raw_data_path)
     else:
         logger.info(f"\n⏭  Skipping embed phase for {author}")
 
@@ -144,10 +144,10 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help=f"Author key to process (optional, defaults to all). Available: {', '.join(INGEST_CONFIGS.keys())}"
     )
     parser.add_argument(
-        "--raw-dir",
+        "--raw-data-path",
         type=str,
-        default=str(DEFAULT_RAW_DIR),
-        help=f"Base directory for scraped documents (default: {DEFAULT_RAW_DIR})"
+        default=str(RAW_DATA_PATH),
+        help=f"Base directory for scraped documents (default: {RAW_DATA_PATH})"
     )
     parser.add_argument(
         "--skip-scrape",
@@ -197,7 +197,7 @@ def main() -> None:
         for author in authors_to_process:
             ingest_author(
                 author=author,
-                raw_dir=args.raw_dir,
+                raw_data_path=args.raw_data_path,
                 skip_scrape=args.skip_scrape,
                 skip_embed=args.skip_embed
             )

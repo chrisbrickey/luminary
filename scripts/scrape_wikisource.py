@@ -9,7 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.configs.common import DEFAULT_RAW_DIR
+from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.document_loaders.wikisource_loader import WikisourceLoader
 from src.utils.io import save_documents_to_disk
@@ -22,12 +22,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def scrape_author(author: str, output_base_dir: str) -> int:
+def scrape_author(author: str, output_base_path: str) -> int:
     """Scrape documents for a single author.
 
     Args:
         author: Author key to scrape
-        output_base_dir: Base directory for saving documents
+        output_base_path: Base directory for saving documents
 
     Returns:
         Number of documents saved
@@ -46,10 +46,10 @@ def scrape_author(author: str, output_base_dir: str) -> int:
     logger.info(f"\nConfiguration:")
     logger.info(f"  Author: {author}")
     logger.info(f"  Document: {config.document_title}")
-    logger.info(f"  Output: {Path(output_base_dir) / config.document_id}")
+    logger.info(f"  Output: {Path(output_base_path) / config.document_id}")
 
-    # Create output directory path
-    output_dir = Path(output_base_dir) / config.document_id
+    # Create output path
+    output_path = Path(output_base_path) / config.document_id
 
     # Initialize loader
     loader = WikisourceLoader(config)
@@ -63,9 +63,9 @@ def scrape_author(author: str, output_base_dir: str) -> int:
         return 0
 
     logger.info(f"\nSaving {len(documents)} documents to disk...")
-    saved_paths = save_documents_to_disk(documents, output_dir)
+    saved_paths = save_documents_to_disk(documents, output_path)
 
-    logger.info(f"✓ Saved {len(saved_paths)} files to {output_dir}\n")
+    logger.info(f"✓ Saved {len(saved_paths)} files to {output_path}\n")
     return len(saved_paths)
 
 
@@ -81,10 +81,10 @@ def main() -> None:
         help=f"Author key to scrape (optional, defaults to all). Available: {', '.join(INGEST_CONFIGS.keys())}"
     )
     parser.add_argument(
-        "--output-dir",
+        "--output-path",
         type=str,
-        default=str(DEFAULT_RAW_DIR),
-        help=f"Base directory for saving scraped documents (default: {DEFAULT_RAW_DIR})"
+        default=str(RAW_DATA_PATH),
+        help=f"Base directory for saving scraped documents (default: {RAW_DATA_PATH})"
     )
 
     args = parser.parse_args()
@@ -106,7 +106,7 @@ def main() -> None:
     try:
         total_saved = 0
         for author in authors_to_scrape:
-            num_saved = scrape_author(author, args.output_dir)
+            num_saved = scrape_author(author, args.output_path)
             total_saved += num_saved
 
         logger.info(f"\n{'='*70}")

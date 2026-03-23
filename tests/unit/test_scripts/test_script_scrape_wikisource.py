@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.documents import Document
 
-from src.configs.common import DEFAULT_RAW_DIR
+from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 
 # Test constants
@@ -73,7 +73,7 @@ class TestScrapWikisourceMain:
 
         # Verify default output directory used
         call_args = mock_scrape.call_args[0]
-        assert call_args[1] == str(DEFAULT_RAW_DIR)
+        assert call_args[1] == str(RAW_DATA_PATH)
 
     @patch("scripts.scrape_wikisource.save_documents_to_disk")
     @patch("scripts.scrape_wikisource.WikisourceLoader")
@@ -177,9 +177,9 @@ class TestScrapWikisourceMain:
     @patch("sys.argv", [
         "scrape_wikisource.py",
         "--author", TEST_AUTHOR,
-        "--output-dir", "custom/output"
+        "--output-path", "custom/output"
     ])
-    def test_custom_output_directory(
+    def test_custom_output_path(
         self,
         mock_exit: MagicMock,
         mock_loader_class: MagicMock,
@@ -231,7 +231,7 @@ class TestScrapWikisourceMain:
     @patch("scripts.scrape_wikisource.save_documents_to_disk")
     @patch("scripts.scrape_wikisource.WikisourceLoader")
     @patch("sys.argv", ["scrape_wikisource.py", "--author", TEST_AUTHOR])
-    def test_output_directory_path_construction(
+    def test_output_path_construction(
         self,
         mock_loader_class: MagicMock,
         mock_save: MagicMock,
@@ -250,7 +250,7 @@ class TestScrapWikisourceMain:
 
         # Verify output path combines base dir with document_id
         output_path = mock_save.call_args[0][1]
-        assert output_path == Path(DEFAULT_RAW_DIR) / TEST_DOCUMENT_ID
+        assert output_path == Path(RAW_DATA_PATH) / TEST_DOCUMENT_ID
 
     @patch("scripts.scrape_wikisource.save_documents_to_disk")
     @patch("scripts.scrape_wikisource.WikisourceLoader")
@@ -279,14 +279,14 @@ class TestScrapWikisourceMain:
 
     @patch("scripts.scrape_wikisource.save_documents_to_disk")
     @patch("scripts.scrape_wikisource.WikisourceLoader")
-    @patch("sys.argv", ["scrape_wikisource.py", "--output-dir", "custom/dir"])
-    def test_default_with_custom_output_dir(
+    @patch("sys.argv", ["scrape_wikisource.py", "--output-path", "custom/dir"])
+    def test_default_with_custom_output_path(
         self,
         mock_loader_class: MagicMock,
         mock_save: MagicMock,
         sample_documents: list[Document]
     ) -> None:
-        """Test that default behavior works with custom output directory."""
+        """Test that default behavior works with custom output path."""
         from scripts.scrape_wikisource import main
 
         # Configure mocks

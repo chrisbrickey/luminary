@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.configs.common import DEFAULT_RAW_DIR
+from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 
 # Test constants
@@ -14,7 +14,7 @@ TEST_AUTHOR = "voltaire"
 INVALID_AUTHOR = "nonexistent_author"
 
 # Test data for helper function tests (not testing defaults)
-TEST_RAW_DIR = "test/raw"
+TEST_RAW_PATH = "test/raw"
 TEST_DB_PATH = "test/db"
 
 
@@ -43,7 +43,7 @@ class TestIngestMain:
 
         # Verify default directories used
         call_kwargs = mock_ingest.call_args[1]
-        assert call_kwargs["raw_dir"] == str(DEFAULT_RAW_DIR)
+        assert call_kwargs["raw_data_path"] == str(RAW_DATA_PATH)
         assert call_kwargs["skip_scrape"] is False
         assert call_kwargs["skip_embed"] is False
 
@@ -73,7 +73,7 @@ class TestIngestMain:
         assert scrape_call[0][0] == [
             "uv", "run", "python", "scripts/scrape_wikisource.py",
             "--author", TEST_AUTHOR,
-            "--output-dir", str(DEFAULT_RAW_DIR)
+            "--output-path", str(RAW_DATA_PATH)
         ]
         assert scrape_call[1]["check"] is True
 
@@ -82,7 +82,7 @@ class TestIngestMain:
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", str(DEFAULT_RAW_DIR)
+            "--input-path", str(RAW_DATA_PATH)
         ]
         assert embed_call[1]["check"] is True
 
@@ -110,7 +110,7 @@ class TestIngestMain:
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", str(DEFAULT_RAW_DIR)
+            "--input-path", str(RAW_DATA_PATH)
         ]
 
     @patch("scripts.ingest.subprocess.run")
@@ -131,7 +131,7 @@ class TestIngestMain:
         assert scrape_call[0][0] == [
             "uv", "run", "python", "scripts/scrape_wikisource.py",
             "--author", TEST_AUTHOR,
-            "--output-dir", str(DEFAULT_RAW_DIR)
+            "--output-path", str(RAW_DATA_PATH)
         ]
 
     @patch("scripts.ingest.check_ollama_available")
@@ -200,7 +200,7 @@ class TestIngestMain:
 
     @patch("scripts.ingest.check_ollama_available")
     @patch("scripts.ingest.subprocess.run")
-    def test_custom_raw_directory(
+    def test_custom_raw_data_path(
         self,
         mock_run: MagicMock,
         mock_ollama: MagicMock,
@@ -213,7 +213,7 @@ class TestIngestMain:
         with patch("sys.argv", [
             "ingest.py",
             "--author", TEST_AUTHOR,
-            "--raw-dir", custom_raw
+            "--raw-data-path", custom_raw
         ]):
             from scripts.ingest import main
             main()
@@ -223,14 +223,14 @@ class TestIngestMain:
         assert scrape_call[0][0] == [
             "uv", "run", "python", "scripts/scrape_wikisource.py",
             "--author", TEST_AUTHOR,
-            "--output-dir", custom_raw
+            "--output-path", custom_raw
         ]
 
         embed_call = mock_run.call_args_list[1]
         assert embed_call[0][0] == [
             "uv", "run", "python", "scripts/embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", custom_raw
+            "--input-path", custom_raw
         ]
 
     @patch("scripts.ingest.check_ollama_available")
@@ -312,7 +312,7 @@ class TestIngestAuthor:
         from scripts.ingest import ingest_author
         ingest_author(
             author=TEST_AUTHOR,
-            raw_dir=TEST_RAW_DIR,
+            raw_data_path=TEST_RAW_PATH,
             skip_scrape=False,
             skip_embed=False
         )
@@ -331,7 +331,7 @@ class TestIngestAuthor:
         from scripts.ingest import ingest_author
         ingest_author(
             author=TEST_AUTHOR,
-            raw_dir=TEST_RAW_DIR,
+            raw_data_path=TEST_RAW_PATH,
             skip_scrape=True,
             skip_embed=False
         )
@@ -352,7 +352,7 @@ class TestIngestAuthor:
         from scripts.ingest import ingest_author
         ingest_author(
             author=TEST_AUTHOR,
-            raw_dir=TEST_RAW_DIR,
+            raw_data_path=TEST_RAW_PATH,
             skip_scrape=False,
             skip_embed=True
         )
@@ -369,7 +369,7 @@ class TestIngestAuthor:
         with pytest.raises(ValueError, match="Unknown author"):
             ingest_author(
                 author=INVALID_AUTHOR,
-                raw_dir=TEST_RAW_DIR,
+                raw_data_path=TEST_RAW_PATH,
                 skip_scrape=False,
                 skip_embed=False
             )
@@ -386,16 +386,16 @@ class TestIngestAuthor:
         from scripts.ingest import ingest_author
         ingest_author(
             author=TEST_AUTHOR,
-            raw_dir=custom_raw,
+            raw_data_path=custom_raw,
             skip_scrape=False,
             skip_embed=False
         )
 
         # Verify custom paths in both calls
         scrape_call = mock_run.call_args_list[0]
-        assert "--output-dir" in scrape_call[0][0]
+        assert "--output-path" in scrape_call[0][0]
         assert custom_raw in scrape_call[0][0]
 
         embed_call = mock_run.call_args_list[1]
-        assert "--input-dir" in embed_call[0][0]
+        assert "--input-path" in embed_call[0][0]
         assert custom_raw in embed_call[0][0]

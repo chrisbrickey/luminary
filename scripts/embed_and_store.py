@@ -9,7 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.configs.common import DEFAULT_RAW_DIR
+from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 from src.utils.chunker import chunk_documents
@@ -24,12 +24,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def embed_author(author: str, input_base_dir: str) -> int:
+def embed_author(author: str, input_base_path: str) -> int:
     """Embed and store documents for a single author.
 
     Args:
         author: Author key to process
-        input_base_dir: Base directory containing scraped documents
+        input_base_path: Base directory containing scraped documents
 
     Returns:
         Number of chunks stored
@@ -46,15 +46,15 @@ def embed_author(author: str, input_base_dir: str) -> int:
         )
 
     config = INGEST_CONFIGS[author]
-    document_dir = Path(input_base_dir) / config.document_id
+    document_path = Path(input_base_path) / config.document_id
 
     logger.info(f"\nConfiguration:")
     logger.info(f"  Author: {author}")
-    logger.info(f"  Input: {document_dir}")
+    logger.info(f"  Input: {document_path}")
 
     # Load documents from disk
-    logger.info(f"\nLoading documents from {document_dir}...")
-    documents = load_documents_from_disk(document_dir)
+    logger.info(f"\nLoading documents from {document_path}...")
+    documents = load_documents_from_disk(document_path)
     logger.info(f"✓ Loaded {len(documents)} documents")
 
     # Chunk documents
@@ -86,10 +86,10 @@ def main() -> None:
         help=f"Author key to process (optional, defaults to all). Available: {', '.join(INGEST_CONFIGS.keys())}"
     )
     parser.add_argument(
-        "--input-dir",
+        "--input-path",
         type=str,
-        default=str(DEFAULT_RAW_DIR),
-        help=f"Base directory containing scraped documents (default: {DEFAULT_RAW_DIR})"
+        default=str(RAW_DATA_PATH),
+        help=f"Base directory containing scraped documents (default: {RAW_DATA_PATH})"
     )
 
     args = parser.parse_args()
@@ -118,7 +118,7 @@ def main() -> None:
     try:
         total_chunks = 0
         for author in authors_to_process:
-            num_chunks = embed_author(author, args.input_dir)
+            num_chunks = embed_author(author, args.input_path)
             total_chunks += num_chunks
 
         logger.info(f"\n{'='*70}")

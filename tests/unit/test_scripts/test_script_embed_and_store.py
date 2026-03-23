@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.documents import Document
 
-from src.configs.common import DEFAULT_RAW_DIR
+from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 
@@ -16,7 +16,7 @@ INVALID_AUTHOR = "nonexistent_author"
 TEST_DOCUMENT_ID = "voltaire_lettres_philosophiques-1734"
 
 # Test data for helper function tests (not testing defaults)
-TEST_INPUT_DIR = "test/input"
+TEST_INPUT_PATH = "test/input"
 TEST_DB_PATH = "test/db"
 
 
@@ -94,7 +94,7 @@ class TestEmbedAndStoreMain:
 
         # Verify default directories used
         call_args = mock_embed.call_args[0]
-        assert call_args[1] == str(DEFAULT_RAW_DIR)  # input_base_dir
+        assert call_args[1] == str(RAW_DATA_PATH)  # input_base_path
 
     @patch("scripts.embed_and_store.check_ollama_available")
     @patch("scripts.embed_and_store.embed_and_store")
@@ -122,7 +122,7 @@ class TestEmbedAndStoreMain:
         mock_ollama.assert_called_once()
 
         # Verify load was called with correct default path
-        expected_path = Path(DEFAULT_RAW_DIR) / TEST_DOCUMENT_ID
+        expected_path = Path(RAW_DATA_PATH) / TEST_DOCUMENT_ID
         mock_load.assert_called_once_with(expected_path)
 
         # Verify chunk was called with documents
@@ -168,7 +168,7 @@ class TestEmbedAndStoreMain:
     @patch("scripts.embed_and_store.embed_and_store")
     @patch("scripts.embed_and_store.chunk_documents")
     @patch("scripts.embed_and_store.load_documents_from_disk")
-    def test_custom_input_directory(
+    def test_custom_input_path(
         self,
         mock_load: MagicMock,
         mock_chunk: MagicMock,
@@ -186,7 +186,7 @@ class TestEmbedAndStoreMain:
         with patch("sys.argv", [
             "embed_and_store.py",
             "--author", TEST_AUTHOR,
-            "--input-dir", custom_input
+            "--input-path", custom_input
         ]):
             from scripts.embed_and_store import main
             main()
@@ -285,7 +285,7 @@ class TestEmbedAuthor:
         mock_chunk.return_value = sample_chunks
 
         from scripts.embed_and_store import embed_author
-        num_chunks = embed_author(TEST_AUTHOR, TEST_INPUT_DIR)
+        num_chunks = embed_author(TEST_AUTHOR, TEST_INPUT_PATH)
 
         assert num_chunks == len(sample_chunks)
 
@@ -298,7 +298,7 @@ class TestEmbedAuthor:
         from scripts.embed_and_store import embed_author
 
         with pytest.raises(ValueError, match="Unknown author"):
-            embed_author(INVALID_AUTHOR, TEST_INPUT_DIR)
+            embed_author(INVALID_AUTHOR, TEST_INPUT_PATH)
 
         # Load should not be called for invalid author
         mock_load.assert_not_called()

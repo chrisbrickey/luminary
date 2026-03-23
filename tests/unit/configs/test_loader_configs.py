@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import VECTOR_DB_PATH
 from src.configs.loader_configs import (
     INGEST_CONFIGS,
     LETTRES_PHILOSOPHIQUES_CONFIG,
@@ -10,11 +10,11 @@ from src.configs.loader_configs import (
 )
 
 
-def test_default_db_path_is_correct() -> None:
-    """Test that DEFAULT_DB_PATH points to the correct location."""
-    assert DEFAULT_DB_PATH == Path("data/chroma_db")
-    assert DEFAULT_DB_PATH.name == "chroma_db"
-    assert DEFAULT_DB_PATH.parent.name == "data"
+def test_vector_db_path_is_correct() -> None:
+    """Test that VECTOR_DB_PATH points to the correct location."""
+    assert VECTOR_DB_PATH == Path("data/chroma_db")
+    assert VECTOR_DB_PATH.name == "chroma_db"
+    assert VECTOR_DB_PATH.parent.name == "data"
 
 def test_ingest_configs_has_voltaire_key() -> None:
     """Test that INGEST_CONFIGS registry has voltaire key."""

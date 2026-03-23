@@ -8,7 +8,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import OllamaEmbeddings
 
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import VECTOR_DB_PATH
 from src.configs.vectorstore_config import COLLECTION_NAME, DEFAULT_K, EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def build_retriever(
     logger.debug(
         "Opening database collection '%s' at %s (k=%d, author=%r)",
         collection_name,
-        DEFAULT_DB_PATH,
+        VECTOR_DB_PATH,
         k,
         author,
     )
@@ -53,7 +53,7 @@ def build_retriever(
     vectorstore = Chroma(
         collection_name=collection_name,
         embedding_function=embeddings,
-        persist_directory=str(DEFAULT_DB_PATH),
+        persist_directory=str(VECTOR_DB_PATH),
     )
 
     # Build search kwargs with optional author filter

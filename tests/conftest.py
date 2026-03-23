@@ -14,7 +14,7 @@ os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 # Set default values for ChromaDB settings that have type inference issues
 os.environ.setdefault("CHROMA_SERVER_NOFILE", "65536")
 
-# Import modules that use DEFAULT_DB_PATH so we can reference them directly
+# Import modules that use VECTOR_DB_PATH so we can reference them directly
 from src.vectorstores import chroma, retriever
 
 from langchain_core.documents import Document
@@ -130,7 +130,7 @@ def make_test_document() -> Callable[..., Document]:
 def test_db_path(tmp_path: Path, monkeypatch) -> Path:
     """Provide a temporary ChromaDB path with centralized monkeypatching.
 
-    This fixture patches DEFAULT_DB_PATH in all modules that import it,
+    This fixture patches VECTOR_DB_PATH in all modules that import it,
     ensuring test isolation without needing to repeat monkeypatch calls
     in every test file.
 
@@ -143,11 +143,11 @@ def test_db_path(tmp_path: Path, monkeypatch) -> Path:
     """
     db_path = tmp_path / "chroma_db"
 
-    # Patch DEFAULT_DB_PATH only in the modules that actually use it
+    # Patch VECTOR_DB_PATH only in the modules that actually use it
     # We don't patch src.configs.common because the modules import with
-    # "from src.configs.common import DEFAULT_DB_PATH" which creates local bindings
-    monkeypatch.setattr(chroma, "DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr(retriever, "DEFAULT_DB_PATH", db_path)
+    # "from src.configs.common import VECTOR_DB_PATH" which creates local bindings
+    monkeypatch.setattr(chroma, "VECTOR_DB_PATH", db_path)
+    monkeypatch.setattr(retriever, "VECTOR_DB_PATH", db_path)
 
     return db_path
 

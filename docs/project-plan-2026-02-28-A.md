@@ -3,7 +3,7 @@
 ## Context
 Luminary is a RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges) answer questions grounded in their historical texts. 
 It will feature an ingestion pipeline (initially integrated with Wikisource), retrieval-augmented chat with per-philosopher persona prompts, bilingual support (French/English), a multi-philosopher debate mode with LangChain agents, a deterministic + LLM-as-judge evaluation harness, and deployment to Heroku with configurable LLM/embedding providers. 
-This plan covers the complete system from project scaffolding through production deployment. This plan is intended to be read by coding agents. It is intentionally not optimized for human readers.
+This plan covers the complete system from project scaffolding through production deployment. This plan should be updated throughout development to reflect new decisions. This plan is intended to be read by coding agents. It is intentionally not optimized for human readers.
 
 ## Hosting target: Heroku
 
@@ -24,7 +24,7 @@ All design decisions should keep Heroku deployment in mind:
 **Change:** Removed user-facing database path overrides from all scripts and UI. Database location is now configured solely via environment variable.
 
 - **Before:** Scripts had `--db` CLI flags, UI had "Database Path" input, functions accepted `persist_dir` parameters
-- **After:** All removed. `DEFAULT_DB_PATH` in `src/configs/common.py` reads from `CHROMA_DB_PATH` environment variable (defaults to "data/chroma_db")
+- **After:** All removed. `VECTOR_DB_PATH` in `src/configs/common.py` reads from `CHROMA_DB_PATH` environment variable (defaults to "data/chroma_db")
 - **Rationale:** Simplifies API by treating database location as infrastructure concern rather than user-facing parameter. Don't anticipate needing more than one vector database per environment or sharding.
 - **Impact:** Affects Steps 5–10, 15–17; see "DB path override removal (2026-03-19)" deviation notes in affected steps
 
@@ -96,7 +96,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - Update `tests/integration/test_mypy.py`: add `"scripts"` to the mypy command
 - Update `.gitignore`: add `data/raw/`
 - Create `src/configs/loader_configs.py`:
-  - `DEFAULT_DB_PATH = Path("data/chroma_db")` — simplified to relative path (not resolved)
+  - `VECTOR_DB_PATH = Path("data/chroma_db")` — simplified to relative path (not resolved)
   - `WikisourceCollectionConfig` (Pydantic): `document_id`, `document_title`, `author` (lowercase), `page_title_template` (with `{n}` placeholder), `total_pages: int | None` (auto-discovered if None), `api_url` (default: `https://fr.wikisource.org/w/api.php`)
   - `LETTRES_PHILOSOPHIQUES_CONFIG`: pre-built config for Voltaire's Lettres philosophiques (renamed from VOLTAIRE_LETTRES_CONFIG)
   - `INGEST_CONFIGS: dict[str, WikisourceCollectionConfig]` — registry mapping author key → config; initially `{"voltaire": LETTRES_PHILOSOPHIQUES_CONFIG}`
@@ -110,12 +110,12 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - ~~`load_documents_from_disk(directory) -> list[Document]`~~ — deferred to Step 7 (not needed until combined ingestion script)
 - Create `scripts/scrape_wikisource.py` — CLI entrypoint: loads config, calls loader, saves to `data/raw/<document_id>/`; does NOT call `check_ollama_available()` (no Ollama dependency for scraping)
 - **Test:** `tests/unit/test_script_scrape_wikisource.py` — mock all external dependencies; test successful scraping, invalid author, no documents loaded, loader exception, save exception, custom output directory, output path construction, default scraping all authors (9 tests)
-- **Test:** `tests/unit/test_loader_configs.py` — validate LETTRES_PHILOSOPHIQUES_CONFIG fields, `INGEST_CONFIGS` has `"voltaire"` key, DEFAULT_DB_PATH correctness, custom API URL (6 tests)
+- **Test:** `tests/unit/test_loader_configs.py` — validate LETTRES_PHILOSOPHIQUES_CONFIG fields, `INGEST_CONFIGS` has `"voltaire"` key, VECTOR_DB_PATH correctness, custom API URL (6 tests)
 - **Test:** `tests/unit/document_loaders/test_wikisource_loader.py` — comprehensive tests for HTML parser and loader with mocked HTTP calls; test retry on 429/5xx, network errors, max retries, non-transient errors, auto-discovery, empty responses, metadata construction (15 tests for parser and loader combined)
 - **Test:** `tests/unit/utils/test_io.py` — test save operations: directory creation, error handling, Unicode preservation, padding (6 tests for save only; load tests deferred to Step 7)
 - **README:** Added Usage > Ingestion section with `scripts/scrape_wikisource.py` command, options table, output location details, and example; updated project structure diagram to add `scripts/` and clarify directories
 - **Deviations from plan:**
-  - `DEFAULT_DB_PATH` simplified to relative path `Path("data/chroma_db")` instead of absolute resolved path; later moved to `src/configs/common.py` in 2026-03-08 refactoring (see Step 6 deviations)
+  - `VECTOR_DB_PATH` simplified to relative path `Path("data/chroma_db")` instead of absolute resolved path; later moved to `src/configs/common.py` in 2026-03-08 refactoring (see Step 6 deviations)
   - Config name changed from `VOLTAIRE_LETTRES_CONFIG` to `LETTRES_PHILOSOPHIQUES_CONFIG`
   - `--author` flag changed from required to optional (defaults to all configured authors)
   - Enhanced logging with user-friendly progress messages and simplified format to show real-time scraping progress
@@ -142,7 +142,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - Create `tests/conftest.py`: `FakeEmbeddings(Embeddings)` fixture returning constant 8-dim vectors; disable ChromaDB telemetry via `os.environ.setdefault` before import
 - Create `src/vectorstores/chroma.py` (renamed from `embed_and_store.py` for better module naming)
 - `embed_and_store(chunks, collection_name="philosophes", embeddings=None) -> Chroma`:
-  - Uses `DEFAULT_DB_PATH` from config (no user-facing persist_dir parameter)
+  - Uses `VECTOR_DB_PATH` from config (no user-facing persist_dir parameter)
   - Uses `Chroma.from_documents()` with **`ids=` set to each chunk's `chunk_id`** — idempotent upserts on re-run (improvement over rag-chat-1 which omitted `ids=`, causing duplicates)
   - Accepts injectable embeddings for testing; defaults to `OllamaEmbeddings(model="nomic-embed-text")`
   - Refactored with private helper functions `_get_embeddings_instance()` and `_extract_and_validate_chunk_ids()` following SRP
@@ -167,7 +167,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 ## ✅ Step 6: Retrieval chain
 - Create `src/vectorstores/retriever.py`
 - `build_retriever(collection_name="philosophes", embeddings=None, k=5, author=None) -> VectorStoreRetriever`
-  - Uses `DEFAULT_DB_PATH` from config (no user-facing persist_dir parameter)
+  - Uses `VECTOR_DB_PATH` from config (no user-facing persist_dir parameter)
 - Wrap ChromaDB as LangChain retriever; apply author filter at retriever level via `search_kwargs={"filter": {"author": author}}` (ChromaDB metadata filter, not post-retrieval)
 - **Test:** `tests/unit/vectorstores/test_retriever.py` — with small fixture DB, query and assert relevant chunks returned with intact metadata; test author filter; test without filter returns all
 - **Test:** `tests/integration/test_retriever.py` — wire real ChromaDB + FakeEmbeddings end-to-end; embed fixtures then retrieve; verify round-trip
@@ -179,7 +179,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - All tests pass; total of 10 tests vs. suggested "with small fixture DB" approach
   - Type checking passes via mypy integration test
   - **Configuration refactoring (2026-03-08):** Extracted shared constants to improve maintainability and observability:
-    - Created `src/configs/common.py` with `DEFAULT_DB_PATH` constant (moved from `loader_configs.py`)
+    - Created `src/configs/common.py` with `VECTOR_DB_PATH` constant (moved from `loader_configs.py`)
     - Created `src/configs/vectorstore_config.py` with `COLLECTION_NAME`, `EMBEDDING_MODEL`, and `DEFAULT_K` constants
     - Updated `retriever.py` to use constants as defaults and added logging before opening ChromaDB collection (logger.info with collection name, path, k, and author filter)
     - Updated `chroma.py` to use shared constants instead of hardcoded literals
@@ -193,15 +193,15 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 ## ✅ Step 7: Combined ingestion script
 - **Goal:** Create a single `scripts/ingest.py` that can be used instead of running scrape + embed scripts separately
 - Keep the two original scripts and their tests so that the two parts of ingestion can be run separately as lower level alternatives
-- Create `scripts/ingest.py`: `ingest_author(author, raw_dir, skip_scrape, skip_embed) -> None` function + `main()` with argparse
-  - Flags: `--author` (optional, defaults to all registered in `INGEST_CONFIGS`), `--skip-scrape`, `--skip-embed`, `--raw-dir` (no `--db` flag)
+- Create `scripts/ingest.py`: `ingest_author(author, raw_data_path, skip_scrape, skip_embed) -> None` function + `main()` with argparse
+  - Flags: `--author` (optional, defaults to all registered in `INGEST_CONFIGS`), `--skip-scrape`, `--skip-embed`, `--raw-data-path` (no `--db` flag)
   - Calls existing `scrape_wikisource.py` and `embed_and_store.py` scripts via `subprocess.run()` (maintains script separation)
   - Calls `check_ollama_available()` unless `--skip-embed` (only embedding needs Ollama)
 - **Test:** `tests/unit/test_scripts/test_script_ingest.py` — mock all external deps; test default (scrape+embed), skip-scrape, skip-embed, all-authors, single-author, invalid-author, both-skip-flags error, custom directories, ollama availability checks, file-not-found errors, general exceptions (17 tests total covering main() and ingest_author())
 - **README:** Moved two-step ingestion instructions to new ## Troubleshooting section at bottom. In section 5 (Run the ingestion pipeline), added unified `scripts/ingest.py` as primary command with comprehensive documentation of all flags and usage examples
 - **Deviations from plan:**
-  - `ingest_author()` signature uses positional parameters `author, raw_dir, skip_scrape, skip_embed` (no `db_dir` parameter) — directly takes author string and looks up config internally for cleaner interface
-  - Added `--raw-dir` flag for consistency with individual scripts (not in original plan)
+  - `ingest_author()` signature uses positional parameters `author, raw_data_path, skip_scrape, skip_embed` (no `db_dir` parameter) — directly takes author string and looks up config internally for cleaner interface
+  - Added `--raw-data-path` flag for consistency with individual scripts (not in original plan)
   - **Implementation approach:** Uses `subprocess.run()` to call the existing `scrape_wikisource.py` and `embed_and_store.py` scripts rather than importing their functions — this maintains complete separation between scripts and avoids the need to make scripts a Python package
   - `ingest_author()` returns `None` instead of `tuple[int, int]` since subprocess calls don't return counts
   - Final summary simplified (no database location shown)
@@ -218,7 +218,7 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - Create `src/chains/chat_chain.py`:
   - `DEFAULT_AUTHOR = "voltaire"` — canonical author key
   - `_AUTHOR_CONFIGS: dict[str, AuthorConfig]` — extensible registry (AuthorConfig is a dataclass with `prompt_factory` and `exit_message` fields)
-  - `build_chain(author=DEFAULT_AUTHOR, retriever=None, llm=None, prompt=None) -> Runnable[dict, ChatResponse]` — unified API supporting both production use (with defaults) and testing use (with mocks); uses `DEFAULT_DB_PATH` from config (no user-facing persist_dir parameter); chain accepts dict input `{"question": str, "language": str}` via `.invoke()`
+  - `build_chain(author=DEFAULT_AUTHOR, retriever=None, llm=None, prompt=None) -> Runnable[dict, ChatResponse]` — unified API supporting both production use (with defaults) and testing use (with mocks); uses `VECTOR_DB_PATH` from config (no user-facing persist_dir parameter); chain accepts dict input `{"question": str, "language": str}` via `.invoke()`
   - Internal `_run(question, language) -> ChatResponse`: retrieves top-k docs, formats context with `[source: {title}, page {page_number}]` labels (page-specific from the start), invokes LLM with language parameter, returns structured ChatResponse
   - Helpers: `_format_docs_with_titles()`, `_extract_chunk_ids()`, `_extract_source_titles()` (combines document_title + page_number; fallback: title-only → source URL → "unknown")
 - **Test:** `tests/unit/chains/test_chat_chain.py` — mock LLM and retriever; assert chain wires retrieval + prompt correctly; test `_extract_source_titles()` with title+page, title-only, fallback to source URL, missing metadata; test empty retrieval; test unknown author raises ValueError; test language detection integration
@@ -428,12 +428,12 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 - Create `src/agents/` directory (with `src/agents/__init__.py`) and `tests/unit/agents/` directory
 - Add `DebateResponse` to `src/schemas.py`: `author`, `text`, `retrieved_passage_ids`, `retrieved_source_titles`, `language`; add corresponding tests to `tests/unit/test_schemas.py`
 - Create `src/agents/philosopher_agent.py`:
-  - `build_philosopher_agent(author, llm=None) -> AgentExecutor` (uses `DEFAULT_DB_PATH` from config, no persist_dir parameter)
+  - `build_philosopher_agent(author, llm=None) -> AgentExecutor` (uses `VECTOR_DB_PATH` from config, no persist_dir parameter)
   - Wraps the author's ChromaDB retriever as a LangChain `Tool`
   - Uses ReAct-style agent loop; `max_iterations=5`
   - Returns `DebateResponse`
 - Create `src/agents/debate_orchestrator.py`:
-  - `run_debate(question, authors, llm=None) -> list[DebateResponse]` (uses `DEFAULT_DB_PATH` from config, no persist_dir parameter)
+  - `run_debate(question, authors, llm=None) -> list[DebateResponse]` (uses `VECTOR_DB_PATH` from config, no persist_dir parameter)
   - Instantiates one `philosopher_agent` per author
   - Runs **sequentially** (avoids thread-safety issues with shared ChromaDB)
   - Does **not** synthesize or adjudicate
@@ -458,7 +458,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - LLM judge on FR response; also on EN when provided
   - Aggregates per-metric averages
   - Uses deterministic metrics from Step 13
-- Create `scripts/run_eval.py`: CLI with `--golden`, `--author`, `--output-dir`, `--llm-judge` (no `--db` flag); prints summary table + saves timestamped JSON to `data/eval/reports/`; uses `DEFAULT_DB_PATH` from config
+- Create `scripts/run_eval.py`: CLI with `--golden`, `--author`, `--output-path`, `--llm-judge` (no `--db` flag); prints summary table + saves timestamped JSON to `data/eval/reports/`; uses `VECTOR_DB_PATH` from config
 - **Important:** Import and use `DEFAULT_AUTHOR` from `src.configs.authors` as the default value for `--author` argparse argument (consistency with chat CLI and chain)
 - **Test:** `tests/unit/eval/test_judge.py` — valid scores, clamped bounds, unparseable output, missing dimension, LLM invocation (5 tests)
 - **Test:** `tests/unit/eval/test_runner.py` — FR-only, with EN chain, LLM judge FR-only, LLM judge both chains, averages, chain invocation, load/validate golden dataset (9 tests)
@@ -468,13 +468,13 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 
 ## Step 17: ChromaDB server mode
 - **Goal:** Support both embedded (local) and server (HTTP) ChromaDB modes via env vars
-- **Note:** Basic environment-based path configuration already implemented (2026-03-19): `DEFAULT_DB_PATH` in `src/configs/common.py` reads from `CHROMA_DB_PATH` env var (defaults to "data/chroma_db"). This step extends that to support server mode.
+- **Note:** Basic environment-based path configuration already implemented (2026-03-19): `VECTOR_DB_PATH` in `src/configs/common.py` reads from `CHROMA_DB_PATH` env var (defaults to "data/chroma_db"). This step extends that to support server mode.
 - Create `src/configs/db_config.py`:
   - `ChromaMode` enum: `EMBEDDED`, `SERVER`
   - `ChromaDBConfig` Pydantic model: `mode`, `persist_dir` (required for embedded), `host`, `port`
-  - `chromadb_config_from_env() -> ChromaDBConfig`: reads `CHROMA_MODE`, `CHROMA_HOST`, `CHROMA_PORT`, `CHROMA_DB_PATH` (uses `DEFAULT_DB_PATH` for embedded mode)
+  - `chromadb_config_from_env() -> ChromaDBConfig`: reads `CHROMA_MODE`, `CHROMA_HOST`, `CHROMA_PORT`, `CHROMA_DB_PATH` (uses `VECTOR_DB_PATH` for embedded mode)
 - Create `src/vectorstores/chroma_client.py`: `build_chroma_vectorstore(config, collection_name, embeddings) -> Chroma`
-  - Embedded: `Chroma(persist_directory=DEFAULT_DB_PATH, ...)` (or from config)
+  - Embedded: `Chroma(persist_directory=VECTOR_DB_PATH, ...)` (or from config)
   - Server: `Chroma(client=chromadb.HttpClient(host, port), ...)`
 - Modify `src/vectorstores/chroma.py` and `src/vectorstores/retriever.py`: detect mode from env and use appropriate client factory
 - Create `tests/unit/configs/` if not already exists
