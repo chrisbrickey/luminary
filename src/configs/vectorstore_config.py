@@ -1,6 +1,6 @@
 """Configuration constants for ChromaDB vectorstore operations."""
 
-from src.configs.common import DEFAULT_DB_PATH
+from src.configs.common import VECTOR_DB_PATH
 
 # ChromaDB collection name for storing philosopher embeddings
 COLLECTION_NAME = "philosophes"
@@ -12,7 +12,7 @@ EMBEDDING_MODEL = "nomic-embed-text"
 DEFAULT_K = 5
 
 __all__ = [
-    "DEFAULT_DB_PATH",
+    "VECTOR_DB_PATH",
     "COLLECTION_NAME",
     "EMBEDDING_MODEL",
     "DEFAULT_K",
