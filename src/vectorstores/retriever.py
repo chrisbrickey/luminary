@@ -9,7 +9,7 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import OllamaEmbeddings
 
 from src.configs.common import VECTOR_DB_PATH
-from src.configs.vectorstore_config import COLLECTION_NAME, DEFAULT_K, EMBEDDING_MODEL
+from src.configs.vectorstore_config import COLLECTION_NAME, DEFAULT_EMBEDDING_MODEL, DEFAULT_K
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def build_retriever(
     Args:
         collection_name: Name of the ChromaDB collection (default: COLLECTION_NAME)
         embeddings: Embeddings instance to use. If None, defaults to
-            OllamaEmbeddings(model=EMBEDDING_MODEL)
+            OllamaEmbeddings(model=DEFAULT_EMBEDDING_MODEL)
         k: Number of documents to retrieve (default: DEFAULT_K)
         author: Optional author filter. If provided, only chunks from this
             author will be retrieved using ChromaDB metadata filtering
@@ -39,7 +39,7 @@ def build_retriever(
     """
     # Use Ollama embeddings as default if none provided
     if embeddings is None:
-        embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
+        embeddings = OllamaEmbeddings(model=DEFAULT_EMBEDDING_MODEL)
 
     logger.debug(
         "Opening database collection '%s' at %s (k=%d, author=%r)",
