@@ -10,15 +10,15 @@ IMPORTANT: These tests make real HTTP calls to Wikisource.
 import pytest
 from langchain_core.documents import Document
 
-from src.configs.loader_configs import LETTRES_PHILOSOPHIQUES_CONFIG
+from src.configs.loader_configs import LETTRES_PHILOSOPHIQUES
 from src.document_loaders.wikisource_loader import WikisourceLoader
 
 
 @pytest.fixture(scope="module")
 def sample_document() -> Document:
     """Fetch only the first page to keep the test fast."""
-    config = LETTRES_PHILOSOPHIQUES_CONFIG.model_copy(update={"total_pages": 1})
-    documents = WikisourceLoader(config, delay=0).load()
+    collection = LETTRES_PHILOSOPHIQUES.model_copy(update={"total_pages": 1})
+    documents = WikisourceLoader(collection, delay=0).load()
     return documents[0]
 
 
@@ -81,8 +81,8 @@ def test_load_document_metadata_is_correct(sample_document: Document) -> None:
 @pytest.mark.external
 def test_load_multiple_pages() -> None:
     """Verify loading multiple pages works and respects delays."""
-    config = LETTRES_PHILOSOPHIQUES_CONFIG.model_copy(update={"total_pages": 2})
-    documents = WikisourceLoader(config, delay=0.1).load()
+    collection = LETTRES_PHILOSOPHIQUES.model_copy(update={"total_pages": 2})
+    documents = WikisourceLoader(collection, delay=0.1).load()
 
     assert len(documents) == 2
     assert documents[0].metadata["page_number"] == 1
@@ -95,13 +95,13 @@ def test_load_multiple_pages() -> None:
 @pytest.mark.external
 def test_handles_nonexistent_page() -> None:
     """Verify graceful handling when a page doesn't exist."""
-    config = LETTRES_PHILOSOPHIQUES_CONFIG.model_copy(
+    collection = LETTRES_PHILOSOPHIQUES.model_copy(
         update={
             "page_title_template": "NonExistent/Page_{n}",
             "total_pages": 1
         }
     )
-    documents = WikisourceLoader(config, delay=0).load()
+    documents = WikisourceLoader(collection, delay=0).load()
 
     # Should return empty list, not crash
     assert len(documents) == 0

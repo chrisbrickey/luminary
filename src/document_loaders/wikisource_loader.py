@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 from langchain_core.documents import Document
 
-from src.configs.loader_configs import WikisourceCollectionConfig
+from src.schemas import WikisourceCollection
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class WikisourceLoader:
 
     def __init__(
         self,
-        config: WikisourceCollectionConfig,
+        config: WikisourceCollection,
         delay: float = 1.0,
         max_retries: int = 3,
         base_retry_delay: float = 2.0
