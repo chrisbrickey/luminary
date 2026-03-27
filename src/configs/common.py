@@ -10,8 +10,11 @@ RAW_DATA_PATH = Path("data/raw")
 # Defaults to "data/chroma_db" for local development
 VECTOR_DB_PATH = Path(os.getenv("CHROMA_DB_PATH", "data/chroma_db"))
 
-# Default LLM model for chat and generation tasks
-DEFAULT_LLM_MODEL = "mistral"
+# Default LLM for chat chain
+DEFAULT_CHAT_MODEL = "mistral"
+
+# Default embedding model for vector store operations
+DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
 
 # Default response language (overridden by language detected in user's prompt)
 DEFAULT_RESPONSE_LANGUAGE = "en"

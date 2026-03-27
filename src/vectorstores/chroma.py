@@ -8,7 +8,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_ollama import OllamaEmbeddings
 
 from src.configs.common import VECTOR_DB_PATH
-from src.configs.vectorstore_config import COLLECTION_NAME, EMBEDDING_MODEL
+from src.configs.vectorstore_config import COLLECTION_NAME, DEFAULT_EMBEDDING_MODEL
 
 
 def _get_embeddings_instance(embeddings: Embeddings | None) -> Embeddings:
@@ -16,13 +16,13 @@ def _get_embeddings_instance(embeddings: Embeddings | None) -> Embeddings:
 
     Args:
         embeddings: Optional embeddings instance. If None, creates
-            OllamaEmbeddings with EMBEDDING_MODEL.
+            OllamaEmbeddings with DEFAULT_EMBEDDING_MODEL.
 
     Returns:
         Embeddings instance ready to use
     """
     if embeddings is None:
-        return OllamaEmbeddings(model=EMBEDDING_MODEL)
+        return OllamaEmbeddings(model=DEFAULT_EMBEDDING_MODEL)
     return embeddings
 
 
@@ -61,7 +61,7 @@ def embed_and_store(
             have a 'chunk_id' in its metadata.
         collection_name: Name of the ChromaDB collection (default: COLLECTION_NAME)
         embeddings: Embeddings instance to use. If None, defaults to
-            OllamaEmbeddings(model=EMBEDDING_MODEL)
+            OllamaEmbeddings(model=DEFAULT_EMBEDDING_MODEL)
 
     Returns:
         Chroma vectorstore instance containing the embedded chunks

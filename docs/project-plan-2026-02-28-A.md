@@ -180,13 +180,16 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - Type checking passes via mypy integration test
   - **Configuration refactoring (2026-03-08):** Extracted shared constants to improve maintainability and observability:
     - Created `src/configs/common.py` with `VECTOR_DB_PATH` constant (moved from `loader_configs.py`)
-    - Created `src/configs/vectorstore_config.py` with `COLLECTION_NAME`, `EMBEDDING_MODEL`, and `DEFAULT_K` constants
+    - Created `src/configs/vectorstore_config.py` with `COLLECTION_NAME`, `DEFAULT_EMBEDDING_MODEL`, and `DEFAULT_K` constants
     - Updated `retriever.py` to use constants as defaults and added logging before opening ChromaDB collection (logger.info with collection name, path, k, and author filter)
     - Updated `chroma.py` to use shared constants instead of hardcoded literals
     - Updated `scripts/embed_and_store.py` to import from new config modules
-    - Added comprehensive test coverage: `tests/unit/test_config_common.py` and `tests/unit/test_config_vectorstore.py`
+    - Added comprehensive test coverage: `tests/unit/configs/test_config_common.py` and `tests/unit/configs/test_config_vectorstore.py`
     - Updated existing tests to import constants from new locations
     - Benefits: DRY principle (constants defined once), improved observability (logging), easier maintenance (change values in one place)
+  - **Model configuration consolidation (2026-03-27):** Centralized model configuration constants in `common.py`:
+    - Added `DEFAULT_CHAT_MODEL = "mistral"` to `src/configs/common.py` (renamed from `DEFAULT_LLM_MODEL` to clarify it's specifically for chat, not embeddings)
+    - Added `DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"` to `src/configs/common.py` (moved from `vectorstore_config.py` which now re-exports it)
   - **Chunk ID isolation (2026-03-11):** Added integration test `test_rag_chain_does_not_expose_chunk_ids_to_llm` in `tests/integration/test_rag_pipeline.py` to verify chunk IDs are preserved in metadata but never sent to the LLM in the full pipeline. Integration test count increased from 5 to 6; all 184 tests pass.
   - **DB path override removal (2026-03-19):** Removed `persist_dir` parameter from `build_retriever()` function. Database location now configured solely via `CHROMA_DB_PATH` environment variable (defaults to "data/chroma_db"). Simplifies API by treating database location as infrastructure concern.
 
