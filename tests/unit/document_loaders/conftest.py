@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.configs.loader_configs import WikisourceCollectionConfig
+from src.schemas import WikisourceCollection
 
 
 # Helper functions for creating mock responses
@@ -41,9 +41,9 @@ def mock_sleep() -> Generator[Mock, None, None]:
 
 # Fixtures for common config variations
 @pytest.fixture
-def minimal_config() -> WikisourceCollectionConfig:
+def minimal_config() -> WikisourceCollection:
     """Minimal config with 1 page for testing."""
-    return WikisourceCollectionConfig(
+    return WikisourceCollection(
         document_id="test_doc",
         document_title="Test",
         author="test_author",
@@ -53,9 +53,9 @@ def minimal_config() -> WikisourceCollectionConfig:
 
 
 @pytest.fixture
-def multi_page_config() -> WikisourceCollectionConfig:
+def multi_page_config() -> WikisourceCollection:
     """Config with 2 pages for testing."""
-    return WikisourceCollectionConfig(
+    return WikisourceCollection(
         document_id="test_doc",
         document_title="Test Document",
         author="test_author",
@@ -66,9 +66,9 @@ def multi_page_config() -> WikisourceCollectionConfig:
 
 
 @pytest.fixture
-def auto_discover_config() -> WikisourceCollectionConfig:
+def auto_discover_config() -> WikisourceCollection:
     """Config with auto-discovery enabled (total_pages=None)."""
-    return WikisourceCollectionConfig(
+    return WikisourceCollection(
         document_id="test_doc",
         document_title="Test",
         author="test_author",
@@ -78,9 +78,9 @@ def auto_discover_config() -> WikisourceCollectionConfig:
 
 
 @pytest.fixture
-def detailed_config() -> WikisourceCollectionConfig:
+def detailed_config() -> WikisourceCollection:
     """Config with all fields specified for metadata testing."""
-    return WikisourceCollectionConfig(
+    return WikisourceCollection(
         document_id="test_id",
         document_title="Test Title",
         author="test_author",

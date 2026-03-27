@@ -5,9 +5,8 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 
-
-from src.configs.loader_configs import WikisourceCollectionConfig
 from src.document_loaders.wikisource_loader import WikisourceLoader, _WikisourceHTMLExtractor
+from src.schemas import WikisourceCollection
 from tests.unit.document_loaders.conftest import create_api_response_bytes, create_mock_response
 
 
@@ -108,7 +107,7 @@ class TestWikisourceLoader:
 
     def test_load_successful(
         self,
-        multi_page_config: WikisourceCollectionConfig,
+        multi_page_config: WikisourceCollection,
         mock_sleep: Mock,
         mock_urlopen: Mock
     ) -> None:
@@ -131,7 +130,7 @@ class TestWikisourceLoader:
 
     def test_handles_missing_page(
         self,
-        multi_page_config: WikisourceCollectionConfig,
+        multi_page_config: WikisourceCollection,
         mock_sleep: Mock,
         mock_urlopen: Mock
     ) -> None:
@@ -155,7 +154,7 @@ class TestWikisourceLoader:
 
     def test_retry_on_transient_error(
         self,
-        minimal_config: WikisourceCollectionConfig,
+        minimal_config: WikisourceCollection,
         mock_sleep: Mock,
         mock_urlopen: Mock
     ) -> None:
@@ -175,7 +174,7 @@ class TestWikisourceLoader:
 
     def test_retry_on_network_error(
         self,
-        minimal_config: WikisourceCollectionConfig,
+        minimal_config: WikisourceCollection,
         mock_sleep: Mock,
         mock_urlopen: Mock
     ) -> None:
@@ -193,7 +192,7 @@ class TestWikisourceLoader:
 
     def test_max_retries_exceeded(
         self,
-        minimal_config: WikisourceCollectionConfig,
+        minimal_config: WikisourceCollection,
         mock_urlopen: Mock
     ) -> None:
         """Test that max retries is respected."""
@@ -212,7 +211,7 @@ class TestWikisourceLoader:
 
     def test_non_transient_error_no_retry(
         self,
-        minimal_config: WikisourceCollectionConfig,
+        minimal_config: WikisourceCollection,
         mock_urlopen: Mock
     ) -> None:
         """Test that non-transient errors (404) don't trigger retry."""
@@ -232,7 +231,7 @@ class TestWikisourceLoader:
 
     def test_auto_discover_pages(
         self,
-        auto_discover_config: WikisourceCollectionConfig,
+        auto_discover_config: WikisourceCollection,
         mock_sleep: Mock,
         mock_urlopen: Mock
     ) -> None:
@@ -262,7 +261,7 @@ class TestWikisourceLoader:
 
     def test_empty_response_handling(
         self,
-        multi_page_config: WikisourceCollectionConfig,
+        multi_page_config: WikisourceCollection,
         mock_urlopen: Mock
     ) -> None:
         """Test handling of empty API responses."""
@@ -278,7 +277,7 @@ class TestWikisourceLoader:
 
     def test_metadata_construction(
         self,
-        detailed_config: WikisourceCollectionConfig
+        detailed_config: WikisourceCollection
     ) -> None:
         """Test that metadata is correctly constructed."""
         with patch('src.document_loaders.wikisource_loader.urlopen') as mock_urlopen:

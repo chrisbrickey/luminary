@@ -84,11 +84,14 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 
 ## ✅ Step 2: Pydantic schemas
 - Create `src/schemas.py` with:
+  - `WikisourceCollection`: Pydantic schema for validating Wikisource collection specifications (`document_id`, `document_title`, `author`, `page_title_template`, `total_pages`, `api_url`) — moved here in 2026-03-27 refactoring for organizational consistency
   - `ChunkInfo`: `chunk_id` (SHA256 of `document_id:chunk_index`, truncated to 12 chars), `document_id`, `document_title: str | None = None`, `author: str | None = None` (lowercase), `chunk_index`, `source` (+ `extra="allow"` for domain-specific fields)
   - `ChatResponse`: `text`, `retrieved_passage_ids: list[str]`, `retrieved_contexts: list[str]`, `retrieved_source_titles: list[str]`, `language` (ISO 639-1: `^[a-z]{2}$`)
 - **Test:** `tests/unit/test_schemas.py` — validate construction, required fields, type enforcement, extra fields on ChunkInfo, language regex validation, page_number optional field
 - **README:** No user-facing command; update project structure diagram to add `src/schemas.py`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
+- **Deviations from plan:**
+  - **Schema organization refactoring (2026-03-27):** Moved `WikisourceCollection` (originally named `WikisourceCollectionConfig`) from `src/configs/loader_configs.py` to `src/schemas.py` for consistency. Rationale: Since it uses Pydantic validation for external data, it belongs with other schemas rather than with simple config constants. This establishes the pattern: Pydantic validation schemas → `schemas.py`, simple constants/registries → `configs/`. Also renamed constant from `LETTRES_PHILOSOPHIQUES_CONFIG` to `LETTRES_PHILOSOPHIQUES` to avoid "config" terminology for data that's now clearly a schema instance.
 
 ## ✅ Step 3: Corpus ingestion — loader
 - Create new directories with `__init__.py`: `src/configs/`, `src/document_loaders/`; create `scripts/`
@@ -97,9 +100,9 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - Update `.gitignore`: add `data/raw/`
 - Create `src/configs/loader_configs.py`:
   - `VECTOR_DB_PATH = Path("data/chroma_db")` — simplified to relative path (not resolved)
-  - `WikisourceCollectionConfig` (Pydantic): `document_id`, `document_title`, `author` (lowercase), `page_title_template` (with `{n}` placeholder), `total_pages: int | None` (auto-discovered if None), `api_url` (default: `https://fr.wikisource.org/w/api.php`)
-  - `LETTRES_PHILOSOPHIQUES_CONFIG`: pre-built config for Voltaire's Lettres philosophiques (renamed from VOLTAIRE_LETTRES_CONFIG)
-  - `INGEST_CONFIGS: dict[str, WikisourceCollectionConfig]` — registry mapping author key → config; initially `{"voltaire": LETTRES_PHILOSOPHIQUES_CONFIG}`
+  - `WikisourceCollection` (Pydantic): `document_id`, `document_title`, `author` (lowercase), `page_title_template` (with `{n}` placeholder), `total_pages: int | None` (auto-discovered if None), `api_url` (default: `https://fr.wikisource.org/w/api.php`) — **Note:** as of 2026-03-27, this schema is defined in `src/schemas.py` and imported here
+  - `LETTRES_PHILOSOPHIQUES`: pre-built collection specification for Voltaire's Lettres philosophiques (renamed from VOLTAIRE_LETTRES_CONFIG, then from LETTRES_PHILOSOPHIQUES_CONFIG in 2026-03-27 refactoring)
+  - `INGEST_CONFIGS: dict[str, WikisourceCollection]` — registry mapping author key → collection specification; initially `{"voltaire": LETTRES_PHILOSOPHIQUES}`
 - Create `src/document_loaders/wikisource_loader.py`:
   - `WikisourceLoader`: class-based loader with `load() -> list[Document]`; fetches HTML via Wikisource API; parses with `_WikisourceHTMLExtractor` (HTMLParser subclass, skip-depth tracking to strip ws-noexport, reference, reflist, script, style)
   - Metadata per Document: `document_id`, `document_title`, `author`, `source` (canonical URL), `page_number`
@@ -110,13 +113,14 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
   - ~~`load_documents_from_disk(directory) -> list[Document]`~~ — deferred to Step 7 (not needed until combined ingestion script)
 - Create `scripts/scrape_wikisource.py` — CLI entrypoint: loads config, calls loader, saves to `data/raw/<document_id>/`; does NOT call `check_ollama_available()` (no Ollama dependency for scraping)
 - **Test:** `tests/unit/test_script_scrape_wikisource.py` — mock all external dependencies; test successful scraping, invalid author, no documents loaded, loader exception, save exception, custom output directory, output path construction, default scraping all authors (9 tests)
-- **Test:** `tests/unit/test_loader_configs.py` — validate LETTRES_PHILOSOPHIQUES_CONFIG fields, `INGEST_CONFIGS` has `"voltaire"` key, VECTOR_DB_PATH correctness, custom API URL (6 tests)
+- **Test:** `tests/unit/configs/test_loader_configs.py` — validate LETTRES_PHILOSOPHIQUES fields, `INGEST_CONFIGS` has `"voltaire"` key, VECTOR_DB_PATH correctness, WikisourceCollection validation (custom API URL, optional total_pages, default values) (6 tests)
 - **Test:** `tests/unit/document_loaders/test_wikisource_loader.py` — comprehensive tests for HTML parser and loader with mocked HTTP calls; test retry on 429/5xx, network errors, max retries, non-transient errors, auto-discovery, empty responses, metadata construction (15 tests for parser and loader combined)
 - **Test:** `tests/unit/utils/test_io.py` — test save operations: directory creation, error handling, Unicode preservation, padding (6 tests for save only; load tests deferred to Step 7)
 - **README:** Added Usage > Ingestion section with `scripts/scrape_wikisource.py` command, options table, output location details, and example; updated project structure diagram to add `scripts/` and clarify directories
 - **Deviations from plan:**
   - `VECTOR_DB_PATH` simplified to relative path `Path("data/chroma_db")` instead of absolute resolved path; later moved to `src/configs/common.py` in 2026-03-08 refactoring (see Step 6 deviations)
-  - Config name changed from `VOLTAIRE_LETTRES_CONFIG` to `LETTRES_PHILOSOPHIQUES_CONFIG`
+  - Config name changed from `VOLTAIRE_LETTRES_CONFIG` to `LETTRES_PHILOSOPHIQUES_CONFIG`, then to `LETTRES_PHILOSOPHIQUES` in 2026-03-27 refactoring
+  - **Schema organization refactoring (2026-03-27):** `WikisourceCollection` schema (originally `WikisourceCollectionConfig`) moved from `src/configs/loader_configs.py` to `src/schemas.py` for organizational consistency. `loader_configs.py` now imports the schema and provides pre-built instances (`LETTRES_PHILOSOPHIQUES`) and registry (`INGEST_CONFIGS`). This establishes clear separation: Pydantic validation schemas live in `schemas.py`, while simple constants and registries live in `configs/`.
   - `--author` flag changed from required to optional (defaults to all configured authors)
   - Enhanced logging with user-friendly progress messages and simplified format to show real-time scraping progress
   - `load_documents_from_disk()` and associated tests deferred to Step 7 (not needed until combined ingestion script)
@@ -404,12 +408,12 @@ Test fixtures use **broad Enlightenment topics** (e.g., "la tolérance religieus
 - **Goal:** Add second philosopher with her own texts, prompt, and registry entry; expand eval dataset to include Gouges examples
 - Create `src/prompts/gouges.py` — Gouges system prompt (her voice, mandatory citations from her texts, responds in `{language}`, passionate advocacy for women's rights); export `build_gouges_prompt() -> ChatPromptTemplate`
 - Register `"gouges": AuthorConfig(prompt_factory=build_gouges_prompt, exit_message=<personalized message>)` in `_AUTHOR_CONFIGS` in `chat_chain.py`
-- Add `GOUGES_DECLARATION_CONFIG` to `src/configs/loader_configs.py`
-- Register `INGEST_CONFIGS["gouges"] = GOUGES_DECLARATION_CONFIG` in `loader_configs.py`
+- Add `GOUGES_DECLARATION` (a `WikisourceCollection` instance) to `src/configs/loader_configs.py`
+- Register `INGEST_CONFIGS["gouges"] = GOUGES_DECLARATION` in `loader_configs.py`
 - **Expand golden dataset:** Update `data/eval/golden_dataset.json` to **v2.0** — add 3-4 Gouges examples covering women's rights, social contracts; ensure both Voltaire and Gouges examples present
 - **Test:** `tests/unit/test_prompts_gouges.py` — assert prompt template has correct placeholders (`{context}`, `{question}`, `{language}`); assert `"gouges"` registered in `_AUTHOR_CONFIGS`
 - **Test:** `tests/unit/chains/test_chat_chain.py` — add test for `author="gouges"` in `build_default_chain` (mock LLM); assert it selects Gouges prompt
-- **Test:** `tests/unit/test_loader_configs.py` — add tests: validate GOUGES config fields, `INGEST_CONFIGS["gouges"]` points to correct config
+- **Test:** `tests/unit/configs/test_loader_configs.py` — add tests: validate GOUGES_DECLARATION fields, `INGEST_CONFIGS["gouges"]` points to correct collection specification
 - **README:** Update Technology table if new deps; update CLI flags docs to show `gouges` as valid `--author` value; note that `scripts/ingest.py --author gouges` populates her corpus
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
