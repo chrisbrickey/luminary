@@ -33,7 +33,12 @@ All test development in this plan follows this workflow:
 
 ### Implementation
 
-1. **Add schemas for evaluation results**
+1. **Add tests to validate schema characteristics**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/test_schemas.py` - add MetricResult tests
+   - Tests should cover: valid construction, score bounds (0-1), required fields, optional details
+   
+2. **Add schemas for evaluation results**
    - Modify `src/schemas.py`: add `MetricResult` (name, score 0-1, details)
 
    ```python
@@ -44,49 +49,44 @@ All test development in this plan follows this workflow:
        details: dict[str, Any] = Field(default_factory=dict, description="Additional details about the metric result")
    ```
 
-2. **Tests**
-   - `tests/unit/test_schemas.py` - add MetricResult tests
-   - **Follow Test Development Workflow (see top of document)**
-   - Tests should cover: valid construction, score bounds (0-1), required fields, optional details
-
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 4. **Create evaluation directory structure**
    - Create `src/eval/` with `__init__.py`
    - Create `src/eval/metrics/` with `__init__.py`
    - Create `tests/unit/eval/` directory (no `__init__.py` needed per pytest convention)
 
-5. **Implement retrieval relevance metric**
+5. **Add tests for the retrieval metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_retrieval_metric.py`
+   - Test cases:
+     - `test_perfect_retrieval()` - all expected found, no extras → recall=1.0, precision=1.0, F1=1.0
+     - `test_high_recall_low_precision()` - 3 of 3 expected found, but 7 irrelevant → recall=1.0, precision=0.3, F1=0.46
+     - `test_high_precision_low_recall()` - 1 of 3 expected found, no extras → recall=0.33, precision=1.0, F1=0.5
+     - `test_balanced_partial()` - 2 of 3 expected found, 2 retrieved total → recall=0.67, precision=1.0, F1=0.8
+     - `test_no_chunks_found()` - 0 of 3 expected IDs in retrieved → recall=0.0, precision=0.0, F1=0.0
+     - `test_no_expected_ids()` - empty expected list → score 1.0 (vacuous truth)
+     - `test_empty_retrieval()` - empty retrieved list with non-empty expected → recall=0.0, precision=0.0, F1=0.0
+
+6. **Implement retrieval relevance metric**
    - Create `src/eval/metrics/retrieval.py`
    - Function signature: `retrieval_relevance(expected_chunk_ids: list[str], retrieved_chunk_ids: list[str]) -> MetricResult`
-   - Logic: fraction of expected chunk IDs found in retrieved chunks
-   - Score calculation: `len(set(expected) & set(retrieved)) / len(expected)` if expected is non-empty, else 1.0
-   - Return `MetricResult(name="retrieval_relevance", score=..., details={"found": [...], "missing": [...]})`
+   - Logic: Calculate recall (fraction of expected found), precision (fraction of retrieved that are relevant), and F1 score (harmonic mean)
+   - Score calculation:
+     - `recall = len(set(expected) & set(retrieved)) / len(expected)` if expected is non-empty, else 1.0
+     - `precision = len(set(expected) & set(retrieved)) / len(retrieved)` if retrieved is non-empty, else 1.0
+     - `f1_score = 2 * (precision * recall) / (precision + recall)` if sum > 0, else 0.0
+     - Use F1 score as the primary metric score
+   - Return `MetricResult(name="retrieval_relevance", score=f1_score, details={"recall": recall, "precision": precision, "f1_score": f1_score, "found": [...], "missing": [...], "irrelevant": [...]})`
 
-   **Rationale:** Deterministic graders are fast, cheap, objective, and reproducible. Retrieval metrics validate that the RAG pipeline fetches relevant context before the LLM sees it. This is a foundational capability for grounded responses.
+    **Rationale:** Deterministic graders are fast, cheap, objective, and reproducible. Retrieval metrics validate that the RAG pipeline fetches relevant context before the LLM sees it. F1 score balances recall (finding all relevant chunks) and precision (avoiding irrelevant chunks). High precision prevents wasting context window tokens on noise and reduces LLM confusion. This is a foundational capability for grounded responses.
 
-6. **Test the retrieval metric**
-   - `tests/unit/eval/test_retrieval_metric.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases (5 tests minimum):
-     - `test_all_chunks_found()` - all expected IDs in retrieved → score 1.0
-     - `test_partial_chunks_found()` - 2 of 3 expected IDs in retrieved → score 0.67
-     - `test_no_chunks_found()` - 0 of 3 expected IDs in retrieved → score 0.0
-     - `test_no_expected_ids()` - empty expected list → score 1.0 (vacuous truth)
-     - `test_empty_retrieval()` - empty retrieved list with non-empty expected → score 0.0
-
-7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### Documentation
 
 - **README:** Update project structure diagram to add `src/eval/` directory with comment: `# Evaluation harness: metrics, runner, and quality measurement`
-- **README:** Update Architecture Overview to show EVALUATION PIPELINE:
-  ```
-  EVALUATION PIPELINE 
 
-  golden_dataset → run_eval(chain, dataset) → invoke chain per example →
-  apply metrics → aggregate scores → EvalRun artifact
-  ```
 - **README:** Add new section "## Evaluation Harness" (after Architecture Overview):
   ```markdown
   ## Evaluation Harness
@@ -107,7 +107,7 @@ All test development in this plan follows this workflow:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -117,8 +117,22 @@ All test development in this plan follows this workflow:
 
 ### Implementation
 
-1. **Add schemas for golden dataset**
+1. **Add tests for the golden dataset schemas**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/test_schemas.py` - add `GoldenExample` and `GoldenDataset` tests
+   - Test cases for `GoldenExample` (4 tests minimum):
+     - `test_golden_example_construction()` - valid fields → constructs successfully
+     - `test_golden_example_required_fields()` - missing `id` or `question` → raises error
+     - `test_golden_example_default_fields()` - optional fields default to empty lists
+     - `test_golden_example_metadata_extensibility()` - can add arbitrary metadata fields
+   - Test cases for `GoldenDataset` (3 tests minimum):
+     - `test_golden_dataset_construction()` - valid fields → constructs successfully
+     - `test_golden_dataset_version_validation()` - invalid version "v1.0" → raises ValueError
+     - `test_golden_dataset_valid_version()` - valid version "1.0" → passes validation
+
+2. **Add schemas for golden dataset**
    - Modify `src/schemas.py`: add `GoldenExample` and `GoldenDataset`
+   - Below is a draft that may change given current state of the app.
 
    ```python
    class GoldenExample(BaseModel):
@@ -155,27 +169,13 @@ All test development in this plan follows this workflow:
        examples: list[GoldenExample] = Field(..., description="List of test examples")
    ```
 
-   **Design notes:**
+   Add these **design notes:** to file or method documentation.
    - `translation_pair_id` links related examples (e.g., both `tolerance_fr` and `tolerance_en` have `translation_pair_id="tolerance"`)
    - Language-specific fields (`expected_keywords_fr`, `forbidden_phrases_en`) allow bilingual validation
    - `metadata` provides extensibility without schema changes
    - `version` field enables traceability (matches filename convention)
 
-2. **Test the golden dataset schemas**
-   - `tests/unit/test_schemas.py` - add `GoldenExample` and `GoldenDataset` tests
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases for `GoldenExample` (4 tests minimum):
-     - `test_golden_example_construction()` - valid fields → constructs successfully
-     - `test_golden_example_required_fields()` - missing `id` or `question` → raises error
-     - `test_golden_example_default_fields()` - optional fields default to empty lists
-     - `test_golden_example_metadata_extensibility()` - can add arbitrary metadata fields
-
-   - Test cases for `GoldenDataset` (3 tests minimum):
-     - `test_golden_dataset_construction()` - valid fields → constructs successfully
-     - `test_golden_dataset_version_validation()` - invalid version "v1.0" → raises ValueError
-     - `test_golden_dataset_valid_version()` - valid version "1.0" → passes validation
-
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 4. **Create golden dataset directory**
    - Create `data/raw/golden/` directory
@@ -259,7 +259,7 @@ All test development in this plan follows this workflow:
    3. Copy those chunk IDs into the golden dataset
    4. This ensures the eval tests realistic retrieval (not arbitrary IDs)
 
-6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### Documentation
 
@@ -298,7 +298,7 @@ All test development in this plan follows this workflow:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -308,12 +308,29 @@ All test development in this plan follows this workflow:
 ### Implementation
 
 1. **Add configuration constant and tests**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/configs/test_config_common.py`: Add `test_golden_dataset_path_is_path_object()` to verify it is a `Path` and not a string
    - Modify `src/configs/common.py`: add `DEFAULT_GOLDEN_DATASET_PATH = Path("data/raw/golden")` to reference the location of golden datasets
    - **Rationale:** Following dependency injection pattern from existing pipelines (e.g. `VECTOR_DB_PATH` is a `Path`, not `_DIR`). These configs are sensible defaults that work for most users that can be overridden programmatically or via CLI flags for advanced use cases.
-   - `tests/unit/configs/test_config_common.py`: Add `test_golden_dataset_path_is_path_object()` to verify it is a `Path` and not a string
-   - **Follow Test Development Workflow (see top of document)**
 
-2. **Implement utilities for loading golden datasets**
+2. **Add tests for utilities for loading golden datasets**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/utils/test_eval_utils.py`
+
+   - Test cases for `load_golden_dataset()` (4 tests minimum):
+     - `test_load_valid_dataset()` - valid JSON → returns GoldenDataset
+     - `test_load_missing_file()` - nonexistent path → raises FileNotFoundError with helpful message
+     - `test_load_invalid_json()` - malformed JSON → raises JSONDecodeError
+     - `test_load_invalid_schema()` - valid JSON, invalid schema → raises ValidationError
+
+   - Test cases for `discover_latest_golden_dataset()` (3 tests minimum):
+     - `test_discover_finds_latest()` - multiple versions → returns newest
+     - `test_discover_no_matches()` - no matching files → raises FileNotFoundError with helpful message
+     - `test_discover_respects_author()` - voltaire and gouges files → returns correct author
+
+   - Use `tmp_path` fixture for file I/O tests
+
+3. **Implement utilities for loading golden datasets**
    - Create `src/utils/eval_utils.py`
    - Implement data loading utility methods. First draft below. Adapt to current state of the application.
 
@@ -392,25 +409,9 @@ All test development in this plan follows this workflow:
    - `discover_latest_golden_dataset()`: Convention-based auto-discovery (good UX)
    - All functions have clear error messages for common failure modes
 
-3. **Test the dataset utilities**
-   - `tests/unit/utils/test_eval_utils.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases for `load_golden_dataset()` (4 tests minimum):
-     - `test_load_valid_dataset()` - valid JSON → returns GoldenDataset
-     - `test_load_missing_file()` - nonexistent path → raises FileNotFoundError with helpful message
-     - `test_load_invalid_json()` - malformed JSON → raises JSONDecodeError
-     - `test_load_invalid_schema()` - valid JSON, invalid schema → raises ValidationError
-
-   - Test cases for `discover_latest_golden_dataset()` (3 tests minimum):
-     - `test_discover_finds_latest()` - multiple versions → returns newest
-     - `test_discover_no_matches()` - no matching files → raises FileNotFoundError with helpful message
-     - `test_discover_respects_author()` - voltaire and gouges files → returns correct author
-
-   - Use `tmp_path` fixture for file I/O tests
-
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -420,8 +421,23 @@ All test development in this plan follows this workflow:
 
 ### Implementation
 
-1. **Add schemas for evaluation runs**
+1. **Add test for the schemas for evaluation runs**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/test_schemas.py` - add `ExampleResult` and `EvalRun` tests
+   
+   - Test cases for `ExampleResult` (3 tests minimum):
+     - `test_example_result_construction()` - valid fields → constructs successfully
+     - `test_example_result_required_fields()` - all required fields present
+     - `test_example_result_default_values()` - passed field calculated correctly
+
+   - Test cases for `EvalRun` (3 tests minimum):
+     - `test_eval_run_construction()` - valid fields → constructs successfully
+     - `test_eval_run_required_fields()` - missing `dataset_version` → raises error
+     - `test_eval_run_structure()` - aggregate_scores has expected nested structure
+
+2. **Add schemas for evaluation runs**
    - Modify `src/schemas.py`: add `ExampleResult` and `EvalRun`
+   - Below is a draft. Adapt to the current state of the app.
 
    ```python
    class ExampleResult(BaseModel):
@@ -456,22 +472,23 @@ All test development in this plan follows this workflow:
    - `aggregate_scores` has nested structure: `{"overall": {...}, "by_language": {"en": {...}, "fr": {...}}, "cross_language": {...}}`
    - **Naming rationale:** "EvalRun" aligns with typical terminology ("run eval", "eval run") used to describe the automated evaluation process that results in an artifact. "Report" or "eval report" is reserved for documentation of how the app is improved using an EvalRun as an input.
 
-2. **Test the evaluation run schemas**
-   - `tests/unit/test_schemas.py` - add `ExampleResult` and `EvalRun` tests
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+4. **Add tests for the evaluation runner**
    - **Follow Test Development Workflow (see top of document)**
-   - Test cases for `ExampleResult` (3 tests minimum):
-     - `test_example_result_construction()` - valid fields → constructs successfully
-     - `test_example_result_required_fields()` - all required fields present
-     - `test_example_result_default_values()` - passed field calculated correctly
+   - `tests/unit/eval/test_runner.py`
+   - Test cases (8 tests minimum):
+     - `test_run_eval_returns_eval_run()` - run eval with mocked chain → returns EvalRun with correct structure
+     - `test_run_eval_invokes_chain_per_example()` - chain.invoke called once per example
+     - `test_run_eval_applies_language_specific_metrics()` - FR examples get faithfulness_fr, EN get faithfulness_en
+     - `test_run_eval_computes_translation_metrics()` - paired examples → translation_consistency computed
+     - `test_run_eval_aggregates_scores()` - overall, by_language, cross_language all present
+     - `test_run_eval_calculates_pass_rate()` - 2 of 3 examples pass → overall_pass_rate = 0.67
+     - `test_run_eval_captures_system_version()` - system_version has chat_model, commit fields
+   - Mock the chain using `Mock(spec=Runnable)` with predefined `ChatResponse` returns
+   - Mock metric functions to return known scores for deterministic tests
 
-   - Test cases for `EvalRun` (3 tests minimum):
-     - `test_eval_run_construction()` - valid fields → constructs successfully
-     - `test_eval_run_required_fields()` - missing `dataset_version` → raises error
-     - `test_eval_run_structure()` - aggregate_scores has expected nested structure
-
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
-
-4. **Implement evaluation runner**
+5. **Implement evaluation runner**
    - Create `src/eval/runner.py`
    - Key functions:
      - `run_eval(chain, golden_dataset) -> EvalRun` - main entry point (processes all languages)
@@ -482,22 +499,7 @@ All test development in this plan follows this workflow:
 
    **Critical design decision:** The runner processes ALL examples regardless of language. It applies language-specific metrics based on each example's `language` field. This tests the bilingual system as a whole, not in parts.
 
-5. **Test the evaluation runner**
-   - `tests/unit/eval/test_runner.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases (8 tests minimum):
-     - `test_run_eval_returns_eval_run()` - run eval with mocked chain → returns EvalRun with correct structure
-     - `test_run_eval_invokes_chain_per_example()` - chain.invoke called once per example
-     - `test_run_eval_applies_language_specific_metrics()` - FR examples get faithfulness_fr, EN get faithfulness_en
-     - `test_run_eval_computes_translation_metrics()` - paired examples → translation_consistency computed
-     - `test_run_eval_aggregates_scores()` - overall, by_language, cross_language all present
-     - `test_run_eval_calculates_pass_rate()` - 2 of 3 examples pass → overall_pass_rate = 0.67
-     - `test_run_eval_captures_system_version()` - system_version has chat_model, commit fields
-
-   - Mock the chain using `Mock(spec=Runnable)` with predefined `ChatResponse` returns
-   - Mock metric functions to return known scores for deterministic tests
-
-6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 7. **Add integration test**
     - Create `tests/integration/test_eval_runner_integration.py`
@@ -509,7 +511,30 @@ All test development in this plan follows this workflow:
 
 ### Documentation
 
-- **README:** Update "Evaluation Harness" section:
+- **README:** Update "Pipelines" section:
+    ```markdown
+    III. EVALUATION PIPELINE
+    ──────────────────────────────────────────────────────────────
+    run_eval() → invoke chain per example → apply metrics → aggregate scores → EvalRun artifact
+    ```
+
+- **README:** Update "Pipelines in Detail" section.
+    ```markdown
+    EVALUATION (on-demand quality measurement)
+    ─────────────────────────────────────────────────────────────────────
+     GoldenDataset           versioned test cases with expected behaviors (questions, expected chunks, keywords, etc.)
+          │
+          ▼
+     runner.py               invokes chat chain for each example, applies metrics, aggregates scores
+          │
+          ▼
+     metrics/                deterministic graders: retrieval_relevance (recall/precision/F1), citation_accuracy, language compliance
+          │
+          ▼
+     EvalRun                 machine-readable artifact with all results, scores, and system version (saved to evals/runs/)
+    ```
+
+- **README:** Update "Evaluation Harness" section: The below is draft. Consult the user on how much of this to add.
   ```markdown
   ## Evaluation Harness
 
@@ -540,7 +565,7 @@ All test development in this plan follows this workflow:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -555,11 +580,19 @@ All test development in this plan follows this workflow:
    - **Rationale:** Eval run artifacts are large JSON files (contain all responses + metrics). They should not be committed. Only the more narrative reports added in a subsequent section should be committed.
 
 2. **Add configuration constant and tests**
-   - Modify `src/configs/common.py`: add `DEFAULT_EVAL_ARTIFACTS_PATH = Path("evals/runs")` to reference the destination location of eval run artifacts
-   - `tests/unit/configs/test_config_common.py`: add `test_eval_artifacts_path_is_relative()` to verify relative path for portability
    - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/configs/test_config_common.py`: add `test_eval_artifacts_path_is_relative()` to verify relative path for portability
+   - Modify `src/configs/common.py`: add `DEFAULT_EVAL_ARTIFACTS_PATH = Path("evals/runs")` to reference the destination location of eval run artifacts
+  
+3. **Add tests for the utility for saving eval run**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/utils/test_eval_utils.py`
+   - Test cases for `save_eval_run()` (2 tests minimum):
+     - `test_save_creates_directory()` - nonexistent output_dir → creates it
+     - `test_save_generates_valid_filename()` - check filename matches pattern `{author}_{timestamp}.json`
+   - Use `tmp_path` fixture for file I/O tests
 
-3. **Add utility for saving eval run**
+4. **Add utility for saving eval run**
    - Update `src/utils/eval_utils.py`: Add `save_eval_run()`.
    - Timestamped filenames prevent overwrites and enable tracking.
    - First draft below. Adapt to current state of the application.
@@ -592,17 +625,23 @@ All test development in this plan follows this workflow:
         return filepath
      ```
 
-4. **Add tests on the utility for saving eval run**
-   - `tests/unit/utils/test_eval_utils.py`
+5. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+6. **Add tests for the evaluation CLI**
    - **Follow Test Development Workflow (see top of document)**
-   - Test cases for `save_eval_run()` (2 tests minimum):
-     - `test_save_creates_directory()` - nonexistent output_dir → creates it
-     - `test_save_generates_valid_filename()` - check filename matches pattern `{author}_{timestamp}.json`
-   - Use `tmp_path` fixture for file I/O tests
+   - Unit tests on `tests/unit/test_scripts/test_script_run_eval.py`
+   - Test cases (7 tests minimum):
+       - `test_main_auto_discovery()` - no --golden flag → discovers latest dataset
+       - `test_main_explicit_golden_path()` - --golden provided → uses that path
+       - `test_main_forwards_author()` - --author gouges → builds chain for gouges
+       - `test_main_custom_output()` - --output provided → saves to custom location
+       - `test_main_prints_summary()` - after eval → print_summary_table called
+       - `test_main_saves_artifact()` - after eval → save_eval_run called with timestamp
+       - `test_main_invalid_author()` - --author invalid → exits with error
+     - Mock all external dependencies: `discover_latest_golden_dataset`, `load_golden_dataset`, `build_chain`, `run_eval`, `save_eval_run`, `check_ollama_available`
+     - Use `@patch` decorators and assert on call arguments
 
-5. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to user instructions.
-
-6. **Implement evaluation CLI script**
+7. **Implement evaluation CLI script**
    - Create `scripts/run_eval.py`
    - Full implementation includes:
      - `print_summary_table(eval_run)` helper - prints human-readable summary with scores, status icons (✅/❌), and pass rate
@@ -668,47 +707,35 @@ All test development in this plan follows this workflow:
    - **Actionable next steps:** Tell user what to do with results
    - **No `--language` flag:** The runner processes all languages by default (bilingual system testing)
 
-7. **Test the evaluation CLI**
-   - Unit tests on `tests/unit/test_scripts/test_script_run_eval.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases (7 tests minimum):
-       - `test_main_auto_discovery()` - no --golden flag → discovers latest dataset
-       - `test_main_explicit_golden_path()` - --golden provided → uses that path
-       - `test_main_forwards_author()` - --author gouges → builds chain for gouges
-       - `test_main_custom_output()` - --output provided → saves to custom location
-       - `test_main_prints_summary()` - after eval → print_summary_table called
-       - `test_main_saves_artifact()` - after eval → save_eval_run called with timestamp
-       - `test_main_invalid_author()` - --author invalid → exits with error
-     - Mock all external dependencies: `discover_latest_golden_dataset`, `load_golden_dataset`, `build_chain`, `run_eval`, `save_eval_run`, `check_ollama_available`
-     - Use `@patch` decorators and assert on call arguments
+8. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+9. **Add integration test**
    - Integration test on `tests/integration/test_eval_cli_integration.py`
-     - goal: validate the complete user workflow
-     - benefits: Catches issues with path handling, file permissions, JSON serialization in realistic context.
+   - goal: validate the complete user workflow
+   - benefits: Catches issues with path handling, file permissions, JSON serialization in realistic context.
 
-   ```python
-   def test_run_eval_cli_end_to_end(tmp_path, mock_llm_chain):
-      """Integration test: CLI loads dataset, runs eval, saves artifacts."""
-      # Arrange: Create minimal golden dataset file
-      golden_path = tmp_path / "golden" / "voltaire_golden_v1.0_2026-03-29.json"
-      golden_path.parent.mkdir(parents=True)
-      # ... write minimal dataset ...
+  ```python
+  def test_run_eval_cli_end_to_end(tmp_path, mock_llm_chain):
+     """Integration test: CLI loads dataset, runs eval, saves artifacts."""
+     # Arrange: Create minimal golden dataset file
+     golden_path = tmp_path / "golden" / "voltaire_golden_v1.0_2026-03-29.json"
+     golden_path.parent.mkdir(parents=True)
+     # ... write minimal dataset ...
 
-      # Act: Run CLI with real file I/O
-      artifacts_path = tmp_path / "runs"
-      run_eval_cli(
-          golden_dataset_path=golden_path,
-          artifacts_path=artifacts_path,
-          chain=mock_llm_chain
-      )
+     # Act: Run CLI with real file I/O
+     artifacts_path = tmp_path / "runs"
+     run_eval_cli(
+         golden_dataset_path=golden_path,
+         artifacts_path=artifacts_path,
+         chain=mock_llm_chain
+     )
 
-      # Assert: Artifact file exists and is valid JSON
-      artifact_files = list(artifacts_path.glob("*.json"))
-      assert len(artifact_files) == 1
-      saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
-      assert len(saved_run.example_results) > 0
-   ```
-
-8. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to user instructions.
+     # Assert: Artifact file exists and is valid JSON
+     artifact_files = list(artifacts_path.glob("*.json"))
+     assert len(artifact_files) == 1
+     saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+     assert len(saved_run.example_results) > 0
+  ```
 
 ### Documentation
 
@@ -815,7 +842,7 @@ All test development in this plan follows this workflow:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -825,7 +852,17 @@ All test development in this plan follows this workflow:
 
 ### Implementation
 
-1. **Implement citation accuracy metric**
+1. **Add tests for the citation accuracy metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_citation_metric.py`
+   - Test cases (5 tests minimum):
+   - `test_all_titles_found()` - all expected substrings present → score 1.0
+   - `test_partial_titles_found()` - 1 of 2 expected substrings present → score 0.5
+   - `test_case_insensitive_matching()` - "lettres" matches "Lettres Philosophiques" → score 1.0
+   - `test_no_expected_titles()` - empty expected list → score 1.0
+   - `test_no_retrieved_titles()` - empty retrieved list with non-empty expected → score 0.0
+
+2. **Implement citation accuracy metric**
    - Create `src/eval/metrics/citation.py`
    - Function signature: `citation_accuracy(expected_source_titles: list[str], retrieved_source_titles: list[str]) -> MetricResult`
    - Logic: Check if expected source title **substrings** are found in retrieved titles (case-insensitive)
@@ -835,19 +872,19 @@ All test development in this plan follows this workflow:
 
    **Rationale:** Citations ground responses in source texts. This metric validates that the system correctly propagates source metadata (document titles) from retrieval through to the final response. Substring matching allows flexibility for page numbers and formatting variations.
 
-2. **Test the citation metric**
-   - `tests/unit/eval/test_citation_metric.py`
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+4. **Add tests for the citation-to-retrieval consistency metric**
    - **Follow Test Development Workflow (see top of document)**
+   - Update `tests/unit/eval/test_citation_metric.py`
    - Test cases (5 tests minimum):
-     - `test_all_titles_found()` - all expected substrings present → score 1.0
-     - `test_partial_titles_found()` - 1 of 2 expected substrings present → score 0.5
-     - `test_case_insensitive_matching()` - "lettres" matches "Lettres Philosophiques" → score 1.0
-     - `test_no_expected_titles()` - empty expected list → score 1.0
-     - `test_no_retrieved_titles()` - empty retrieved list with non-empty expected → score 0.0
+     - `test_all_citations_match()` - all citations found in retrieved sources → score 1.0
+     - `test_partial_citations_match()` - 2 of 3 citations match retrieved sources → score 0.67
+     - `test_no_citations_match()` - 0 of 2 citations in retrieved sources → score 0.0 (hallucinated)
+     - `test_no_citations_in_response()` - empty response citations → score 1.0 (vacuous truth)
+     - `test_case_insensitive_matching()` - "lettres" citation matches "Lettres Philosophiques" source → score 1.0
 
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
-
-4. **Implement citation-to-retrieval consistency metric**
+5. **Implement citation-to-retrieval consistency metric**
    - Update `src/eval/metrics/citation.py`
    - Function signature: `citation_to_retrieval_consistency(response_citations: list[str], retrieved_chunk_sources: list[str]) -> MetricResult`
    - Logic: Verify every citation in the response text corresponds to a chunk that was actually retrieved (runtime consistency check)
@@ -856,16 +893,6 @@ All test development in this plan follows this workflow:
    - Return `MetricResult(name="citation_to_retrieval_consistency", score=..., details={"matched": [...], "hallucinated": [...]})`
 
    **Rationale:** This metric validates runtime consistency between what the LLM cites and what the retrieval system actually returned. It catches two critical failure modes: (1) hallucinated citations - LLM invents sources that weren't retrieved, and (2) metadata propagation bugs - citations lost somewhere in the chain. This complements `citation_accuracy` which tests against golden dataset expectations.
-
-5. **Test the citation-to-retrieval consistency metric**
-   - Update `tests/unit/eval/test_citation_metric.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases (5 tests minimum):
-     - `test_all_citations_match()` - all citations found in retrieved sources → score 1.0
-     - `test_partial_citations_match()` - 2 of 3 citations match retrieved sources → score 0.67
-     - `test_no_citations_match()` - 0 of 2 citations in retrieved sources → score 0.0 (hallucinated)
-     - `test_no_citations_in_response()` - empty response citations → score 1.0 (vacuous truth)
-     - `test_case_insensitive_matching()` - "lettres" citation matches "Lettres Philosophiques" source → score 1.0
 
 6. **Check In:** Stop and ask the user to confirm that the implementation is satisfactory before continuing.
 
@@ -886,7 +913,7 @@ Compare the new artifact with the first run:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -969,9 +996,17 @@ Compare the new artifact with the first run:
    [Known gaps and missing cases]
    ```
 
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-4. **Create report stub generator utility to expedite creation of narrative reports**
+4. **Add tests for the report stub generator**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/utils/test_eval_utils.py` - add tests for `format_eval_report_stub()`
+   - Test cases (3 tests minimum):
+     - `test_format_stub_includes_metadata()` - stub contains date, author, commit
+     - `test_format_stub_includes_metrics_table()` - stub contains all metrics with scores
+     - `test_format_stub_includes_todo_prompts()` - stub contains [TODO] markers for manual sections
+   
+5. **Create report stub generator utility to expedite creation of narrative reports**
    - Modify `src/utils/eval_utils.py`: add `format_eval_report_stub(eval_run: EvalRun) -> str`
    - Auto-fills: date, author, artifact path, commit, system version, metrics table
    - Leaves narrative sections as `[TODO]` prompts for manual completion
@@ -1004,14 +1039,6 @@ Compare the new artifact with the first run:
    ...
    ```
 
-5. **Test the report stub generator**
-   - `tests/unit/utils/test_eval_utils.py` - add tests for `format_eval_report_stub()`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases (3 tests minimum):
-     - `test_format_stub_includes_metadata()` - stub contains date, author, commit
-     - `test_format_stub_includes_metrics_table()` - stub contains all metrics with scores
-     - `test_format_stub_includes_todo_prompts()` - stub contains [TODO] markers for manual sections
-
 6. **Document reporting process**
    - Create `docs/reports/README.md` explaining:
      - Purpose of narrative reports (institutional memory, decision logs, quality tracking)
@@ -1019,7 +1046,7 @@ Compare the new artifact with the first run:
      - Filename convention: `{YYYY-MM-DD}_{author}_{description}.md`
      - Tips for writing reports (be specific, link commits, read artifacts, track trends)
 
-7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### Documentation
 
@@ -1053,7 +1080,7 @@ Compare the new artifact with the first run:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -1248,7 +1275,8 @@ This process should be repeated throughout development of subsequent sections.
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
 - **Document findings:**
 
   Example documentation (customize based on actual results):
@@ -1288,7 +1316,14 @@ This process should be repeated throughout development of subsequent sections.
 
 ### Implementation
 
-1. **Implement language metadata compliance metric**
+1. **Add tests for language metadata compliance metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_language_metric.py`
+   - Test cases (2 tests minimum):
+     - `test_matching_language_metadata()` - "fr" == "fr" → score 1.0
+     - `test_mismatching_language_metadata()` - "en" != "fr" → score 0.0
+     - 
+2. **Implement language metadata compliance metric**
    - Create `src/eval/metrics/language.py`
    - Function signature: `language_metadata_compliance(expected_language: str, response_language: str) -> MetricResult`
    - Logic: exact match between expected and actual language metadata (ISO 639-1 codes: "en", "fr")
@@ -1297,16 +1332,19 @@ This process should be repeated throughout development of subsequent sections.
 
    **Rationale:** The system auto-detects user language and sets the `ChatResponse.language` field accordingly. This metric validates that language detection works correctly and the chain sets the metadata property as expected.
 
-2. **Test the language metadata compliance metric**
-   - `tests/unit/eval/test_language_metric.py`
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+4. **Add tests for language content compliance metric**
    - **Follow Test Development Workflow (see top of document)**
-   - Test cases (2 tests minimum):
-     - `test_matching_language_metadata()` - "fr" == "fr" → score 1.0
-     - `test_mismatching_language_metadata()` - "en" != "fr" → score 0.0
+   - Update `tests/unit/eval/test_language_metric.py`
+   - Test cases (4 tests minimum):
+     - `test_french_content_detected()` - French text with expected="fr" → score 1.0
+     - `test_english_content_detected()` - English text with expected="en" → score 1.0
+     - `test_french_content_mismatch()` - French text with expected="en" → score 0.0
+     - `test_english_content_mismatch()` - English text with expected="fr" → score 0.0
+   - Use realistic sample text in both languages (not single words - langdetect needs ~20+ chars)
 
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
-
-4. **Implement language content compliance metric**
+5. **Implement language content compliance metric**
    - Update `src/eval/metrics/language.py`
    - Function signature: `language_content_compliance(expected_language: str, response_text: str) -> MetricResult`
    - Logic: Detect actual language from response text content and compare to expected language
@@ -1318,19 +1356,24 @@ This process should be repeated throughout development of subsequent sections.
 
    **Design note:** Requires adding `langdetect` to dependencies (`uv add langdetect`). This is a lightweight library with no external API calls (runs locally).
 
-5. **Test the language content compliance metric**
-   - Update `tests/unit/eval/test_language_metric.py`
+6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+7. **Add tests for faithfulness metrics**
    - **Follow Test Development Workflow (see top of document)**
-   - Test cases (4 tests minimum):
-     - `test_french_content_detected()` - French text with expected="fr" → score 1.0
-     - `test_english_content_detected()` - English text with expected="en" → score 1.0
-     - `test_french_content_mismatch()` - French text with expected="en" → score 0.0
-     - `test_english_content_mismatch()` - English text with expected="fr" → score 0.0
-   - Use realistic sample text in both languages (not single words - langdetect needs ~20+ chars)
+   - `tests/unit/eval/test_faithfulness_metric.py`
+   - Test cases for French (5 tests minimum):
+     - `test_all_keywords_found_fr()` - all expected keywords present → score 1.0
+     - `test_partial_keywords_found_fr()` - 2 of 3 keywords present → score 0.67
+     - `test_no_keywords_found_fr()` - 0 of 3 keywords present → score 0.0
+     - `test_case_insensitive_fr()` - "Tolérance" matches "tolérance" → score 1.0
+     - `test_no_expected_keywords_fr()` - empty expected list → score 1.0
+   - Test cases for English (4 tests minimum):
+     - `test_all_keywords_found_en()` - all expected keywords present → score 1.0
+     - `test_partial_keywords_found_en()` - 1 of 2 keywords present → score 0.5
+     - `test_no_keywords_found_en()` - 0 of 2 keywords present → score 0.0
+     - `test_no_expected_keywords_en()` - empty expected list → score 1.0
 
-6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
-
-7. **Implement faithfulness metrics (bilingual)**
+8. **Implement faithfulness metrics (bilingual)**
    - Create `src/eval/metrics/faithfulness.py`
    - Shared helper function: `_keyword_score(expected_keywords: list[str], response_text: str) -> float`
      - Logic: fraction of expected keywords found in response text (case-insensitive, whole-word matching)
@@ -1349,23 +1392,7 @@ This process should be repeated throughout development of subsequent sections.
 
    **Design note:** Separate FR/EN functions allow different keyword lists for each language while sharing scoring logic. This follows the DRY principle (helper is reused) while maintaining language-specific validation.
 
-8. **Test the faithfulness metrics**
-   - `tests/unit/eval/test_faithfulness_metric.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases for French (5 tests minimum):
-     - `test_all_keywords_found_fr()` - all expected keywords present → score 1.0
-     - `test_partial_keywords_found_fr()` - 2 of 3 keywords present → score 0.67
-     - `test_no_keywords_found_fr()` - 0 of 3 keywords present → score 0.0
-     - `test_case_insensitive_fr()` - "Tolérance" matches "tolérance" → score 1.0
-     - `test_no_expected_keywords_fr()` - empty expected list → score 1.0
-
-   - Test cases for English (4 tests minimum):
-     - `test_all_keywords_found_en()` - all expected keywords present → score 1.0
-     - `test_partial_keywords_found_en()` - 1 of 2 keywords present → score 0.5
-     - `test_no_keywords_found_en()` - 0 of 2 keywords present → score 0.0
-     - `test_no_expected_keywords_en()` - empty expected list → score 1.0
-
-9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### User instructions for eval run + report
 
@@ -1390,7 +1417,7 @@ This is the first full report documenting metric additions and system improvemen
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -1400,7 +1427,17 @@ This is the first full report documenting metric additions and system improvemen
 
 ### Implementation
 
-1. **Implement citation placement metric**
+1. **Add tests for citation placement metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_citation_placement_metric.py`
+   - Test cases (5 tests minimum):
+     - `test_correct_placement()` - "Some claim. [source: X]" → score 1.0
+     - `test_citation_at_line_start()` - "[source: X]\nSome text" → score < 1.0
+     - `test_citation_after_newline_without_text()` - "Para 1.\n\n[source: X]" → score < 1.0
+     - `test_no_citations()` - text without any citations → score 1.0
+     - `test_multiple_correct_placements()` - multiple well-placed citations → score 1.0
+
+2. **Implement citation placement metric**
    - Create `src/eval/metrics/citation_placement.py`
    - Function signature: `citation_placement(response_text: str) -> MetricResult`
    - Logic: Verify that inline citations `[source: ...]` appear AFTER sentences/claims, not at the beginning or middle of paragraphs
@@ -1414,17 +1451,17 @@ This is the first full report documenting metric additions and system improvemen
 
    **Note:** Regex patterns may need iteration based on real outputs. The "Check In" points allow refining detection logic before committing to full eval runs.
 
-2. **Test the citation placement metric**
-   - `tests/unit/eval/test_citation_placement_metric.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases (5 tests minimum):
-     - `test_correct_placement()` - "Some claim. [source: X]" → score 1.0
-     - `test_citation_at_line_start()` - "[source: X]\nSome text" → score < 1.0
-     - `test_citation_after_newline_without_text()` - "Para 1.\n\n[source: X]" → score < 1.0
-     - `test_no_citations()` - text without any citations → score 1.0
-     - `test_multiple_correct_placements()` - multiple well-placed citations → score 1.0
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+4. **Add tests for translation metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_translation_metric.py`
+   - Test cases (5 tests minimum):
+     - `test_identical_chunks()` - same chunk IDs → score 1.0 (perfect overlap)
+     - `test_disjoint_chunks()` - no common IDs → score 0.0 (no overlap)
+     - `test_partial_overlap()` - 2 shared IDs, 1 unique each → score 0.5 (Jaccard = 2/4)
+     - `test_both_empty()` - empty lists → score 1.0 (vacuous truth)
+     - `test_one_empty()` - one empty, one non-empty → score 0.0 (no overlap)
 
 4. **Implement translation consistency metric**
    - Create `src/eval/metrics/translation.py`
@@ -1437,19 +1474,19 @@ This is the first full report documenting metric additions and system improvemen
 
    **Important:** This metric only works when the eval run processes BOTH languages. It compares paired examples (e.g., `tolerance_fr` vs. `tolerance_en`) using the `translation_pair_id` field in the golden dataset.
 
-5. **Test the translation metric**
-   - `tests/unit/eval/test_translation_metric.py`
+6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+7. **Add tests for response length metric**
    - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_response_length_metric.py`
    - Test cases (5 tests minimum):
-     - `test_identical_chunks()` - same chunk IDs → score 1.0 (perfect overlap)
-     - `test_disjoint_chunks()` - no common IDs → score 0.0 (no overlap)
-     - `test_partial_overlap()` - 2 shared IDs, 1 unique each → score 0.5 (Jaccard = 2/4)
-     - `test_both_empty()` - empty lists → score 1.0 (vacuous truth)
-     - `test_one_empty()` - one empty, one non-empty → score 0.0 (no overlap)
+     - `test_within_bounds()` - 500 chars, min=100, max=1000 → score 1.0, status="ok"
+     - `test_too_short()` - 50 chars, min=100, max=1000 → score 0.5, status="too_short"
+     - `test_too_long()` - 1500 chars, min=100, max=1000 → score < 1.0, status="too_long"
+     - `test_at_min_boundary()` - 100 chars, min=100, max=1000 → score 1.0, status="ok"
+     - `test_at_max_boundary()` - 1000 chars, min=100, max=1000 → score 1.0, status="ok"
 
-6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
-
-7. **Implement response length metric**
+8. **Implement response length metric**
    - Create `src/eval/metrics/response_length.py`
    - Function signature: `response_length_quality(response_text: str, min_length: int = 100, max_length: int = 1000) -> MetricResult`
    - Logic: Measure response length and check if it falls within acceptable bounds
@@ -1462,17 +1499,7 @@ This is the first full report documenting metric additions and system improvemen
 
    **Rationale:** Response length is a quick quality signal. Too short = incomplete/evasive responses, too long = verbose/unfocused responses. This catches obvious failures (single-word answers, walls of text) before deeper quality metrics. Thresholds are configurable via golden dataset examples.
 
-8. **Test the response length metric**
-   - `tests/unit/eval/test_response_length_metric.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases (5 tests minimum):
-     - `test_within_bounds()` - 500 chars, min=100, max=1000 → score 1.0, status="ok"
-     - `test_too_short()` - 50 chars, min=100, max=1000 → score 0.5, status="too_short"
-     - `test_too_long()` - 1500 chars, min=100, max=1000 → score < 1.0, status="too_long"
-     - `test_at_min_boundary()` - 100 chars, min=100, max=1000 → score 1.0, status="ok"
-     - `test_at_max_boundary()` - 1000 chars, min=100, max=1000 → score 1.0, status="ok"
-
-9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### User instructions for eval run + report
 
@@ -1495,7 +1522,7 @@ After implementing advanced quality metrics:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
@@ -1505,7 +1532,22 @@ After implementing advanced quality metrics:
 
 ### Implementation
 
-1. **Implement forbidden phrases metrics (bilingual)**
+1. **Add tests for forbidden phrases metrics**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_forbidden_metric.py`
+   - Test cases for French (5 tests minimum):
+     - `test_no_forbidden_phrases_fr()` - clean text → score 1.0
+     - `test_no_forbidden_list_fr()` - empty forbidden list → score 1.0
+     - `test_single_violation_fr()` - "internet" in text → score 0.0
+     - `test_case_insensitive_fr()` - "Internet" matches "internet" → score 0.0
+     - `test_multiple_violations_fr()` - "internet" and "website" both present → score 0.0
+   - Test cases for English (4 tests minimum):
+     - `test_no_forbidden_phrases_en()` - clean text → score 1.0
+     - `test_no_forbidden_list_en()` - empty forbidden list → score 1.0
+     - `test_single_violation_en()` - "democracy" in text → score 0.0
+     - `test_multiple_violations_en()` - "AI" and "website" both present → score 0.0
+     
+2. **Implement forbidden phrases metrics (bilingual)**
    - Create `src/eval/metrics/forbidden.py`
    - Shared helper function: `_forbidden_score(forbidden_phrases: list[str], response_text: str) -> float`
      - Logic: Check if any forbidden phrases appear in response (case-insensitive substring search)
@@ -1524,23 +1566,7 @@ After implementing advanced quality metrics:
 
    **Design note:** Binary scoring (0.0 or 1.0) is appropriate here. A single anachronism ruins immersion; partial credit doesn't make sense.
 
-2. **Test the forbidden phrases metrics**
-   - `tests/unit/eval/test_forbidden_metric.py`
-   - **Follow Test Development Workflow (see top of document)**
-   - Test cases for French (5 tests minimum):
-     - `test_no_forbidden_phrases_fr()` - clean text → score 1.0
-     - `test_no_forbidden_list_fr()` - empty forbidden list → score 1.0
-     - `test_single_violation_fr()` - "internet" in text → score 0.0
-     - `test_case_insensitive_fr()` - "Internet" matches "internet" → score 0.0
-     - `test_multiple_violations_fr()` - "internet" and "website" both present → score 0.0
-
-   - Test cases for English (4 tests minimum):
-     - `test_no_forbidden_phrases_en()` - clean text → score 1.0
-     - `test_no_forbidden_list_en()` - empty forbidden list → score 1.0
-     - `test_single_violation_en()` - "democracy" in text → score 0.0
-     - `test_multiple_violations_en()` - "AI" and "website" both present → score 0.0
-
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to the below steps.
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### User instructions for eval run + report
 
@@ -1566,6 +1592,6 @@ After implementing safety guardrails:
 
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅`, note any deviations
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
