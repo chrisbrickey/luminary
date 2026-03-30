@@ -299,6 +299,7 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Split up schemas into multiple files per domain to improve maintainability as this plan will add many eval-related schemas.
 
 ---
 
