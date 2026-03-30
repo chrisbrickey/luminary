@@ -1,6 +1,6 @@
 """Pydantic schemas to validate data structures."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -81,3 +81,16 @@ class ChatResponse(BaseModel):
     retrieved_contexts: list[str]                # full text of the top-k chunks fed to the LLM as context
     retrieved_source_titles: list[str]           # human-readable document titles from retrieved chunks
     language: Annotated[str, Field(pattern=r"^[a-z]{2}$")]  # ISO 639-1 two-letter code (e.g., "fr", "en")
+
+
+class MetricResult(BaseModel):
+    """Result from a single metric on a single example.
+
+    Uses standard scoring attributes:
+        ge=0.0: greater than or equal to 0
+        le=1.0: less than or equal to 1
+    """
+
+    name: str = Field(..., description="Name of the metric")
+    score: float = Field(..., ge=0.0, le=1.0, description="Score 0.0 to 1.0 where 1.0 is perfect")
+    details: dict[str, Any] = Field(default_factory=dict, description="Additional details about the metric result")
