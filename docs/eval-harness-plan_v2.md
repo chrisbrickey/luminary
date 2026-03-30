@@ -27,7 +27,7 @@ All test development in this plan follows this workflow:
 
 ---
 
-## A. Core retrieval metrics
+## ✅ A. Core retrieval metrics
 
 **Goal:** Establish directory foundation and implement fundamental metrics that directly validate retrieval functionality of the RAG pipeline.
 

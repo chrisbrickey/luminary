@@ -47,7 +47,7 @@ Ask Voltaire anything grounded in their writings. Here are some questions to get
 
 ## Architecture
 
-### Overview
+### Pipelines
 
 Luminary will be organized into four pipelines. The ingestion and query pipelines are complete. 
 Evaluation harness and multi-agent debate are under development.
@@ -64,7 +64,7 @@ II. QUERY PIPELINE
 user question → retriever → format context → prompt LLM with agent personas → respond
 ```
 
-## Pipelines in Detail
+#### Pipelines in Detail
 
 ```
 INGESTION (one-time / on-demand via scripts)
@@ -112,6 +112,7 @@ luminary/
 │   ├── chains/              # RAG chain orchestration with retrieval + LLM
 │   ├── configs/             # configurations shared across modules
 │   ├── document_loaders/    # fetch and parse data, returning standardised LangChain Documents
+│   ├── eval/                # evaluation harness: metrics, runner, and quality measurement
 │   ├── i18n/                # localization keys and message loading
 │   ├── prompts/             # author-specific persona prompts (e.g., Voltaire, Gouges)
 │   ├── utils/               # shared utility functions
@@ -125,6 +126,21 @@ luminary/
     └── integration/         # tests across modules and services*
 ```
 _*Tests that make http or grpc calls to confirm API contracts are tagged with 'external' annotation._
+
+### Evaluation Harness
+
+Luminary uses a bespoke, automated evaluation harness to measure quality and prevent regressions.
+
+**Capabilities under development:**
+- Deterministic metrics: retrieval relevance (recall/precision/F1), citation accuracy, language compliance
+- Quality metrics: faithfulness to source texts, citation placement, persona maintenance
+- Cross-language metrics: translation consistency (FR/EN retrieval overlap)
+- LLM-as-judge metrics: relevance, groundedness, coherence
+
+**Design principles:**
+- Multi-language by default: test the bilingual system as users experience it
+- Deterministic graders first: fast, reproducible, objective
+- Comprehensive coverage: happy paths and edge cases (anachronisms, persona breaks)
 
 ## Development
 
