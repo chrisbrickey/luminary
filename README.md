@@ -107,14 +107,13 @@ luminary/
 ├── locales/                 # user-facing messages that should adapt to detected language
 │
 ├── src/
-│   ├── schemas.py           # shared Pydantic data models to validate data structures
-│   │
 │   ├── chains/              # RAG chain orchestration with retrieval + LLM
 │   ├── configs/             # configurations shared across modules
 │   ├── document_loaders/    # fetch and parse data, returning standardised LangChain Documents
 │   ├── eval/                # evaluation harness: metrics, runner, and quality measurement
 │   ├── i18n/                # localization keys and message loading
 │   ├── prompts/             # author-specific persona prompts (e.g., Voltaire, Gouges)
+│   ├── schemas/             # shared Pydantic data models to validate data structures
 │   ├── utils/               # shared utility functions
 │   └── vectorstores/        # ingestion-time storage and query-time retrieval operations
 │
