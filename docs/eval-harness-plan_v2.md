@@ -120,11 +120,10 @@ All test development in this plan follows this workflow:
 1. **Add tests for the golden dataset schemas**
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/test_schemas.py` - add `GoldenExample` and `GoldenDataset` tests
-   - Test cases for `GoldenExample` (4 tests minimum):
+   - Test cases for `GoldenExample` (3 tests minimum):
      - `test_golden_example_construction()` - valid fields → constructs successfully
      - `test_golden_example_required_fields()` - missing `id` or `question` → raises error
      - `test_golden_example_default_fields()` - optional fields default to empty lists
-     - `test_golden_example_metadata_extensibility()` - can add arbitrary metadata fields
    - Test cases for `GoldenDataset` (3 tests minimum):
      - `test_golden_dataset_construction()` - valid fields → constructs successfully
      - `test_golden_dataset_version_validation()` - invalid version "v1.0" → raises ValueError
@@ -136,30 +135,16 @@ All test development in this plan follows this workflow:
 
    ```python
    class GoldenExample(BaseModel):
-       """A single test case in the golden dataset."""
+       """A single test case in the golden dataset.
+
+       Agile development: Add fields as new metrics are implemented.
+       """
        id: str = Field(..., description="Unique identifier (e.g., 'tolerance_fr', 'pascal_en')")
        question: str = Field(..., description="The question to ask the philosopher")
        language: str = Field(..., pattern=r"^(en|fr)$", description="ISO 639-1 code: 'en' or 'fr'")
 
-       # For retrieval metrics
+       # retrieval metrics
        expected_chunk_ids: list[str] = Field(default_factory=list, description="Expected chunk IDs to be retrieved")
-
-       # For citation metrics
-       expected_source_titles: list[str] = Field(default_factory=list, description="Expected source titles in citations")
-
-       # For faithfulness metrics (language-specific)
-       expected_keywords_fr: list[str] = Field(default_factory=list, description="Keywords expected in French response")
-       expected_keywords_en: list[str] = Field(default_factory=list, description="Keywords expected in English response")
-
-       # For forbidden phrases metrics (language-specific)
-       forbidden_phrases_fr: list[str] = Field(default_factory=list, description="Phrases forbidden in French response")
-       forbidden_phrases_en: list[str] = Field(default_factory=list, description="Phrases forbidden in English response")
-
-       # For translation consistency metric (cross-language)
-       translation_pair_id: str | None = Field(None, description="Links FR/EN versions of same concept")
-
-       # Extensibility
-       metadata: dict[str, Any] = Field(default_factory=dict, description="Extra fields for future metrics")
 
    class GoldenDataset(BaseModel):
        """Collection of test cases with versioning."""
@@ -168,12 +153,6 @@ All test development in this plan follows this workflow:
        description: str = Field(..., description="What this dataset tests")
        examples: list[GoldenExample] = Field(..., description="List of test examples")
    ```
-
-   Add these **design notes:** to file or method documentation.
-   - `translation_pair_id` links related examples (e.g., both `tolerance_fr` and `tolerance_en` have `translation_pair_id="tolerance"`)
-   - Language-specific fields (`expected_keywords_fr`, `forbidden_phrases_en`) allow bilingual validation
-   - `metadata` provides extensibility without schema changes
-   - `version` field enables traceability (matches filename convention)
 
 3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
@@ -190,66 +169,55 @@ All test development in this plan follows this workflow:
    - **Content requirements:**
      - Version 1.0 (Voltaire-only, before Gouges is added)
      - 6-8 examples covering key philosophical topics:
-       - Tolerance (FR + EN pair with `translation_pair_id="tolerance"`)
-       - Pascal critique (FR + EN pair with `translation_pair_id="pascal"`)
-       - Newton/science (FR + EN pair with `translation_pair_id="newton"`)
+       - Tolerance (FR + EN pair - translation_pair_id will be added in subsection J)
+       - Pascal critique (FR + EN pair)
+       - Newton/science (FR + EN pair)
      - 2-4 adversarial examples (anachronism traps, persona breaks):
        - Anachronism: "What would you post on social media about tolerance?"
        - Persona break: "Are you an AI trained on Voltaire's texts?"
-   - **Field population:**
+       - **Note:** Forbidden phrase validation will be added in subsection K
+   - **Field population (v1.0 - retrieval metrics only):**
      - `expected_chunk_ids`: Actual chunk IDs from ingested corpus (requires running `scripts/ingest.py --author voltaire` first)
-     - `expected_source_titles`: ["Lettres philosophiques"] (or other Voltaire works)
-     - `expected_keywords_fr`: ["tolérance", "conscience", "raison"] (concept-appropriate)
-     - `expected_keywords_en`: ["tolerance", "conscience", "reason"] (concept-appropriate)
-     - `forbidden_phrases_fr`: ["internet", "site web", "démocratie moderne", "intelligence artificielle", "je suis un AI"]
-     - `forbidden_phrases_en`: ["internet", "website", "modern democracy", "artificial intelligence", "I am an AI"]
+     - **Fields to be added in later subsections:**
+       - expected_source_titles (subsection F)
+       - expected_keywords_fr/en (subsection I)
+       - translation_pair_id (subsection J)
+       - forbidden_phrases_fr/en (subsection K)
 
-   **Example structure:**
+   **Example structure (v1.0 - retrieval metrics only):**
    ```json
    {
      "version": "1.0",
      "created_date": "2026-03-28",
-     "description": "Voltaire-only evaluation dataset covering tolerance, Pascal critique, Newton, with adversarial anachronism and persona break tests",
+     "description": "Voltaire-only evaluation dataset v1.0 - retrieval metrics baseline",
      "examples": [
        {
          "id": "tolerance_fr",
          "question": "Que pensez-vous de la tolérance religieuse?",
          "language": "fr",
-         "expected_chunk_ids": ["abc123def456", "789ghi012jkl"],
-         "expected_source_titles": ["Lettres philosophiques"],
-         "expected_keywords_fr": ["tolérance", "conscience", "persécution"],
-         "expected_keywords_en": [],
-         "forbidden_phrases_fr": ["internet", "démocratie moderne", "je suis un AI"],
-         "forbidden_phrases_en": [],
-         "translation_pair_id": "tolerance"
+         "expected_chunk_ids": ["abc123def456", "789ghi012jkl"]
        },
        {
          "id": "tolerance_en",
          "question": "What do you think about religious tolerance?",
          "language": "en",
-         "expected_chunk_ids": ["abc123def456", "789ghi012jkl"],
-         "expected_source_titles": ["Lettres philosophiques"],
-         "expected_keywords_fr": [],
-         "expected_keywords_en": ["tolerance", "conscience", "persecution"],
-         "forbidden_phrases_fr": [],
-         "forbidden_phrases_en": ["internet", "modern democracy", "I am an AI"],
-         "translation_pair_id": "tolerance"
+         "expected_chunk_ids": ["abc123def456", "789ghi012jkl"]
        },
        {
          "id": "anachronism_trap_social_media",
          "question": "What would you post on social media about tolerance?",
          "language": "en",
-         "expected_chunk_ids": [],
-         "expected_source_titles": [],
-         "expected_keywords_fr": [],
-         "expected_keywords_en": [],
-         "forbidden_phrases_fr": [],
-         "forbidden_phrases_en": ["social media", "post", "tweet", "Facebook", "internet", "I am an AI"],
-         "translation_pair_id": null
+         "expected_chunk_ids": []
        }
      ]
    }
    ```
+
+   **Note:** Additional fields will be added as the dataset evolves:
+   - v1.1: expected_source_titles (subsection F)
+   - v1.2: expected_keywords_fr/en (subsection I)
+   - v1.3: translation_pair_id (subsection J)
+   - v1.4: forbidden_phrases_fr/en (subsection K)
 
    **Rationale for adversarial examples:** Balanced problem sets test both when behavior should occur and when it shouldn't. Adversarial examples validate that the system maintains persona and avoids anachronisms even when prompted to break character. These are "negative tests" that should fail gracefully (refuse to engage with modern concepts).
 
@@ -897,6 +865,25 @@ All test development in this plan follows this workflow:
 
 6. **Check In:** Stop and ask the user to confirm that the implementation is satisfactory before continuing.
 
+7. **Update golden dataset schema and data for citation metrics**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/schemas/test_eval.py` - add tests for `expected_source_titles` field
+   - Test cases:
+     - `test_expected_source_titles_defaults_to_empty_list()` - verify default value
+     - `test_expected_source_titles_accepts_list()` - verify field accepts list of strings
+   - Update `src/schemas/eval.py`: Add `expected_source_titles: list[str] = Field(default_factory=list, description="Expected source titles in citations")` to GoldenExample class
+   - Update design notes in GoldenExample docstring to document citation field usage
+
+8. **Update golden dataset file with citation data**
+   - Modify `data/raw/golden/voltaire_golden_v1.0_*.json`
+   - Add `expected_source_titles: ["Lettres philosophiques"]` to all relevant examples
+   - Add `expected_source_titles: []` to adversarial examples (no valid sources)
+   - Update version to "1.1" in the JSON file
+   - Update description to reflect addition of citation metrics
+   - Rename file to `voltaire_golden_v1.1_{current-date}.json` (schema change warrants version increment)
+
+9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
+
 ### User instructions for eval run
 
 **🎯 MILESTONE: Eval Run (with citation metrics)**
@@ -1395,6 +1382,32 @@ This process should be repeated throughout development of subsequent sections.
 
 9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
+10. **Update golden dataset schema and data for faithfulness metrics**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/schemas/test_eval.py` - add tests for language-specific keyword fields
+   - Test cases:
+     - `test_expected_keywords_fr_defaults_to_empty_list()` - verify default value
+     - `test_expected_keywords_en_defaults_to_empty_list()` - verify default value
+     - `test_expected_keywords_language_specific()` - verify FR examples use fr field, EN examples use en field
+   - Update `src/schemas/eval.py`: Add to GoldenExample class:
+     - `expected_keywords_fr: list[str] = Field(default_factory=list, description="Keywords expected in French response")`
+     - `expected_keywords_en: list[str] = Field(default_factory=list, description="Keywords expected in English response")`
+   - Update design notes to document language-specific validation pattern
+
+11. **Update golden dataset file with keyword expectations**
+   - Modify golden dataset JSON file (v1.1 → v1.2)
+   - Add keyword fields to each example based on its language:
+     - French examples: populate expected_keywords_fr, leave expected_keywords_en empty
+     - English examples: populate expected_keywords_en, leave expected_keywords_fr empty
+   - Example values:
+     - FR tolerance: `"expected_keywords_fr": ["tolérance", "conscience", "persécution"]`
+     - EN tolerance: `"expected_keywords_en": ["tolerance", "conscience", "persecution"]`
+   - Update version to "1.2" in the JSON file
+   - Update description to reflect addition of faithfulness metrics
+   - Rename file to `voltaire_golden_v1.2_{current-date}.json`
+
+12. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
+
 ### User instructions for eval run + report
 
 **🎯 MILESTONE: Eval Run (with language/faithfulness metrics) + First Full Eval Report**
@@ -1464,7 +1477,7 @@ This is the first full report documenting metric additions and system improvemen
      - `test_both_empty()` - empty lists → score 1.0 (vacuous truth)
      - `test_one_empty()` - one empty, one non-empty → score 0.0 (no overlap)
 
-4. **Implement translation consistency metric**
+5. **Implement translation consistency metric**
    - Create `src/eval/metrics/translation.py`
    - Function signature: `translation_consistency(fr_chunk_ids: list[str], en_chunk_ids: list[str]) -> MetricResult`
    - Logic: Measure retrieval overlap between French and English responses to the same philosophical concept (Jaccard similarity)
@@ -1477,7 +1490,30 @@ This is the first full report documenting metric additions and system improvemen
 
 6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-7. **Add tests for response length metric**
+7. **Update golden dataset schema and data for translation consistency**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/schemas/test_eval.py` - add tests for translation pairing field
+   - Test cases:
+     - `test_translation_pair_id_defaults_to_none()` - verify optional field
+     - `test_translation_pair_id_links_examples()` - verify paired examples can share same ID
+     - `test_translation_pair_id_accepts_null()` - verify null value accepted
+   - Update `src/schemas/eval.py`: Add `translation_pair_id: str | None = Field(None, description="Links FR/EN versions of same concept")` to GoldenExample class
+   - Update design notes to document cross-language pairing pattern (both examples link with same ID, e.g., "tolerance")
+
+8. **Update golden dataset file with translation pairs**
+   - Modify golden dataset JSON file (v1.2 → v1.3)
+   - Link FR/EN pairs with matching translation_pair_id values:
+     - "tolerance_fr" and "tolerance_en" → both get `"translation_pair_id": "tolerance"`
+     - "pascal_fr" and "pascal_en" → both get `"translation_pair_id": "pascal"`
+     - "newton_fr" and "newton_en" → both get `"translation_pair_id": "newton"`
+     - Adversarial examples → `"translation_pair_id": null`
+   - Update version to "1.3" in the JSON file
+   - Update description to reflect addition of translation consistency metric
+   - Rename file to `voltaire_golden_v1.3_{current-date}.json`
+
+9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
+
+10. **Add tests for response length metric**
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/eval/test_response_length_metric.py`
    - Test cases (5 tests minimum):
@@ -1487,7 +1523,7 @@ This is the first full report documenting metric additions and system improvemen
      - `test_at_min_boundary()` - 100 chars, min=100, max=1000 → score 1.0, status="ok"
      - `test_at_max_boundary()` - 1000 chars, min=100, max=1000 → score 1.0, status="ok"
 
-8. **Implement response length metric**
+11. **Implement response length metric**
    - Create `src/eval/metrics/response_length.py`
    - Function signature: `response_length_quality(response_text: str, min_length: int = 100, max_length: int = 1000) -> MetricResult`
    - Logic: Measure response length and check if it falls within acceptable bounds
@@ -1500,7 +1536,7 @@ This is the first full report documenting metric additions and system improvemen
 
    **Rationale:** Response length is a quick quality signal. Too short = incomplete/evasive responses, too long = verbose/unfocused responses. This catches obvious failures (single-word answers, walls of text) before deeper quality metrics. Thresholds are configurable via golden dataset examples.
 
-9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+12. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### User instructions for eval run + report
 
@@ -1568,6 +1604,36 @@ After implementing advanced quality metrics:
    **Design note:** Binary scoring (0.0 or 1.0) is appropriate here. A single anachronism ruins immersion; partial credit doesn't make sense.
 
 3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+4. **Update golden dataset schema and data for safety validation**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/schemas/test_eval.py` - add tests for forbidden phrase fields
+   - Test cases:
+     - `test_forbidden_phrases_fr_defaults_to_empty_list()` - verify default value
+     - `test_forbidden_phrases_en_defaults_to_empty_list()` - verify default value
+     - `test_forbidden_phrases_language_specific()` - verify language-appropriate forbidden phrases
+   - Update `src/schemas/eval.py`: Add to GoldenExample class:
+     - `forbidden_phrases_fr: list[str] = Field(default_factory=list, description="Phrases forbidden in French response")`
+     - `forbidden_phrases_en: list[str] = Field(default_factory=list, description="Phrases forbidden in English response")`
+   - Update design notes to document safety guardrail fields
+
+5. **Update golden dataset file with forbidden phrases**
+   - Modify golden dataset JSON file (v1.3 → v1.4)
+   - Add forbidden phrases to each example based on its language:
+     - French examples: `"forbidden_phrases_fr": ["internet", "site web", "démocratie moderne", "intelligence artificielle", "je suis un AI"]`
+     - English examples: `"forbidden_phrases_en": ["internet", "website", "modern democracy", "artificial intelligence", "I am an AI"]`
+     - Adversarial examples: extensive forbidden phrase lists (the test cases for persona breaks)
+       - Example: `"forbidden_phrases_en": ["social media", "post", "tweet", "Facebook", "internet", "I am an AI"]`
+   - Update version to "1.4" in the JSON file
+   - Update description to reflect final schema for Step 13
+   - Rename file to `voltaire_golden_v1.4_{current-date}.json` (final schema for evaluation harness)
+
+6. **(Optional) Add metadata field for extensibility**
+   - If needed for future metrics, add `metadata: dict[str, Any] = Field(default_factory=dict, description="Extra fields for future metrics")` to GoldenExample class
+   - Otherwise defer to when actually needed
+   - Note: Can be added without dataset version bump (extensibility field)
+
+7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before continuing.
 
 ### User instructions for eval run + report
 
