@@ -102,7 +102,9 @@ luminary/
 │
 ├── data/                    # (gitignored)
 │   ├── chroma_db/           # ChromaDB vector database
-│   └── raw/                 # scraped documents saved as JSON, organised by document_id
+│   └── raw/
+│       ├── golden/          # versioned golden datasets for evaluation
+│       └── <document_id>/   # scraped documents saved as JSON
 │
 ├── locales/                 # user-facing messages that should adapt to detected language
 │
@@ -140,6 +142,10 @@ Luminary uses a bespoke, automated evaluation harness to measure quality and pre
 - Multi-language by default: test the bilingual system as users experience it
 - Deterministic graders first: fast, reproducible, objective
 - Comprehensive coverage: happy paths and edge cases (anachronisms, persona breaks)
+
+**Golden datasets:**
+- Golden datasets are versioned collections of test cases that validate system behavior. Versioning allows comparing results across time and referencing the correct snapshot of data when creating eval reports. 
+- They live in `data/raw/golden/` (gitignored) with naming convention: `{author}_golden_v{version}_{YYYY-MM-DD}.json`
 
 ## Development
 

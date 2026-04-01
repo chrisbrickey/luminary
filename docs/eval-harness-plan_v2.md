@@ -111,7 +111,7 @@ All test development in this plan follows this workflow:
 
 ---
 
-## B. Golden dataset v1.0 (Voltaire-only evaluation data)
+## ✅ B. Golden dataset v1.0 (Voltaire-only evaluation data)
 
 **Goal:** Create concrete validation data to test all metrics end-to-end.
 
@@ -268,6 +268,9 @@ All test development in this plan follows this workflow:
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
   - Split up schemas into multiple files per domain to improve maintainability as this plan will add many eval-related schemas.
+  - Created helper scripts not in original plan: `scripts/query_for_golden_dataset.py` (queries ChromaDB to get realistic chunk IDs) and `scripts/validate_golden_dataset.py` (validates golden dataset against schema)
+  - Used actual chunk IDs from ingested Voltaire corpus instead of placeholders 
+  - Dataset includes 8 examples (6 main philosophical topics as FR/EN pairs + 2 adversarial examples) with realistic chunk IDs from *Lettres philosophiques*
 
 ---
 
