@@ -1,5 +1,8 @@
 """Retrieval metrics for evaluating RAG system performance."""
 
+from typing import Any
+
+from src.eval.metrics.base import MetricSpec, register_metric
 from src.schemas import MetricResult
 
 
@@ -88,3 +91,31 @@ def retrieval_relevance(
             "irrelevant": sorted(irrelevant_set),
         },
     )
+
+
+def _retrieval_relevance_wrapper(example: Any, response: Any) -> MetricResult:
+    """Wrapper to adapt retrieval_relevance for the registry interface.
+
+    Args:
+        example: GoldenExample with expected_chunk_ids attribute
+        response: ChatResponse with retrieved_passage_ids attribute
+
+    Returns:
+        MetricResult from retrieval_relevance
+    """
+    return retrieval_relevance(
+        expected_chunk_ids=example.expected_chunk_ids,
+        retrieved_chunk_ids=response.retrieved_passage_ids,
+    )
+
+
+# Register the metric in the global registry
+register_metric(
+    MetricSpec(
+        name="retrieval_relevance",
+        compute=_retrieval_relevance_wrapper,
+        required_example_fields={"expected_chunk_ids"},
+        required_response_fields={"retrieved_passage_ids"},
+        languages=None,  # Applies to all languages
+    )
+)

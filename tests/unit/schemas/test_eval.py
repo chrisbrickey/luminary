@@ -5,7 +5,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from src.schemas.eval import GoldenDataset, GoldenExample, MetricResult
+from src.schemas.chat import ChatResponse
+from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
 
 # --- Shared test constants ---
 
@@ -16,6 +17,8 @@ QUESTION_TEXT = "What is the meaning of tolerance?"
 DATASET_VERSION = "3.0"
 DATASET_DATE = "2029-05-09"
 DATASET_DESCRIPTION = "Test dataset for evaluation"
+RUN_TIMESTAMP = "2029-05-09T14:30:45+00:00"
+DATASET_NAME = "test_dataset_golden"
 
 
 def _metric_kwargs(**overrides: Any) -> dict[str, Any]:
@@ -43,10 +46,53 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
 def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
     """Return default GoldenDataset kwargs, with optional overrides."""
     defaults: dict[str, Any] = {
+        "name": DATASET_NAME,
         "version": DATASET_VERSION,
         "created_date": DATASET_DATE,
         "description": DATASET_DESCRIPTION,
         "examples": [],
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+def _chat_response_kwargs(**overrides: Any) -> dict[str, Any]:
+    """Return default ChatResponse kwargs, with optional overrides."""
+    defaults: dict[str, Any] = {
+        "text": "Sample response text.",
+        "retrieved_passage_ids": ["chunk_001", "chunk_002"],
+        "retrieved_contexts": ["Context 1", "Context 2"],
+        "retrieved_source_titles": ["Source A", "Source B"],
+        "language": "en",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+def _example_result_kwargs(**overrides: Any) -> dict[str, Any]:
+    """Return default ExampleResult kwargs, with optional overrides."""
+    defaults: dict[str, Any] = {
+        "example_id": EXAMPLE_ID,
+        "question": QUESTION_TEXT,
+        "language": "en",
+        "response": ChatResponse(**_chat_response_kwargs()),
+        "metrics": [],
+        "passed": True,
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
+    """Return default EvalRun kwargs, with optional overrides."""
+    defaults: dict[str, Any] = {
+        "dataset_version": DATASET_VERSION,
+        "dataset_name": DATASET_NAME,
+        "run_timestamp": RUN_TIMESTAMP,
+        "system_version": {"chat_model": "test-model", "commit": "abc123"},
+        "example_results": [],
+        "aggregate_scores": {"overall": {}},
+        "overall_pass_rate": 0.0,
     }
     defaults.update(overrides)
     return defaults
@@ -184,3 +230,72 @@ class TestGoldenDataset:
             kwargs = _golden_dataset_kwargs()
             del kwargs["description"]
             GoldenDataset(**kwargs)  # type: ignore[call-arg]
+
+
+class TestExampleResult:
+    def test_construction_with_required_fields(self) -> None:
+        """Valid fields construct successfully."""
+        result = ExampleResult(**_example_result_kwargs())
+        assert result.example_id == EXAMPLE_ID
+        assert result.question == QUESTION_TEXT
+        assert result.language == "en"
+        assert isinstance(result.response, ChatResponse)
+        assert result.metrics == []
+        assert result.passed is True
+
+    def test_construction_with_all_fields(self) -> None:
+        """All required fields are present."""
+        metric1 = MetricResult(**_metric_kwargs(name="metric_a", score=0.9))
+        metric2 = MetricResult(**_metric_kwargs(name="metric_b", score=0.7))
+        result = ExampleResult(**_example_result_kwargs(
+            metrics=[metric1, metric2],
+            passed=False
+        ))
+        assert len(result.metrics) == 2
+        assert result.metrics[0].name == "metric_a"
+        assert result.metrics[1].name == "metric_b"
+        assert result.passed is False
+
+    def test_passed_field_calculated_correctly(self) -> None:
+        """Passed field can be True or False."""
+        result_passed = ExampleResult(**_example_result_kwargs(passed=True))
+        assert result_passed.passed is True
+
+        result_failed = ExampleResult(**_example_result_kwargs(passed=False))
+        assert result_failed.passed is False
+
+
+class TestEvalRun:
+    def test_construction_with_required_fields(self) -> None:
+        """Valid fields construct successfully."""
+        run = EvalRun(**_eval_run_kwargs())
+        assert run.dataset_version == DATASET_VERSION
+        assert run.dataset_name == DATASET_NAME
+        assert run.run_timestamp == RUN_TIMESTAMP
+        assert run.system_version == {"chat_model": "test-model", "commit": "abc123"}
+        assert run.example_results == []
+        assert run.aggregate_scores == {"overall": {}}
+        assert run.overall_pass_rate == 0.0
+
+    def test_missing_dataset_version_raises(self) -> None:
+        """Missing dataset_version raises error."""
+        with pytest.raises(ValidationError):
+            kwargs = _eval_run_kwargs()
+            del kwargs["dataset_version"]
+            EvalRun(**kwargs)  # type: ignore[call-arg]
+
+    def test_aggregate_scores_structure(self) -> None:
+        """Aggregate scores has expected nested structure."""
+        aggregate_scores = {
+            "overall": {"metric_a": 0.85, "metric_b": 0.90},
+            "by_language": {
+                "en": {"metric_a": 0.87, "metric_b": 0.92},
+                "fr": {"metric_a": 0.83, "metric_b": 0.88}
+            },
+            "cross_language": {"translation_consistency": 0.75}
+        }
+        run = EvalRun(**_eval_run_kwargs(aggregate_scores=aggregate_scores))
+        assert "overall" in run.aggregate_scores
+        assert "by_language" in run.aggregate_scores
+        assert "cross_language" in run.aggregate_scores
+        assert run.aggregate_scores["by_language"]["en"]["metric_a"] == 0.87

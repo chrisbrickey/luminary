@@ -55,13 +55,15 @@ Evaluation harness and multi-agent debate are under development.
 ```
 I. INGESTION PIPELINE
 ──────────────────────────────────────────────────────────────
-  load    →    persist   →   chunk    →    embed  →  vector DB
-(web scrape)  (JSON files) (overlapping)  (vectors)  (persist)
-
+fetch raw data → persist JSON documents → generate overlapping chunks → embed vectors in vector DB
 
 II. QUERY PIPELINE
 ──────────────────────────────────────────────────────────────
-user question → retriever → format context → prompt LLM with agent personas → respond
+user question → retrieve relevant chunks from vector DB → format context → prompt LLM with agent personas → respond to user
+
+III. EVALUATION PIPELINE
+──────────────────────────────────────────────────────────────
+load golden dataset -> invoke chat chain → apply all metrics → aggregate scores → persist eval run artifact
 ```
 
 #### Pipelines in Detail
@@ -90,6 +92,19 @@ QUERY (real-time via user prompt)
       │
       ▼
  ChatResponse            validated and structured response in user's language
+ 
+EVALUATION (on-demand quality measurement)
+─────────────────────────────────────────────────────────────────────
+GoldenDataset            versioned example cases with expected behaviors (e.g., questions, expected chunks, keywords)
+      │
+      ▼
+runner.py                invokes chat chain for each example, applies metrics, aggregates scores
+      │
+      ▼
+metrics/                 deterministic graders such as retrieval_relevance, citation_accuracy, language compliance
+      │
+      ▼
+EvalRun                  machine-readable artifact with all results, scores, and system version (saved to evals/runs/)
 ```
 
 ### Project Structure
@@ -132,20 +147,26 @@ _*Tests that make http or grpc calls to confirm API contracts are tagged with 'e
 
 Luminary uses a bespoke, automated evaluation harness to measure quality and prevent regressions.
 
-**Capabilities under development:**
-- Deterministic metrics: retrieval relevance (recall/precision/F1), citation accuracy, language compliance
+**Design principles:**
+- Traceability: Eval artifacts are linked to versions of golden datasets and system attributes.
+- Multi-language by default: Test the multilingual system as users experience it, starting with English and French.
+- Iterative approach: Deterministic graders first: fast, reproducible, objective. Add more languages and complex metrics as the eval harness stabilizes.
+- Single source of truth: Centralized METRIC_REGISTRY provides the single list of metrics so eval runners and other callers don't need to be updated to detect new metrics.
+- Comprehensive coverage: happy paths and edge cases (anachronisms, persona breaks)
+
+**Metrics Categories:**
+- Deterministic metrics: retrieval relevance, citation accuracy, language compliance
 - Quality metrics: faithfulness to source texts, citation placement, persona maintenance
 - Cross-language metrics: translation consistency (FR/EN retrieval overlap)
 - LLM-as-judge metrics: relevance, groundedness, coherence
 
-**Design principles:**
-- Multi-language by default: test the bilingual system as users experience it
-- Deterministic graders first: fast, reproducible, objective
-- Comprehensive coverage: happy paths and edge cases (anachronisms, persona breaks)
-
 **Golden datasets:**
 - Golden datasets are versioned collections of test cases that validate system behavior. Versioning allows comparing results across time and referencing the correct snapshot of data when creating eval reports. 
 - They live in `data/raw/golden/` (gitignored) with naming convention: `{author}_golden_v{version}_{YYYY-MM-DD}.json`
+
+**Eval Artifacts:**
+- Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{author}_{YYYY-MM-DD}T{HH-MM-SS}.json`.
+- Contains all example results, aggregate scores, and system version metadata for traceability
 
 ## Development
 
