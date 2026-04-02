@@ -274,7 +274,7 @@ All test development in this plan follows this workflow:
 
 ---
 
-## C. Golden Dataset Loading Utilities
+## ✅ C. Golden Dataset Loading Utilities
 **Goal:** Add capability for loading the most recent versioned golden datasets. This will be used by the eval runner.
 
 ### Implementation
@@ -384,6 +384,10 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Started a new config file for eval constants: `configs/eval.py` and their tests instead of adding to `common.py` to ease maintainability, especially because this plan will add many more eval-specific configs. Updated subsequent steps in this plan to use this file structure.
+  - Changed location of eval utils to the eval module: `src/eval/utils.py` instead of adding to `src/utils/`. Updated subsequent steps in this plan to use this file structure.
+  - Removed display of DEFAULT_GOLDEN_DATASET_PATH from error handling in the loading utilities because the path is injected and these utilities should be generic so that they can be reused with any path.
+  - Added test to document an accepted edge case where a multi-digit decimal verion (e.g. `v1.12`) will not sort correctly. This edge case is accepted because it is not necessary for our use cases and the golden dataset validations will prevent a multi-digit decimal version.
 
 ---
 
@@ -553,19 +557,19 @@ All test development in this plan follows this workflow:
 
 2. **Add configuration constant and tests**
    - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/configs/test_config_common.py`: add `test_eval_artifacts_path_is_relative()` to verify relative path for portability
-   - Modify `src/configs/common.py`: add `DEFAULT_EVAL_ARTIFACTS_PATH = Path("evals/runs")` to reference the destination location of eval run artifacts
+   - `tests/unit/configs/test_config_eval.py`: add `test_eval_artifacts_path_is_relative()` to verify relative path for portability
+   - Modify `src/configs/eval.py`: add `DEFAULT_EVAL_ARTIFACTS_PATH = Path("evals/runs")` to reference the destination location of eval run artifacts
   
 3. **Add tests for the utility for saving eval run**
    - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/utils/test_eval_utils.py`
+   - `tests/unit/eval/test_utils.py`
    - Test cases for `save_eval_run()` (2 tests minimum):
      - `test_save_creates_directory()` - nonexistent output_dir → creates it
      - `test_save_generates_valid_filename()` - check filename matches pattern `{author}_{timestamp}.json`
    - Use `tmp_path` fixture for file I/O tests
 
 4. **Add utility for saving eval run**
-   - Update `src/utils/eval_utils.py`: Add `save_eval_run()`.
+   - Update `src/eval/utils.py`: Add `save_eval_run()`.
    - Timestamped filenames prevent overwrites and enable tracking.
    - First draft below. Adapt to current state of the application.
 
@@ -991,14 +995,14 @@ Compare the new artifact with the first run:
 
 4. **Add tests for the report stub generator**
    - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/utils/test_eval_utils.py` - add tests for `format_eval_report_stub()`
+   - `tests/unit/eval/test_utils.py` - add tests for `format_eval_report_stub()`
    - Test cases (3 tests minimum):
      - `test_format_stub_includes_metadata()` - stub contains date, author, commit
      - `test_format_stub_includes_metrics_table()` - stub contains all metrics with scores
      - `test_format_stub_includes_todo_prompts()` - stub contains [TODO] markers for manual sections
    
 5. **Create report stub generator utility to expedite creation of narrative reports**
-   - Modify `src/utils/eval_utils.py`: add `format_eval_report_stub(eval_run: EvalRun) -> str`
+   - Modify `src/eval/utils.py`: add `format_eval_report_stub(eval_run: EvalRun) -> str`
    - Auto-fills: date, author, artifact path, commit, system version, metrics table
    - Leaves narrative sections as `[TODO]` prompts for manual completion
    - Returns markdown string ready to save as `.md` file

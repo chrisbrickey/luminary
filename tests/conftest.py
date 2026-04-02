@@ -179,13 +179,17 @@ def pytest_collection_modifyitems(
     session: pytest.Session, config: pytest.Config, items: List[pytest.Item]
 ) -> None:
     """Print banner when running external tests."""
-    # Check if any collected items have the external marker
+    # Check if external marker expression is being used to exclude tests
+    markexpr = config.getoption("-m", default="")
+    is_excluding_external = "not external" in markexpr
+
+    # Only print banner if external tests will actually run
     has_external_tests = any(
         item.get_closest_marker("external") is not None
         for item in items
     )
 
-    if has_external_tests:
+    if has_external_tests and not is_excluding_external:
         print("\n" + "=" * 70)
         print("RUNNING EXTERNAL TESTS")
         print("=" * 70)

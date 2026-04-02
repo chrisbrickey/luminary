@@ -1,12 +1,12 @@
-"""Common configuration constants used across the application."""
+"""Common configuration constants used across modules."""
 
 import os
 from pathlib import Path
 
-# Raw documents directory - used by scraping and embedding scripts
+# Raw documents path; Used by scraping and embedding scripts
 RAW_DATA_PATH = Path("data/raw")
 
-# ChromaDB vector database path - configured per environment via CHROMA_DB_PATH env var
+# Vector database path; Configured per environment via CHROMA_DB_PATH env var
 # Defaults to "data/chroma_db" for local development
 VECTOR_DB_PATH = Path(os.getenv("CHROMA_DB_PATH", "data/chroma_db"))
 

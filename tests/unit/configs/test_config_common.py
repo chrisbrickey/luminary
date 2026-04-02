@@ -1,4 +1,11 @@
-"""Unit tests for common config module."""
+"""Unit tests for common config module.
+
+Validation that file locations exist is intentionally omitted.
+- Config defines intent, not reality.
+- Tests at this level would be testing state (the file system), not behavior.
+- Errors (e.g. file not found) are handled by the components that
+use the configs and error handling is tested at that level.
+"""
 
 from pathlib import Path
 
