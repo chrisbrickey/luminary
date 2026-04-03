@@ -27,6 +27,7 @@ NONEXISTENT_FILE = "does_not_exist.json"
 
 # Test data constants
 VALID_DATASET_JSON = {
+    "name": f"{AUTHOR_A}_golden",
     "version": VERSION_OLD,
     "created_date": DATE_OLD,
     "description": "Test dataset for unit tests",

@@ -4,7 +4,8 @@
 
 - **Goal:** Implement minimum viable eval harness; establish quality baseline with Voltaire before adding more philosophers
 - **Implementation approach:** This step is broken into subsections for an iterative approach. The subsections are ordered to enable quick feedback loops - implementing a minimal set of metrics, then immediately building the runner and CLI to execute the first eval run, then iteratively adding more metrics with eval runs after each addition.
-- **Multi-language design:** The evaluation harness tests the system as a **bilingual chatbot** (not two separate monolingual systems). Eval runs process all examples in the golden dataset regardless of language, allowing cross-language metrics like translation consistency to work correctly.
+- **Multi-language design:** The evaluation harness tests the system as a **multlingual chatbot** (not separate monolingual systems). Eval runs process all examples in the golden dataset regardless of language, allowing cross-language metrics like translation consistency to work correctly. 
+- **French and English for MVP:** In order to establish a feedback loop as quickly as possible, with which the application and harness can be improved through iteration, only French (the language of most of the raw source data) and English will be evaluated initially. More languages can be added to the eval harness in the future. 
 
 ---
 
@@ -399,7 +400,7 @@ All test development in this plan follows this workflow:
 
 1. **Add test for the schemas for evaluation runs**
    - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/test_schemas.py` - add `ExampleResult` and `EvalRun` tests
+   - `tests/unit/schemas/test_eval.py` - add `ExampleResult` and `EvalRun` tests
    
    - Test cases for `ExampleResult` (3 tests minimum):
      - `test_example_result_construction()` - valid fields → constructs successfully
@@ -412,7 +413,7 @@ All test development in this plan follows this workflow:
      - `test_eval_run_structure()` - aggregate_scores has expected nested structure
 
 2. **Add schemas for evaluation runs**
-   - Modify `src/schemas.py`: add `ExampleResult` and `EvalRun`
+   - Modify `src/schemas/eval.py`: add `ExampleResult` and `EvalRun`
    - Below is a draft. Adapt to the current state of the app.
 
    ```python
@@ -542,6 +543,9 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Added name field to GoldenDataset schema to prevent reconstruction of a dataset name within the eval harness runner. This metadata field may be populated by the caller (e.g. script), which is appropriate because the caller will load the dataset from file.
+  - Remove author field from EvalRun because it is redundant with dataset_name and not necessary for the MVP use cases.
+  - Implement registry pattern for metrics so that metrics can be automatically discovered by the eval runner (instead of updating the runner every time a metric is added).
 
 ---
 
@@ -628,7 +632,7 @@ All test development in this plan follows this workflow:
        - `--verbose` (optional): Enable debug logging
      - Calls `check_ollama_available()` at startup
      - Auto-discovers latest golden dataset if `--golden` not provided
-     - Loads dataset, builds chain, runs eval, saves artifact, prints summary
+     - Loads dataset, populates metadata of GoldenDataset as needed, builds chain, runs eval, saves artifact, prints summary
      - Clear error messages for common failures (Ollama not running, dataset not found, invalid author)
 
    **Key implementation details:**
