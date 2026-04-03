@@ -93,18 +93,19 @@ QUERY (real-time via user prompt)
       ▼
  ChatResponse            validated and structured response in user's language
  
+ 
 EVALUATION (on-demand quality measurement)
 ─────────────────────────────────────────────────────────────────────
-GoldenDataset            versioned example cases with expected behaviors (e.g., questions, expected chunks, keywords)
+ GoldenDataset            versioned example cases with expected behaviors (e.g., questions, expected chunks, keywords)
       │
       ▼
-runner.py                invokes chat chain for each example, applies metrics, aggregates scores
+ runner.py                invokes chat chain for each example, applies metrics, aggregates scores
       │
       ▼
-metrics/                 deterministic graders such as retrieval_relevance, citation_accuracy, language compliance
+ metrics/                 deterministic graders such as retrieval_relevance, citation_accuracy, language compliance
       │
       ▼
-EvalRun                  machine-readable artifact with all results, scores, and system version (saved to evals/runs/)
+ EvalRun                  machine-readable artifact with all results, scores, and system version (saved to evals/runs/)
 ```
 
 ### Project Structure

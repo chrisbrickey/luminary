@@ -392,7 +392,7 @@ All test development in this plan follows this workflow:
 
 ---
 
-## D. Evaluation Runner
+## ✅ D. Evaluation Runner
 
 **Goal:** Add mechanism to measure quality and identify specific weaknesses in order to drive improvements by measuring quality and identifying specific weaknesses.
 
