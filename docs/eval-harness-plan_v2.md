@@ -823,7 +823,9 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
-
+    - Remove author's name from filename of persisted eval artifact; Critical metadata for traceability will be in the content of the report instead of attempting to capture it in the filename.
+    - Add error handling (and associated tests) to utility methods.
+  
 ---
 
 ## F. Core citation metrics (including an eval run)

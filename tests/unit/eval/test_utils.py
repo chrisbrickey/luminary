@@ -1,13 +1,17 @@
 """Unit tests for eval utility functions."""
 
 import json
+import os
+import re
+import stat
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset
-from src.schemas.eval import GoldenDataset
+from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset, save_eval_run
+from src.schemas.chat import ChatResponse
+from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult
 
 # --- Shared test constants ---
 
@@ -107,6 +111,40 @@ def test_load_invalid_schema(tmp_path: Path) -> None:
         load_golden_dataset(invalid_schema_file)
 
 
+def test_load_permission_denied(tmp_path: Path) -> None:
+    """Test that load_golden_dataset raises PermissionError with context when file is unreadable."""
+    dataset_file = tmp_path / "unreadable.json"
+    dataset_file.write_text(json.dumps(VALID_DATASET_JSON))
+
+    # Make file unreadable (Unix-like systems only)
+    os.chmod(dataset_file, 0o000)
+
+    try:
+        with pytest.raises(PermissionError) as exc_info:
+            load_golden_dataset(dataset_file)
+
+        error_message = str(exc_info.value)
+        assert "Permission denied" in error_message
+        assert str(dataset_file) in error_message
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(dataset_file, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_load_is_directory_error(tmp_path: Path) -> None:
+    """Test that load_golden_dataset raises IsADirectoryError when path is a directory."""
+    # Create a directory instead of a file
+    directory_path = tmp_path / "not_a_file"
+    directory_path.mkdir()
+
+    with pytest.raises(IsADirectoryError) as exc_info:
+        load_golden_dataset(directory_path)
+
+    error_message = str(exc_info.value)
+    assert "Expected file but found directory" in error_message
+    assert str(directory_path) in error_message
+
+
 # --- Tests for discover_latest_golden_dataset() ---
 
 
@@ -181,3 +219,130 @@ def test_discover_respects_author(tmp_path: Path) -> None:
     assert result == author_a_file
     assert AUTHOR_A in result.name
     assert AUTHOR_B not in result.name
+
+
+# --- Tests for save_eval_run() ---
+
+
+def _create_minimal_eval_run(dataset_name: str = f"{AUTHOR_A}_golden") -> EvalRun:
+    """Create a minimal EvalRun object for testing."""
+    return EvalRun(
+        dataset_version=VERSION_OLD,
+        dataset_name=dataset_name,
+        run_timestamp="2025-06-15T14:30:45+00:00",
+        system_version={
+            "chat_model": "test-model",
+            "commit": "abc123def456"
+        },
+        example_results=[
+            ExampleResult(
+                example_id="test_example_001",
+                question="Sample question?",
+                language="en",
+                response=ChatResponse(
+                    text="Sample response",
+                    retrieved_passage_ids=["chunk_abc123"],
+                    retrieved_contexts=["Sample context text"],
+                    retrieved_source_titles=["Sample Source"],
+                    language="en"
+                ),
+                metrics=[
+                    MetricResult(
+                        name="test_metric",
+                        score=0.85,
+                        details={"status": "ok"}
+                    )
+                ],
+                passed=True
+            )
+        ],
+        aggregate_scores={
+            "overall": {"test_metric": 0.85}
+        },
+        overall_pass_rate=1.0
+    )
+
+
+def test_save_creates_directory(tmp_path: Path) -> None:
+    """Test that save_eval_run creates the output directory if it doesn't exist."""
+    nonexistent_dir = tmp_path / "new_directory" / "nested"
+    eval_run = _create_minimal_eval_run()
+
+    # Directory should not exist yet
+    assert not nonexistent_dir.exists()
+
+    # Save should create the directory
+    result_path = save_eval_run(eval_run, nonexistent_dir)
+
+    # Directory should now exist
+    assert nonexistent_dir.exists()
+    assert nonexistent_dir.is_dir()
+    assert result_path.parent == nonexistent_dir
+
+
+def test_save_generates_valid_filename(tmp_path: Path) -> None:
+    """Test that save_eval_run generates filename matching pattern {timestamp}.json."""
+    eval_run = _create_minimal_eval_run(dataset_name=f"{AUTHOR_A}_golden")
+
+    result_path = save_eval_run(eval_run, tmp_path)
+
+    # Filename should match pattern: {YYYY-MM-DD}T{HH-MM-SS}.json
+    timestamp_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}"
+    expected_pattern = rf"^{timestamp_pattern}\.json$"
+
+    assert result_path.parent == tmp_path
+    assert re.match(expected_pattern, result_path.name), (
+        f"Filename '{result_path.name}' does not match expected pattern '{expected_pattern}'"
+    )
+
+    # Verify file was created and contains valid JSON
+    assert result_path.exists()
+    assert result_path.is_file()
+
+    # Verify saved content can be loaded back as EvalRun
+    saved_data = json.loads(result_path.read_text())
+    loaded_eval_run = EvalRun(**saved_data)
+    assert loaded_eval_run.dataset_name == eval_run.dataset_name
+    assert loaded_eval_run.dataset_version == eval_run.dataset_version
+
+
+def test_save_permission_error_on_directory_creation(tmp_path: Path) -> None:
+    """Test that save_eval_run raises PermissionError with context when directory creation fails."""
+    eval_run = _create_minimal_eval_run()
+
+    # Create a file where we want to create a directory (will cause error)
+    blocking_file = tmp_path / "blocking_file"
+    blocking_file.write_text("content")
+
+    # Try to create directory with same name as file (should fail)
+    output_dir = blocking_file / "nested"
+
+    with pytest.raises((PermissionError, OSError)) as exc_info:
+        save_eval_run(eval_run, output_dir)
+
+    error_message = str(exc_info.value)
+    # Error message should contain helpful context
+    assert str(output_dir) in error_message or str(blocking_file) in error_message
+
+
+def test_save_permission_error_on_file_write(tmp_path: Path) -> None:
+    """Test that save_eval_run raises PermissionError when file write is denied."""
+    eval_run = _create_minimal_eval_run()
+
+    # Create read-only directory (Unix-like systems only)
+    read_only_dir = tmp_path / "read_only"
+    read_only_dir.mkdir()
+
+    # Make directory read-only (no write permission)
+    os.chmod(read_only_dir, stat.S_IRUSR | stat.S_IXUSR)
+
+    try:
+        with pytest.raises(PermissionError) as exc_info:
+            save_eval_run(eval_run, read_only_dir)
+
+        error_message = str(exc_info.value)
+        assert "Permission denied" in error_message
+        assert "write" in error_message.lower()
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(read_only_dir, stat.S_IRWXU)
