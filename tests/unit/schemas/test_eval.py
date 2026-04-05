@@ -5,13 +5,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from src.eval.metrics.base import FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
 
 # --- Shared test constants ---
 
 METRIC_NAME = "test_metric"
-VALID_SCORE = 0.80
+VALID_SCORE = FALLBACK_THRESHOLD
 EXAMPLE_ID = "test_example_001"
 QUESTION_TEXT = "What is the meaning of tolerance?"
 DATASET_VERSION = "3.0"
@@ -90,6 +91,7 @@ def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
         "dataset_name": DATASET_NAME,
         "run_timestamp": RUN_TIMESTAMP,
         "system_version": {"chat_model": "test-model", "commit": "abc123"},
+        "effective_thresholds": {METRIC_NAME: FALLBACK_THRESHOLD},
         "example_results": [],
         "aggregate_scores": {"overall": {}},
         "overall_pass_rate": 0.0,
@@ -273,6 +275,7 @@ class TestEvalRun:
         assert run.dataset_name == DATASET_NAME
         assert run.run_timestamp == RUN_TIMESTAMP
         assert run.system_version == {"chat_model": "test-model", "commit": "abc123"}
+        assert run.effective_thresholds == {METRIC_NAME: FALLBACK_THRESHOLD}
         assert run.example_results == []
         assert run.aggregate_scores == {"overall": {}}
         assert run.overall_pass_rate == 0.0

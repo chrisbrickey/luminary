@@ -21,12 +21,6 @@ from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult
 import src.eval.metrics.retrieval  # noqa: F401
 
 
-# Each metric must score at or above thresholds in order for an example to "pass"
-METRIC_THRESHOLDS = {
-    "retrieval_relevance": 0.8,
-}
-
-
 def _get_system_version() -> dict[str, str]:
     """Capture system version for reproducibility.
 
@@ -114,6 +108,28 @@ def _compute_aggregate_scores(
         "by_language": by_language,
     }
 
+def _build_effective_thresholds(overrides: dict[str, float] | None) -> dict[str, float]:
+    """Create record of effective thresholds that will be used to determine success/failure.
+
+    Automatically discovers all thresholds from each metric in the global registry.
+    Applies any overrides from the primary entry point.
+
+    Args:
+        override_thresholds: Optional dict to override default thresholds per metric.
+
+    Returns:
+        Dict of thresholds (0.0 to 1.0) for each registered metric
+    """
+    # Collect default thresholds from each metric
+    effective_thresholds: dict[str, float] = {}
+    for spec in METRIC_REGISTRY:
+        effective_thresholds[spec.name] = spec.default_threshold
+
+    # Apply any override thresholds
+    override_thresholds = {} if overrides is None else overrides
+    effective_thresholds.update(override_thresholds)
+
+    return effective_thresholds
 
 def _apply_metrics(
     example: Any,  # GoldenExample
@@ -141,27 +157,30 @@ def _apply_metrics(
     return metrics
 
 
-def _check_example_passed(metrics: list[MetricResult]) -> bool:
+def _check_example_passed(
+    metrics: list[MetricResult],
+    thresholds: dict[str, float],
+) -> bool:
     """Check if all metrics pass their thresholds.
 
     An example "passes" if every metric's score meets or exceeds its threshold.
 
     Args:
         metrics: List of MetricResult objects
+        thresholds: Dict mapping metric names to threshold scores
 
     Returns:
         True if all metrics pass, False otherwise
     """
     for metric in metrics:
-        threshold = METRIC_THRESHOLDS.get(metric.name, 0.8)  # Default threshold 0.8
-        if metric.score < threshold:
+        if metric.score < thresholds[metric.name]:
             return False
     return True
-
 
 def run_eval(
     chain: Runnable[str, ChatResponse],
     golden_dataset: GoldenDataset,
+    override_thresholds: dict[str, float] | None = None,
 ) -> EvalRun:
     """Run evaluation harness on a chain using a golden dataset.
 
@@ -175,10 +194,15 @@ def run_eval(
     Args:
         chain: LangChain runnable that takes a question string and returns ChatResponse
         golden_dataset: GoldenDataset with test examples
+        override_thresholds: Optional dict to override default thresholds per metric.
+            Keys are metric names, values are threshold scores (0.0 to 1.0).
+            If not provided, uses default_threshold from each MetricSpec.
 
     Returns:
         EvalRun object containing all results, scores, and metadata
     """
+    effective_thresholds: dict[str, float] = _build_effective_thresholds(override_thresholds)
+
     # Process each example
     example_results: list[ExampleResult] = []
     passed_count = 0
@@ -191,7 +215,7 @@ def run_eval(
         metrics = _apply_metrics(example, response)
 
         # Check if example passed all metrics
-        passed = _check_example_passed(metrics)
+        passed = _check_example_passed(metrics, effective_thresholds)
         if passed:
             passed_count += 1
 
@@ -221,6 +245,7 @@ def run_eval(
         dataset_name=golden_dataset.name,
         run_timestamp=datetime.now(timezone.utc).isoformat(),
         system_version=system_version,
+        effective_thresholds=effective_thresholds,
         example_results=example_results,
         aggregate_scores=aggregate_scores,
         overall_pass_rate=overall_pass_rate,

@@ -15,6 +15,10 @@ from typing import Any, Callable
 from src.schemas.eval import MetricResult
 
 
+# Default threshold for metrics when not explicitly specified
+FALLBACK_THRESHOLD = 0.8
+
+
 @dataclass
 class MetricSpec:
     """Specification for a metric that can be applied to evaluation examples.
@@ -25,6 +29,7 @@ class MetricSpec:
         required_example_fields: Set of attribute names that must exist on example
         required_response_fields: Set of attribute names that must exist on response
         languages: Set of language codes this metric applies to (None = all languages)
+        default_threshold: Minimum score required for this metric to pass (0.0 to 1.0)
     """
 
     name: str
@@ -32,6 +37,7 @@ class MetricSpec:
     required_example_fields: set[str]
     required_response_fields: set[str]
     languages: set[str] | None = None
+    default_threshold: float = FALLBACK_THRESHOLD
 
 
 # Global registry of all available metrics

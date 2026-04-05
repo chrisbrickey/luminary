@@ -546,6 +546,8 @@ All test development in this plan follows this workflow:
   - Added name field to GoldenDataset schema to prevent reconstruction of a dataset name within the eval harness runner. This metadata field may be populated by the caller (e.g. script), which is appropriate because the caller will load the dataset from file.
   - Remove author field from EvalRun because it is redundant with dataset_name and not necessary for the MVP use cases.
   - Implement registry pattern for metrics so that metrics can be automatically discovered by the eval runner (instead of updating the runner every time a metric is added).
+  - Move threshold assignment to individual metrics via new property `default_threshold` on MetricSpec on `base.py`. Add FALLBACK_THRESHOLD on `base.py` to which metric-specific thresholds default.
+  - Add capability to override metric thresholds in the eval runner including test coverage. Add effective_thresholds property to EvalRun so that actual thresholds used per run are recorded for traceability.
 
 ---
 
