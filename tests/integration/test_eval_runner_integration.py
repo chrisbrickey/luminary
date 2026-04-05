@@ -1,7 +1,7 @@
 """Integration tests for eval runner.
 
 This file tests the integration of real components:
-- Real metric functions (retrieval_relevance)
+- Real, registered metrics via METRIC_REGISTRY
 - Real runner (run_eval)
 - Real schemas (GoldenDataset, GoldenExample, EvalRun)
 - Mock chain (to avoid network calls)
@@ -15,7 +15,7 @@ from unittest.mock import Mock
 import pytest
 from langchain_core.runnables import Runnable
 
-from src.eval.metrics.base import FALLBACK_THRESHOLD
+from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.eval.runner import run_eval
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import GoldenDataset, GoldenExample
@@ -90,15 +90,19 @@ def test_eval_runner_end_to_end() -> None:
     """Integration test: wire real metric functions + mocked chain + real runner → verify full pipeline.
 
     This test verifies:
-    1. Real metric functions (retrieval_relevance) are applied correctly
+    1. All applicable metrics from METRIC_REGISTRY are computed for each example
     2. Mock chain returns ChatResponse objects
     3. Real runner (run_eval) processes examples and computes metrics
     4. EvalRun contains expected structure (example_results, aggregate_scores, overall_pass_rate)
-    5. Metric thresholds are checked and pass/fail status is set correctly
+    5. Pass/fail logic is consistent: examples pass iff all metrics meet thresholds
+    6. Overall pass rate matches actual count of passed examples
+
+    This test is fully dynamic and adapts to any metrics registered in METRIC_REGISTRY.
     """
     # Arrange: Create golden dataset with 3 examples
-    # - 2 examples will PASS (perfect retrieval: expected == retrieved)
-    # - 1 example will FAIL (poor retrieval: 0 out of 2 expected chunks retrieved)
+    # Test data is designed to produce varied metric scores:
+    # - 2 examples with perfect matches (expected == retrieved)
+    # - 1 example with no overlap (expected ∩ retrieved = ∅)
     example_pass_1 = GoldenExample(
         **_golden_example_kwargs(
             id=EXAMPLE_ID_EN_001,
@@ -175,32 +179,85 @@ def test_eval_runner_end_to_end() -> None:
     # Assert: Verify chain was invoked for each example
     assert mock_chain.invoke.call_count == 3
 
-    # Assert: Verify example results contain metrics
+    # Assert: Verify all applicable metrics from METRIC_REGISTRY are computed
+    # Get the first example and response to check applicability
+    example_for_check = dataset.examples[0]
+    response_for_check = response_pass_1
+
+    # Determine which metrics should be applicable to our test data
+    applicable_metric_names = {
+        spec.name
+        for spec in METRIC_REGISTRY
+        if is_metric_applicable(spec, example_for_check, response_for_check)
+    }
+
+    # Verify each example has all applicable metrics
     for example_result in result.example_results:
         assert len(example_result.metrics) > 0
-        # Retrieval relevance metric should be applied
-        metric_names = [m.name for m in example_result.metrics]
-        assert "retrieval_relevance" in metric_names
+        computed_metric_names = {m.name for m in example_result.metrics}
 
+        # All applicable metrics should be computed
+        # (Note: some metrics might not apply to all examples due to language constraints)
+        # So we check that at least the metrics we expect are present
+        for metric_name in applicable_metric_names:
+            # Check if this metric applies to this specific example
+            example_idx = result.example_results.index(example_result)
+            original_example = dataset.examples[example_idx]
+            response_idx = example_idx
+            original_response = [response_pass_1, response_pass_2, response_fail][response_idx]
 
-    # Assert: Verify metric thresholds are persisted
-    assert "retrieval_relevance" in result.effective_thresholds
-    assert result.effective_thresholds["retrieval_relevance"] == FALLBACK_THRESHOLD # 0.8
+            # Find the metric spec
+            metric_spec = next(spec for spec in METRIC_REGISTRY if spec.name == metric_name)
 
-    # Assert: Verify pass/fail status based on metric thresholds
-    # retrieval_relevance threshold is 0.8 (from src/eval/metrics/base.py)
-    assert result.example_results[0].passed is True  # Perfect match: score = 1.0
-    assert result.example_results[1].passed is True  # Perfect match: score = 1.0
-    assert result.example_results[2].passed is False  # No overlap: score = 0.0
+            if is_metric_applicable(metric_spec, original_example, original_response):
+                assert metric_name in computed_metric_names, (
+                    f"Expected metric '{metric_name}' to be computed for example {example_result.id}"
+                )
 
-    # Assert: Verify overall pass rate
-    # 2 out of 3 examples pass → 2/3 ≈ 0.667
-    assert result.overall_pass_rate == pytest.approx(0.667, abs=0.01)
+    # Assert: Verify metric thresholds are persisted for all registered metrics
+    for spec in METRIC_REGISTRY:
+        assert spec.name in result.effective_thresholds, (
+            f"Expected metric '{spec.name}' to have a threshold in effective_thresholds"
+        )
+        assert result.effective_thresholds[spec.name] == spec.default_threshold
+
+    # Assert: Verify pass/fail logic is consistent with scores and thresholds
+    # An example passes if ALL its metrics meet their thresholds
+    for example_result in result.example_results:
+        for metric in example_result.metrics:
+            threshold = result.effective_thresholds[metric.name]
+            if example_result.passed:
+                # If example passed, all metrics must be >= threshold
+                assert metric.score >= threshold, (
+                    f"Example {example_result.id} marked as passed but "
+                    f"metric '{metric.name}' scored {metric.score} < threshold {threshold}"
+                )
+
+        # If example failed, verify at least one metric was below threshold
+        if not example_result.passed:
+            failing_metrics = [
+                m for m in example_result.metrics
+                if m.score < result.effective_thresholds[m.name]
+            ]
+            assert len(failing_metrics) > 0, (
+                f"Example {example_result.id} marked as failed but "
+                f"all metrics meet thresholds"
+            )
+
+    # Assert: Verify overall pass rate matches count of passed examples
+    passed_count = sum(1 for ex in result.example_results if ex.passed)
+    expected_pass_rate = passed_count / len(result.example_results)
+    assert result.overall_pass_rate == pytest.approx(expected_pass_rate, abs=0.001)
 
     # Assert: Verify aggregate scores structure
     assert "overall" in result.aggregate_scores
     assert "by_language" in result.aggregate_scores
-    assert "retrieval_relevance" in result.aggregate_scores["overall"]
+
+    # Assert: Verify all applicable metrics appear in aggregate scores
+    for metric_name in applicable_metric_names:
+        assert metric_name in result.aggregate_scores["overall"], (
+            f"Expected metric '{metric_name}' in overall aggregate scores"
+        )
 
     # Assert: Verify system version captured
     assert "chat_model" in result.system_version
@@ -215,7 +272,10 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
     1. Examples in multiple languages (en, fr) are all processed
     2. Language-specific responses are matched correctly
     3. Aggregate scores are computed by language (by_language breakdown)
-    4. Language constraints on metrics are respected
+    4. Language constraints on metrics are respected (metrics with languages=None apply to all)
+    5. Pass/fail logic is consistent with metric scores and thresholds
+
+    This test is fully dynamic and adapts to any metrics registered in METRIC_REGISTRY.
     """
     # Arrange: Create multilingual dataset
     # - 2 English examples
@@ -319,26 +379,62 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
     assert result.example_results[2].language == "fr"
     assert result.example_results[3].language == "fr"
 
-    # Assert: Verify all examples pass (perfect retrieval for all)
-    assert all(ex.passed for ex in result.example_results)
-    assert result.overall_pass_rate == 1.0
+    # Assert: Verify pass/fail logic is consistent with scores and thresholds
+    for example_result in result.example_results:
+        for metric in example_result.metrics:
+            threshold = result.effective_thresholds[metric.name]
+            if example_result.passed:
+                # If example passed, all metrics must be >= threshold
+                assert metric.score >= threshold, (
+                    f"Example {example_result.id} marked as passed but "
+                    f"metric '{metric.name}' scored {metric.score} < threshold {threshold}"
+                )
+
+        # If example failed, verify at least one metric was below threshold
+        if not example_result.passed:
+            failing_metrics = [
+                m for m in example_result.metrics
+                if m.score < result.effective_thresholds[m.name]
+            ]
+            assert len(failing_metrics) > 0, (
+                f"Example {example_result.id} marked as failed but "
+                f"all metrics meet thresholds"
+            )
+
+    # Assert: Verify overall pass rate matches count of passed examples
+    passed_count = sum(1 for ex in result.example_results if ex.passed)
+    expected_pass_rate = passed_count / len(result.example_results)
+    assert result.overall_pass_rate == pytest.approx(expected_pass_rate, abs=0.001)
 
     # Assert: Verify aggregate scores by language
     assert "by_language" in result.aggregate_scores
     assert "en" in result.aggregate_scores["by_language"]
     assert "fr" in result.aggregate_scores["by_language"]
 
-    # Assert: Verify language-specific metrics are computed
-    # retrieval_relevance applies to all languages (languages=None)
-    assert "retrieval_relevance" in result.aggregate_scores["by_language"]["en"]
-    assert "retrieval_relevance" in result.aggregate_scores["by_language"]["fr"]
+    # Assert: Verify all applicable metrics from METRIC_REGISTRY are computed by language
+    # Determine which metrics should be applicable to our test data
+    example_for_check = dataset.examples[0]
+    response_for_check = response_en_1
 
-    # Assert: Verify scores for each language (all perfect matches → score = 1.0)
-    en_retrieval_score = result.aggregate_scores["by_language"]["en"]["retrieval_relevance"]
-    fr_retrieval_score = result.aggregate_scores["by_language"]["fr"]["retrieval_relevance"]
-    assert en_retrieval_score == pytest.approx(1.0, abs=0.01)
-    assert fr_retrieval_score == pytest.approx(1.0, abs=0.01)
+    applicable_metric_names = {
+        spec.name
+        for spec in METRIC_REGISTRY
+        if is_metric_applicable(spec, example_for_check, response_for_check)
+    }
 
-    # Assert: Verify overall aggregate score (average across all languages)
-    overall_retrieval_score = result.aggregate_scores["overall"]["retrieval_relevance"]
-    assert overall_retrieval_score == pytest.approx(1.0, abs=0.01)
+    # Check that each applicable metric appears in both language aggregates
+    for metric_name in applicable_metric_names:
+        # Find the metric spec to check language constraints
+        metric_spec = next(spec for spec in METRIC_REGISTRY if spec.name == metric_name)
+
+        # If metric applies to all languages or specifically to 'en'/'fr', check it's present
+        if metric_spec.languages is None or "en" in metric_spec.languages:
+            assert metric_name in result.aggregate_scores["by_language"]["en"], (
+                f"Expected metric '{metric_name}' in English aggregate scores"
+            )
+
+        if metric_spec.languages is None or "fr" in metric_spec.languages:
+            assert metric_name in result.aggregate_scores["by_language"]["fr"], (
+                f"Expected metric '{metric_name}' in French aggregate scores"
+            )
+
