@@ -106,6 +106,7 @@ class EvalRun(BaseModel):
 
     # System configuration (for reproducibility)
     system_version: dict[str, str] = Field(..., description="System config: model, commit, etc.")
+    effective_thresholds: dict[str, float] = Field(..., description="Thresholds used for pass/fail (metric_name -> threshold)")
 
     # Results
     example_results: list[ExampleResult] = Field(..., description="Results for each example")

@@ -15,6 +15,7 @@ from unittest.mock import Mock
 import pytest
 from langchain_core.runnables import Runnable
 
+from src.eval.metrics.base import FALLBACK_THRESHOLD
 from src.eval.runner import run_eval
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import GoldenDataset, GoldenExample
@@ -180,6 +181,11 @@ def test_eval_runner_end_to_end() -> None:
         # Retrieval relevance metric should be applied
         metric_names = [m.name for m in example_result.metrics]
         assert "retrieval_relevance" in metric_names
+
+
+    # Assert: Verify metric thresholds are persisted
+    assert "retrieval_relevance" in result.effective_thresholds
+    assert result.effective_thresholds["retrieval_relevance"] == FALLBACK_THRESHOLD # 0.8
 
     # Assert: Verify pass/fail status based on metric thresholds
     # retrieval_relevance threshold is 0.8 (from src/eval/metrics/base.py)

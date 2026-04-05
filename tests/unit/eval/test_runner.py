@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 from langchain_core.runnables import Runnable
 
-from src.eval.metrics.base import MetricSpec
+from src.eval.metrics.base import MetricSpec, FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import EvalRun, GoldenDataset, GoldenExample, MetricResult
 
@@ -114,6 +114,8 @@ class TestRunEval:
         assert len(result.example_results) == 1
         assert "overall" in result.aggregate_scores
         assert 0.0 <= result.overall_pass_rate <= 1.0
+        assert "retrieval_relevance" in result.effective_thresholds
+        assert result.effective_thresholds["retrieval_relevance"] == FALLBACK_THRESHOLD
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_invokes_chain_per_example(
@@ -334,3 +336,51 @@ class TestRunEval:
         assert result.system_version["chat_model"] == chat_model
         assert "commit" in result.system_version
         assert result.system_version["commit"] == commit
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_uses_custom_metric_thresholds(
+        self, mock_registry: Mock
+    ) -> None:
+        """Custom metric thresholds override defaults and are recorded in EvalRun."""
+        # Arrange - return different scores for different examples
+        scores = [0.75, 0.65, 0.85]  # With threshold 0.7: 2 pass, 1 fail
+        mock_compute = Mock(side_effect=[
+            MetricResult(**_metric_result_kwargs(name="retrieval_relevance", score=s))
+            for s in scores
+        ])
+
+        metric_spec = MetricSpec(
+            name="retrieval_relevance",
+            compute=mock_compute,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+            default_threshold=0.8,  # Default is 0.8
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
+
+        example1 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_001))
+        example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
+        example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            examples=[example1, example2, example3]
+        ))
+
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        from src.eval.runner import run_eval
+
+        # Act - override threshold to 0.7 (lower than 0.8 of FALLBACK_THRESHOLD)
+        custom_thresholds = {"retrieval_relevance": 0.7}
+        result = run_eval(mock_chain, dataset, override_thresholds=custom_thresholds)
+
+        # Assert - verify custom threshold is used for pass/fail
+        # With threshold 0.7: 0.75 passes, 0.65 fails, 0.85 passes
+        assert result.example_results[0].passed is True  # 0.75 >= 0.7 -> pass
+        assert result.example_results[1].passed is False  # 0.65 < 0.7 -> fail
+        assert result.example_results[2].passed is True  # 0.85 >= 0.7 -> pass
+        assert result.overall_pass_rate == pytest.approx(0.667, abs=0.01)
+
+        # Assert - verify custom threshold is recorded in EvalRun
+        assert result.effective_thresholds["retrieval_relevance"] == 0.7

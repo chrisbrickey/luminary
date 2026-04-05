@@ -117,5 +117,6 @@ register_metric(
         required_example_fields={"expected_chunk_ids"},
         required_response_fields={"retrieved_passage_ids"},
         languages=None,  # Applies to all languages
+        # not specifying default_threshold here will fall back to FALLBACK_THRESHOLD
     )
 )
