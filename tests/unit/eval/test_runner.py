@@ -23,6 +23,8 @@ CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
 DATASET_NAME = "testauthor_golden"
 DATASET_VERSION = "7.0"
+METRIC_NAME = "test_metric"
+METRIC_NAME_2 = "test_metric_2"
 
 
 def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
@@ -84,10 +86,10 @@ class TestRunEval:
         """Run eval with mocked chain returns EvalRun with correct structure."""
         # Arrange
         mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
-            name="retrieval_relevance", score=1.0
+            name=METRIC_NAME, score=1.0
         )))
         metric_spec = MetricSpec(
-            name="retrieval_relevance",
+            name=METRIC_NAME,
             compute=mock_compute,
             required_example_fields=set(),
             required_response_fields=set(),
@@ -114,8 +116,8 @@ class TestRunEval:
         assert len(result.example_results) == 1
         assert "overall" in result.aggregate_scores
         assert 0.0 <= result.overall_pass_rate <= 1.0
-        assert "retrieval_relevance" in result.effective_thresholds
-        assert result.effective_thresholds["retrieval_relevance"] == FALLBACK_THRESHOLD
+        assert METRIC_NAME in result.effective_thresholds
+        assert result.effective_thresholds[METRIC_NAME] == FALLBACK_THRESHOLD
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_invokes_chain_per_example(
@@ -124,10 +126,10 @@ class TestRunEval:
         """Chain.invoke called once per example."""
         # Arrange
         mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
-            name="retrieval_relevance", score=0.8
+            name=METRIC_NAME, score=0.8
         )))
         metric_spec = MetricSpec(
-            name="retrieval_relevance",
+            name=METRIC_NAME,
             compute=mock_compute,
             required_example_fields=set(),
             required_response_fields=set(),
@@ -161,10 +163,10 @@ class TestRunEval:
         This test will be more meaningful when faithfulness metrics are added.
         """
         mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
-            name="retrieval_relevance", score=0.9
+            name=METRIC_NAME, score=0.9
         )))
         metric_spec = MetricSpec(
-            name="retrieval_relevance",
+            name=METRIC_NAME,
             compute=mock_compute,
             required_example_fields=set(),
             required_response_fields=set(),
@@ -206,10 +208,10 @@ class TestRunEval:
         """Aggregate scores are present."""
         # Arrange
         mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
-            name="retrieval_relevance", score=0.85
+            name=METRIC_NAME, score=0.85
         )))
         metric_spec = MetricSpec(
-            name="retrieval_relevance",
+            name=METRIC_NAME,
             compute=mock_compute,
             required_example_fields=set(),
             required_response_fields=set(),
@@ -253,13 +255,13 @@ class TestRunEval:
         # Arrange - return different scores for different examples
         scores = [0.9, 0.5, 0.85]  # 2 pass (>= 0.8), 1 fail
         mock_compute = Mock(side_effect=[
-            MetricResult(**_metric_result_kwargs(name="retrieval_relevance", score=s))
+            MetricResult(**_metric_result_kwargs(name=METRIC_NAME, score=s))
             for s in scores
         ])
 
         # Create MetricSpec once and reuse it
         metric_spec = MetricSpec(
-            name="retrieval_relevance",
+            name=METRIC_NAME,
             compute=mock_compute,
             required_example_fields=set(),
             required_response_fields=set(),
@@ -300,10 +302,10 @@ class TestRunEval:
         chat_model: str = "test-model-v2"
         commit: str = "abc123def456"
         mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
-            name="retrieval_relevance", score=1.0
+            name=METRIC_NAME, score=1.0
         )))
         metric_spec = MetricSpec(
-            name="retrieval_relevance",
+            name=METRIC_NAME,
             compute=mock_compute,
             required_example_fields=set(),
             required_response_fields=set(),
@@ -345,12 +347,12 @@ class TestRunEval:
         # Arrange - return different scores for different examples
         scores = [0.75, 0.65, 0.85]  # With threshold 0.7: 2 pass, 1 fail
         mock_compute = Mock(side_effect=[
-            MetricResult(**_metric_result_kwargs(name="retrieval_relevance", score=s))
+            MetricResult(**_metric_result_kwargs(name=METRIC_NAME, score=s))
             for s in scores
         ])
 
         metric_spec = MetricSpec(
-            name="retrieval_relevance",
+            name=METRIC_NAME,
             compute=mock_compute,
             required_example_fields=set(),
             required_response_fields=set(),
@@ -372,7 +374,7 @@ class TestRunEval:
         from src.eval.runner import run_eval
 
         # Act - override threshold to 0.7 (lower than 0.8 of FALLBACK_THRESHOLD)
-        custom_thresholds = {"retrieval_relevance": 0.7}
+        custom_thresholds = {METRIC_NAME: 0.7}
         result = run_eval(mock_chain, dataset, override_thresholds=custom_thresholds)
 
         # Assert - verify custom threshold is used for pass/fail
@@ -383,4 +385,270 @@ class TestRunEval:
         assert result.overall_pass_rate == pytest.approx(0.667, abs=0.01)
 
         # Assert - verify custom threshold is recorded in EvalRun
-        assert result.effective_thresholds["retrieval_relevance"] == 0.7
+        assert result.effective_thresholds[METRIC_NAME] == 0.7
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_computes_all_registered_metrics(
+        self, mock_registry: Mock
+    ) -> None:
+        """All registered metrics are computed for each example."""
+        # Arrange - create two metrics
+        mock_compute_1 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        mock_compute_2 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME_2, score=0.85
+        )))
+
+        metric_spec_1 = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute_1,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        metric_spec_2 = MetricSpec(
+            name=METRIC_NAME_2,
+            compute=mock_compute_2,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
+
+        example1 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_001))
+        example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            examples=[example1, example2]
+        ))
+
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        from src.eval.runner import run_eval
+
+        # Act
+        result = run_eval(mock_chain, dataset)
+
+        # Assert - both metrics computed for each example
+        assert mock_compute_1.call_count == 2  # Called once per example
+        assert mock_compute_2.call_count == 2  # Called once per example
+
+        # Assert - both metric results appear in each example's results
+        for example_result in result.example_results:
+            metric_names = [mr.name for mr in example_result.metrics]
+            assert METRIC_NAME in metric_names
+            assert METRIC_NAME_2 in metric_names
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_aggregates_multiple_metrics(
+        self, mock_registry: Mock
+    ) -> None:
+        """Aggregate scores include all metrics."""
+        # Arrange - create two metrics with different scores
+        mock_compute_1 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        mock_compute_2 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME_2, score=0.7
+        )))
+
+        metric_spec_1 = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute_1,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        metric_spec_2 = MetricSpec(
+            name=METRIC_NAME_2,
+            compute=mock_compute_2,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
+
+        example = GoldenExample(**_golden_example_kwargs())
+        dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example]))
+
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        from src.eval.runner import run_eval
+
+        # Act
+        result = run_eval(mock_chain, dataset)
+
+        # Assert - both metrics appear in aggregate scores
+        assert "overall" in result.aggregate_scores
+        overall_scores = result.aggregate_scores["overall"]
+        assert METRIC_NAME in overall_scores
+        assert METRIC_NAME_2 in overall_scores
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_pass_fail_requires_all_metrics_pass(
+        self, mock_registry: Mock
+    ) -> None:
+        """Example passes only if ALL metrics pass their thresholds."""
+        # Arrange - create two metrics with different scores for different examples
+        # Example 1: both pass (0.9, 0.85) >= 0.8
+        # Example 2: one passes, one fails (0.9, 0.7) - one < 0.8
+        # Example 3: both fail (0.5, 0.6) < 0.8
+        scores_metric_1 = [0.9, 0.9, 0.5]
+        scores_metric_2 = [0.85, 0.7, 0.6]
+
+        mock_compute_1 = Mock(side_effect=[
+            MetricResult(**_metric_result_kwargs(name=METRIC_NAME, score=s))
+            for s in scores_metric_1
+        ])
+        mock_compute_2 = Mock(side_effect=[
+            MetricResult(**_metric_result_kwargs(name=METRIC_NAME_2, score=s))
+            for s in scores_metric_2
+        ])
+
+        metric_spec_1 = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute_1,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        metric_spec_2 = MetricSpec(
+            name=METRIC_NAME_2,
+            compute=mock_compute_2,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
+
+        example1 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_001))
+        example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
+        example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            examples=[example1, example2, example3]
+        ))
+
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        from src.eval.runner import run_eval
+
+        # Act
+        result = run_eval(mock_chain, dataset)
+
+        # Assert - only example 1 passes (both metrics >= 0.8)
+        assert result.example_results[0].passed is True   # Both pass: 0.9, 0.85
+        assert result.example_results[1].passed is False  # One fails: 0.9, 0.7
+        assert result.example_results[2].passed is False  # Both fail: 0.5, 0.6
+        assert result.overall_pass_rate == pytest.approx(0.333, abs=0.01)  # 1/3 pass
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_records_thresholds_for_all_metrics(
+        self, mock_registry: Mock
+    ) -> None:
+        """Effective thresholds recorded for all metrics."""
+        # Arrange - create two metrics with different default thresholds
+        mock_compute_1 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        mock_compute_2 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME_2, score=0.85
+        )))
+
+        metric_spec_1 = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute_1,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+            default_threshold=0.8,
+        )
+        metric_spec_2 = MetricSpec(
+            name=METRIC_NAME_2,
+            compute=mock_compute_2,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+            default_threshold=0.75,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
+
+        example = GoldenExample(**_golden_example_kwargs())
+        dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example]))
+
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        from src.eval.runner import run_eval
+
+        # Act
+        result = run_eval(mock_chain, dataset)
+
+        # Assert - both thresholds recorded
+        assert METRIC_NAME in result.effective_thresholds
+        assert METRIC_NAME_2 in result.effective_thresholds
+        assert result.effective_thresholds[METRIC_NAME] == 0.8
+        assert result.effective_thresholds[METRIC_NAME_2] == 0.75
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_filters_metrics_by_language(
+        self, mock_registry: Mock
+    ) -> None:
+        """Metrics with language restrictions only apply to matching examples."""
+        # Arrange - create two metrics
+        # Metric 1: English-only
+        # Metric 2: All languages (None)
+        mock_compute_1 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        mock_compute_2 = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME_2, score=0.85
+        )))
+
+        metric_spec_1 = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute_1,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=["en"],  # English only
+        )
+        metric_spec_2 = MetricSpec(
+            name=METRIC_NAME_2,
+            compute=mock_compute_2,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,  # All languages
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
+
+        example_en = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_001, language="en", question=QUESTION_001
+        ))
+        example_fr = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_002, language="fr", question=QUESTION_002
+        ))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            examples=[example_en, example_fr]
+        ))
+
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        from src.eval.runner import run_eval
+
+        # Act
+        result = run_eval(mock_chain, dataset)
+
+        # Assert - English example has both metrics
+        en_result = result.example_results[0]
+        en_metric_names = [mr.name for mr in en_result.metrics]
+        assert METRIC_NAME in en_metric_names     # English-only metric applies
+        assert METRIC_NAME_2 in en_metric_names   # All-language metric applies
+
+        # Assert - French example has only the all-language metric
+        fr_result = result.example_results[1]
+        fr_metric_names = [mr.name for mr in fr_result.metrics]
+        assert METRIC_NAME not in fr_metric_names  # English-only metric skipped
+        assert METRIC_NAME_2 in fr_metric_names    # All-language metric applies
