@@ -352,7 +352,7 @@ All test development in this plan follows this workflow:
        Find most recent golden dataset for an author.
 
        Filename format: {author}_{scope}_v{version}_{YYYY-MM-DD}.json
-       Example: golden__voltaire_v1.0_2026-03-28.json
+       Example: golden_voltaire_v1.0_2026-03-28.json
 
        Args:
            directory: Directory to search (usually DEFAULT_GOLDEN_DATASET_PATH)
@@ -545,10 +545,14 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
-  - Added name field to GoldenDataset schema to prevent reconstruction of a dataset name within the eval harness runner. This metadata field may be populated by the caller (e.g. script), which is appropriate because the caller will load the dataset from file.
+  - **Filenames and metadata**: 
+    - Added name field to GoldenDataset schema to prevent reconstruction of a dataset name within the eval harness runner. This metadata field may be populated by the caller (e.g. script), which is appropriate because the caller will load the dataset from file.
+    - Updated golden dataset filename convention to `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`. In the nearterm, all golden datasets will have scope `persona` to emphasize individual response quality, grounding, and persona fidelity.
+    - In this plan, remove author from filenames of eval run artifacts and reports in order to decouple eval runs from a specific author. Links to golden datasets will be persisted in other ways.
   - **EvalRun schema**: 
     - Remove author field from EvalRun because it is redundant with dataset_name and not necessary for the MVP use cases. 
     - Add dataset_created_date field to support complete traceability to a specific dataset (requires name and version and date).
+    - Update dataset_name field to reflect the new convention for naming golden datasets: `{scope}_{authors}`
   - **METRIC_REGISTRY**:
     - Implement registry pattern for metrics so that the eval runner may automatically discover all metrics (instead of updating the runner every time a metric is added).
     - Make unit tests on the runner independent from real, registered metrics and ensure scenarios with multiple metrics are tested. Only use the METRIC_REGISTRY in the integration test.
@@ -581,7 +585,7 @@ All test development in this plan follows this workflow:
    - `tests/unit/eval/test_utils.py`
    - Test cases for `save_eval_run()` (2 tests minimum):
      - `test_save_creates_directory()` - nonexistent output_dir → creates it
-     - `test_save_generates_valid_filename()` - check filename matches pattern `{author}_{timestamp}.json`
+     - `test_save_generates_valid_filename()` - check filename matches pattern `{timestamp}.json`
    - Use `tmp_path` fixture for file I/O tests
 
 4. **Add utility for saving eval run**
@@ -594,8 +598,8 @@ All test development in this plan follows this workflow:
         """
         Save EvalRun to timestamped JSON file.
 
-        Filename format: {author}_{YYYY-MM-DD}T{HH-MM-SS}.json
-        Example: voltaire_2026-03-28T14-30-45.json
+        Filename format: {YYYY-MM-DD}T{HH-MM-SS}.json
+        Example: 2026-03-28T14-30-45.json
 
         Args:
             eval_run: EvalRun object to save
@@ -606,13 +610,13 @@ All test development in this plan follows this workflow:
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-        filename = f"{eval_run.author}_{timestamp}.json"
-        filepath = output_dir / filename
+       timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+       filename = f"{timestamp}.json"
+       filepath = output_dir / filename
 
-        with filepath.open("w") as f:
-            # Convert dataclass to dict for JSON serialization
-            json.dump(asdict(eval_run), f, indent=2)
+       with filepath.open("w") as f:
+         # Pydantic serializes directly to JSON string
+         f.write(eval_run.model_dump_json(indent=2))
 
         return filepath
      ```
@@ -625,11 +629,9 @@ All test development in this plan follows this workflow:
    - Test cases (7 tests minimum):
        - `test_main_auto_discovery()` - no --golden flag → discovers latest dataset
        - `test_main_explicit_golden_path()` - --golden provided → uses that path
-       - `test_main_forwards_author()` - --author gouges → builds chain for gouges
        - `test_main_custom_output()` - --output provided → saves to custom location
        - `test_main_prints_summary()` - after eval → print_summary_table called
        - `test_main_saves_artifact()` - after eval → save_eval_run called with timestamp
-       - `test_main_invalid_author()` - --author invalid → exits with error
      - Mock all external dependencies: `discover_latest_golden_dataset`, `load_golden_dataset`, `build_chain`, `run_eval`, `save_eval_run`, `check_ollama_available`
      - Use `@patch` decorators and assert on call arguments
 
@@ -639,7 +641,6 @@ All test development in this plan follows this workflow:
      - `print_summary_table(eval_run)` helper - prints human-readable summary with scores, status icons (✅/❌), and pass rate
      - `main()` function with argparse:
        - `--golden` (optional): Path to golden dataset JSON (auto-discovers if not provided)
-       - `--author` (optional, default=`DEFAULT_AUTHOR`): Author to evaluate
        - `--output` (optional, default=`DEFAULT_EVAL_ARTIFACTS_PATH`): Output directory for artifacts
        - `--verbose` (optional): Enable debug logging
      - Calls `check_ollama_available()` at startup
@@ -652,9 +653,11 @@ All test development in this plan follows this workflow:
    def print_summary_table(eval_run: EvalRun) -> None:
        """Print human-readable summary table to stdout."""
        print("\n" + "="*70)
-       print(f"Evaluation Results: {eval_run.dataset_name} v{eval_run.dataset_version}")
-       print(f"Author: {eval_run.author}")
-       print(f"Timestamp: {eval_run.run_timestamp}")
+       print("Evaluated Dataset:")
+       print(f"\tname: {eval_run.dataset_name}")
+       print(f"\tversion: {eval_run.dataset_version}")
+       print(f"\tdate: {eval_run.dataset_date}")
+       print(f"Eval run timestamp: {eval_run.run_timestamp}")
        print(f"System: {eval_run.system_version['chat_model']} @ {eval_run.system_version['commit']}")
        print("="*70)
 
@@ -710,7 +713,7 @@ All test development in this plan follows this workflow:
   def test_run_eval_cli_end_to_end(tmp_path, mock_llm_chain):
      """Integration test: CLI loads dataset, runs eval, saves artifacts."""
      # Arrange: Create minimal golden dataset file
-     golden_path = tmp_path / "golden" / "golden_voltaire_v1.0_2026-03-29.json"
+     golden_path = tmp_path / "golden" / "persona_voltaire_v1.0_2026-03-29.json"
      golden_path.parent.mkdir(parents=True)
      # ... write minimal dataset ...
 
@@ -745,7 +748,7 @@ All test development in this plan follows this workflow:
   **Prerequisites:**
   - Ollama running (`ollama serve`)
   - Corpus ingested (`uv run python scripts/ingest.py`)
-  - Golden dataset created (`evals/golden/golden_voltaire_v1.0_*.json`)
+  - Golden dataset created (`evals/golden/persona_voltaire_v1.0_*.json`)
 
   **Run evaluation:**
   ```bash
@@ -753,10 +756,7 @@ All test development in this plan follows this workflow:
   uv run python scripts/run_eval.py
 
   # Specify dataset explicitly (for reproducibility)
-  uv run python scripts/run_eval.py --golden evals/golden/golden_{AUTHOR}_v{VERSION}_{YYYY-MM-DD}.json
-
-  # Different author (after Step 14)
-  uv run python scripts/run_eval.py --author gouges
+  uv run python scripts/run_eval.py --golden evals/golden/{SCOPE}_{AUTHOR}_v{VERSION}_{YYYY-MM-DD}.json
 
   # Enable debug logging
   uv run python scripts/run_eval.py --verbose
@@ -897,13 +897,10 @@ All test development in this plan follows this workflow:
    - Update `src/schemas/eval.py`: Add `expected_source_titles: list[str] = Field(default_factory=list, description="Expected source titles in citations")` to GoldenExample class
    - Update design notes in GoldenExample docstring to document citation field usage
 
-8. **Update golden dataset file with citation data**
-   - Modify `data/raw/golden/golden_voltaire_v1.0_*.json`
-   - Add `expected_source_titles: ["Lettres philosophiques"]` to all relevant examples
-   - Add `expected_source_titles: []` to adversarial examples (no valid sources)
-   - Update version to "1.1" in the JSON file
+8. **Add golden dataset file updated with citation data**
+   - Copy golden dataset JSON file to create new version (v1.0 → v1.1)
    - Update description to reflect addition of citation metrics
-   - Rename file to `golden_voltaire_v1.1_{current-date}.json` (schema change warrants version increment)
+   - Add `expected_source_titles: ["Lettres philosophiques"]` to all relevant examples
 
 9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
 
@@ -935,12 +932,12 @@ Compare the new artifact with the first run:
 ### Implementation
 
 1. **Create reports directory**
-   - Create `docs/reports/` directory (empty initially)
+   - Create `docs/eval_reports/` directory (empty initially)
    - **Do NOT gitignore** - narrative reports should be committed (unlike eval run artifacts)
    - **Rationale:** Evals are living artifacts that need ongoing attention. Reports document the evolution of the system over time, creating institutional memory.
 
 2. **Create report template**
-   - Create `docs/reports/TEMPLATE.md` with comprehensive structure
+   - Create `docs/eval_reports/TEMPLATE.md` with comprehensive structure
    - Template sections (see full template below):
      - Purpose: What question did this eval answer?
      - System Version: Model, prompt, tools, retrieval setup, commit
@@ -973,7 +970,7 @@ Compare the new artifact with the first run:
    - **Git Commit:** [full hash]
 
    ## Dataset
-   - **Source:** `evals/golden/golden_{author}_v{version}_{date}.json`
+   - **Source:** `evals/golden/{filename}.json`
    - **Version:** [1.0|1.1|...]
    - **Size:** [N] examples
    - **Coverage:** [Topics tested]
@@ -1030,7 +1027,7 @@ Compare the new artifact with the first run:
    **Date:** 2026-03-28
    **Author:** voltaire
    **Languages Tested:** [TODO: FR, EN|FR only|EN only]
-   **Artifact:** `evals/runs/voltaire_2026-03-28T14-30-45.json`
+   **Artifact:** `evals/runs/{filename}.json`
    **Git Commit:** a1b2c3d
 
    ## Purpose
@@ -1051,10 +1048,10 @@ Compare the new artifact with the first run:
    ```
 
 6. **Document reporting process**
-   - Create `docs/reports/README.md` explaining:
+   - Create `docs/eval_reports/README.md` explaining:
      - Purpose of narrative reports (institutional memory, decision logs, quality tracking)
      - Workflow (run eval → generate stub → fill narrative → commit)
-     - Filename convention: `{YYYY-MM-DD}_{author}_{description}.md`
+     - Filename convention: `{to be determined}.md`
      - Tips for writing reports (be specific, link commits, read artifacts, track trends)
 
 7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
@@ -1065,12 +1062,12 @@ Compare the new artifact with the first run:
   ```markdown
   **Evaluation reports:**
   Narrative reports documenting eval runs, analysis, and improvements live in
-  `docs/reports/` (committed to git, unlike artifacts).
+  `docs/eval_reports/` (committed to git, unlike artifacts).
 
   **Report workflow:**
   1. Run eval → produces `evals/runs/{timestamp}.json` artifact
   2. (Optional) Generate stub: `format_eval_report_stub(eval_run)` to auto-fill dates/scores
-  3. Create report: `docs/reports/{YYYY-MM-DD}_{author}_{description}.md`
+  3. Create report: `docs/eval_reports/{filename}.md`
   4. Fill narrative sections: Purpose, Error Analysis, Changes Made, Recommendation
   5. Commit report to git (preserves institutional memory)
 
@@ -1080,13 +1077,13 @@ Compare the new artifact with the first run:
   - Future you (6 months later) will thank you for the narrative
   - Reports align teams on priorities and quality bar
 
-  See `docs/reports/README.md` for detailed workflow and tips.
+  See `docs/eval_reports/README.md` for detailed workflow and tips.
   ```
 
 - **README:** Update "Project Structure" section:
   ```markdown
   docs/
-  └── reports/             # Narrative eval reports (committed, human-readable)
+  └── eval_reports/             # Narrative eval reports documenting improvements made based on eval runs
   ```
 
 ### Plan updates
@@ -1106,7 +1103,7 @@ This process should be repeated throughout development of subsequent sections.
 
 1. **Analyze baseline eval results**
    - User should have already run `scripts/run_eval.py` in previous subsection
-   - Open the artifact: `evals/runs/voltaire_{timestamp}.json`
+   - Open the artifact: `evals/runs/{timestamp}.json`
    - Identify failing metrics (score < threshold)
    - Read `example_results[].response.text` for failed examples
    - Categorize failure modes:
@@ -1204,7 +1201,7 @@ This process should be repeated throughout development of subsequent sections.
 
 5. **Document findings in eval report**
 
-   **Create first report:** `docs/reports/2026-03-28_voltaire_baseline-and-first-iteration.md`
+   **Create first report:** `docs/eval_reports/{filename}.md`
 
    **Use template from previous subsection:**
    - **Purpose:** "Establish baseline quality for Voltaire, then improve failing metrics"
@@ -1226,7 +1223,7 @@ This process should be repeated throughout development of subsequent sections.
 6. **Commit the report**
 
    ```bash
-   git add docs/reports/2026-03-28_voltaire_baseline-and-first-iteration.md
+   git add docs/reports/{filename}.md
    git commit -m "Document Voltaire eval baseline and first improvement iteration"
    ```
 
@@ -1263,7 +1260,7 @@ This process should be repeated throughout development of subsequent sections.
   2. **Analyze:** Read artifact, identify failing metrics and root causes
   3. **Fix:** Make targeted changes (prompts, config, dataset)
   4. **Re-run:** Measure improvements, watch for regressions
-  5. **Document:** Create report in `docs/reports/` with findings
+  5. **Document:** Create report in `docs/eval_reports/` with findings
   6. **Iterate:** Repeat until quality bar met
 
   This workflow ensures improvements are data-driven and traceable.
@@ -1274,7 +1271,7 @@ This process should be repeated throughout development of subsequent sections.
   ## Example Eval Report
 
   After establishing the Voltaire baseline and first improvement iteration,
-  see `docs/reports/2026-03-28_voltaire_baseline-and-first-iteration.md` for
+  see `docs/eval_reports/{filename}.md` for
   an example of how to document eval findings, changes, and results.
 
   Key sections:
@@ -1316,7 +1313,7 @@ This process should be repeated throughout development of subsequent sections.
 
   **Next:** Add Gouges (Step 14) and run comparative eval.
 
-  **Report:** `docs/reports/2026-03-28_voltaire_baseline-and-first-iteration.md`
+  **Report:** `docs/eval_reports/{filename}.md`
   ```
 
 ---
@@ -1417,17 +1414,15 @@ This process should be repeated throughout development of subsequent sections.
      - `expected_keywords_en: list[str] = Field(default_factory=list, description="Keywords expected in English response")`
    - Update design notes to document language-specific validation pattern
 
-11. **Update golden dataset file with keyword expectations**
-   - Modify golden dataset JSON file (v1.1 → v1.2)
+11. **Add golden dataset file updated with keyword expectations**
+   - Copy golden dataset JSON file to create new version (v1.1 → v1.2)
+   - Update description to reflect addition of faithfulness metrics
    - Add keyword fields to each example based on its language:
      - French examples: populate expected_keywords_fr, leave expected_keywords_en empty
      - English examples: populate expected_keywords_en, leave expected_keywords_fr empty
    - Example values:
      - FR tolerance: `"expected_keywords_fr": ["tolérance", "conscience", "persécution"]`
      - EN tolerance: `"expected_keywords_en": ["tolerance", "conscience", "persecution"]`
-   - Update version to "1.2" in the JSON file
-   - Update description to reflect addition of faithfulness metrics
-   - Rename file to `golden_voltaire_v1.2_{current-date}.json`
 
 12. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
 
@@ -1448,7 +1443,7 @@ After implementing language and faithfulness metrics:
    - Document language metric performance
    - Document faithfulness metric performance
    - Include delta table showing improvements
-   - Commit report to `docs/reports/`
+   - Commit report to `docs/eval_reports/`
 
 This is the first full report documenting metric additions and system improvements.
 
@@ -1523,16 +1518,14 @@ This is the first full report documenting metric additions and system improvemen
    - Update `src/schemas/eval.py`: Add `translation_pair_id: str | None = Field(None, description="Links FR/EN versions of same concept")` to GoldenExample class
    - Update design notes to document cross-language pairing pattern (both examples link with same ID, e.g., "tolerance")
 
-8. **Update golden dataset file with translation pairs**
-   - Modify golden dataset JSON file (v1.2 → v1.3)
+8. **Add golden dataset file with translation pairs**
+   - Copy golden dataset JSON file to create new version (v1.2 → v1.3)
+   - Update description to reflect addition of translation consistency metric
    - Link FR/EN pairs with matching translation_pair_id values:
      - "tolerance_fr" and "tolerance_en" → both get `"translation_pair_id": "tolerance"`
      - "pascal_fr" and "pascal_en" → both get `"translation_pair_id": "pascal"`
      - "newton_fr" and "newton_en" → both get `"translation_pair_id": "newton"`
      - Adversarial examples → `"translation_pair_id": null`
-   - Update version to "1.3" in the JSON file
-   - Update description to reflect addition of translation consistency metric
-   - Rename file to `golden_voltaire_v1.3_{current-date}.json`
 
 9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
 
@@ -1578,7 +1571,7 @@ After implementing advanced quality metrics:
    - Document response length quality
    - Compare with previous runs
    - Note any cross-language inconsistencies discovered
-   - Commit report to `docs/reports/`
+   - Commit report to `docs/eval_reports/`
 
 ### Plan updates
 
@@ -1640,16 +1633,14 @@ After implementing advanced quality metrics:
      - `forbidden_phrases_en: list[str] = Field(default_factory=list, description="Phrases forbidden in English response")`
    - Update design notes to document safety guardrail fields
 
-5. **Update golden dataset file with forbidden phrases**
-   - Modify golden dataset JSON file (v1.3 → v1.4)
+5. **Add golden dataset file updated with forbidden phrases**
+   - Copy golden dataset JSON file to create new version (v1.3 → v1.4)
+   - Update description to reflect final schema for Step 13
    - Add forbidden phrases to each example based on its language:
      - French examples: `"forbidden_phrases_fr": ["internet", "site web", "démocratie moderne", "intelligence artificielle", "je suis un AI"]`
      - English examples: `"forbidden_phrases_en": ["internet", "website", "modern democracy", "artificial intelligence", "I am an AI"]`
      - Adversarial examples: extensive forbidden phrase lists (the test cases for persona breaks)
        - Example: `"forbidden_phrases_en": ["social media", "post", "tweet", "Facebook", "internet", "I am an AI"]`
-   - Update version to "1.4" in the JSON file
-   - Update description to reflect final schema for Step 13
-   - Rename file to `golden_voltaire_v1.4_{current-date}.json` (final schema for evaluation harness)
 
 6. **(Optional) Add metadata field for extensibility**
    - If needed for future metrics, add `metadata: dict[str, Any] = Field(default_factory=dict, description="Extra fields for future metrics")` to GoldenExample class
@@ -1678,7 +1669,7 @@ After implementing safety guardrails:
      - Show metric progression over time
      - Identify strongest/weakest areas
      - Recommend next steps
-   - Commit report to `docs/reports/`
+   - Commit report to `docs/eval_reports/`
 
 ### Plan updates
 

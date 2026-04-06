@@ -165,10 +165,10 @@ Luminary uses a bespoke, automated evaluation harness to measure quality and pre
 
 **Golden datasets:**
 - Golden datasets are versioned collections of test cases that validate system behavior. Versioning allows comparing results across time and referencing the correct snapshot of data when creating eval reports. 
-- They live in `evals/golden/` (gitignored) with naming convention: `golden_{author}_v{version}_{YYYY-MM-DD}.json`
+- They live in `evals/golden/` (gitignored) with naming convention: `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`
 
 **Eval Artifacts:**
-- Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{author}_{YYYY-MM-DD}T{HH-MM-SS}.json`.
+- Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{YYYY-MM-DD}T{HH-MM-SS}.json`.
 - Contains all example results, aggregate scores, and system version metadata for traceability
 
 ## Development

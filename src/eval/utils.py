@@ -3,14 +3,18 @@
 import json
 from pathlib import Path
 
+from src.configs.authors import DEFAULT_AUTHOR
 from src.schemas.eval import GoldenDataset
 
 
 def load_golden_dataset(path: Path) -> GoldenDataset:
-    """Load and validate golden dataset from JSON file.
+    """Load and validate golden dataset from specified JSON file.
+
+    Intended to be used in conjunction with discover_latest_golden_dataset,
+    which returns the path to the most recent of versioned datasets.
 
     Args:
-        path: Path to golden dataset JSON file
+        path: Path to one specific golden dataset JSON file
 
     Returns:
         Validated GoldenDataset object
@@ -32,18 +36,18 @@ def load_golden_dataset(path: Path) -> GoldenDataset:
 
 def discover_latest_golden_dataset(
     directory: Path,
-    author: str,
-    scope: str = "golden",
+    scope: str = "persona",
+    author: str = DEFAULT_AUTHOR
 ) -> Path:
     """Find most recent golden dataset for an author.
 
-    Filename format: {scope}_{author}_v{version}_{YYYY-MM-DD}.json
-    Example: golden_voltaire_v1.0_2028-02-28.json
+    Filename format: {scope}_{authors}_v{version}_{YYYY-MM-DD}.json
+    Example: persona_voltaire_v1.0_2028-02-28.json
 
     Args:
         directory: Directory to search
-        author: Author name (e.g., "voltaire", "gouges")
-        scope: Dataset scope (default: "golden")
+        scope: Dataset scope (default: "persona")
+        author: Author name (e.g., "condorcet")
 
     Returns:
         Path to newest matching file (sorted by filename, newest first)
@@ -62,8 +66,7 @@ def discover_latest_golden_dataset(
 
     if not matches:
         raise FileNotFoundError(
-            f"No golden dataset found for author '{author}' in {directory}.\n"
-            f"Expected pattern: {pattern}\n"
+            f"No golden dataset found for '{pattern}' in {directory}."
             f"Make sure you've created the dataset file first."
         )
 

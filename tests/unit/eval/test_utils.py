@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE
 from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset
 from src.schemas.eval import GoldenDataset
@@ -16,19 +17,17 @@ from src.schemas.eval import GoldenDataset
 AUTHOR_A = "author_a"
 AUTHOR_B = "author_b"
 
-# File naming components
-DATASET_SCOPE = "golden"
+# Golden dataset components
+SCOPE = "persona"
 VERSION_OLD = "1.0"
 VERSION_NEW = "1.1"
 DATE_OLD = "2025-06-12"
 DATE_NEW = "2025-06-13"
-
-# Common filenames
 NONEXISTENT_FILE = "does_not_exist.json"
 
 # Test data constants
 VALID_DATASET_JSON = {
-    "name": f"golden_{AUTHOR_A}",
+    "name": f"persona_{AUTHOR_A}",
     "version": VERSION_OLD,
     "created_date": DATE_OLD,
     "description": "Test dataset for unit tests",
@@ -52,12 +51,12 @@ INVALID_SCHEMA_JSON = {
 MALFORMED_JSON_CONTENT = '{"version": "1.0", "created_date": "2024-05-15"'  # Missing closing brace
 
 
-def _golden_dataset_filename(author: str, version: str, date: str) -> str:
+def _golden_dataset_filename(scope: str, author: str, version: str, date: str) -> str:
     """Generate a golden dataset filename following the naming convention.
 
-    Pattern: {scope}_{author}_v{version}_{YYYY-MM-DD}.json
+    Pattern: {scope}_{authors}_v{version}_{YYYY-MM-DD}.json
     """
-    return f"{DATASET_SCOPE}_{author}_v{version}_{date}.json"
+    return f"{scope}_{author}_v{version}_{date}.json"
 
 
 # --- Tests for load_golden_dataset() ---
@@ -114,8 +113,8 @@ def test_load_invalid_schema(tmp_path: Path) -> None:
 def test_discover_finds_latest(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset returns the newest file by lexicographic sort."""
     # Create two dataset files with different versions and dates
-    older_filename = _golden_dataset_filename(AUTHOR_A, VERSION_OLD, DATE_OLD)
-    newer_filename = _golden_dataset_filename(AUTHOR_A, VERSION_NEW, DATE_NEW)
+    older_filename = _golden_dataset_filename(SCOPE, AUTHOR_A, VERSION_OLD, DATE_OLD)
+    newer_filename = _golden_dataset_filename(SCOPE, AUTHOR_A, VERSION_NEW, DATE_NEW)
 
     older_file = tmp_path / older_filename
     newer_file = tmp_path / newer_filename
@@ -136,8 +135,8 @@ def test_discover_lexicographic_sort_limitation(tmp_path: Path) -> None:
     single-digit decimals. If this becomes a problem, implement semantic version parsing.
     """
     # Create files demonstrating the limitation
-    v1_9_filename = _golden_dataset_filename(AUTHOR_A, "1.9", DATE_OLD)
-    v1_10_filename = _golden_dataset_filename(AUTHOR_A, "1.10", DATE_OLD)
+    v1_9_filename = _golden_dataset_filename(SCOPE, AUTHOR_A, "1.9", DATE_OLD)
+    v1_10_filename = _golden_dataset_filename(SCOPE, AUTHOR_A, "1.10", DATE_OLD)
 
     v1_9_file = tmp_path / v1_9_filename
     v1_10_file = tmp_path / v1_10_filename
@@ -155,7 +154,7 @@ def test_discover_lexicographic_sort_limitation(tmp_path: Path) -> None:
 
 def test_discover_no_matches(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset raises FileNotFoundError when no files match."""
-    expected_pattern = f"{DATASET_SCOPE}_{AUTHOR_A}_v*.json"
+    expected_pattern = f"{SCOPE}_{AUTHOR_A}_v*.json"
 
     with pytest.raises(FileNotFoundError) as exc_info:
         discover_latest_golden_dataset(tmp_path, author=AUTHOR_A)
@@ -165,11 +164,24 @@ def test_discover_no_matches(tmp_path: Path) -> None:
     assert str(tmp_path) in error_message
 
 
+def test_discover_defaults_to_default_author(tmp_path: Path) -> None:
+    """Test that discover_latest_golden_dataset defaults to author=DEFAULT_AUTHOR when not specified."""
+    # Create a file with default author
+    filename = _golden_dataset_filename(SCOPE, DEFAULT_AUTHOR, VERSION_OLD, DATE_OLD)
+    file_default_author = tmp_path / filename
+    file_default_author.write_text(json.dumps(VALID_DATASET_JSON))
+
+    # Call without specifying author - should find the file with default author
+    result = discover_latest_golden_dataset(tmp_path, scope="persona")
+
+    assert result == file_default_author
+    assert "persona" in result.name
+
 def test_discover_respects_author(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset filters by author parameter."""
     # Create dataset files for different authors
-    author_a_filename = _golden_dataset_filename(AUTHOR_A, VERSION_OLD, DATE_OLD)
-    author_b_filename = _golden_dataset_filename(AUTHOR_B, VERSION_OLD, DATE_OLD)
+    author_a_filename = _golden_dataset_filename(SCOPE, AUTHOR_A, VERSION_OLD, DATE_OLD)
+    author_b_filename = _golden_dataset_filename(SCOPE, AUTHOR_B, VERSION_OLD, DATE_OLD)
 
     author_a_file = tmp_path / author_a_filename
     author_b_file = tmp_path / author_b_filename
@@ -182,3 +194,37 @@ def test_discover_respects_author(tmp_path: Path) -> None:
     assert result == author_a_file
     assert AUTHOR_A in result.name
     assert AUTHOR_B not in result.name
+
+
+def test_discover_defaults_to_persona_scope(tmp_path: Path) -> None:
+    """Test that discover_latest_golden_dataset defaults to scope='persona' when not specified."""
+    # Create a file with scope "persona"
+    persona_filename = _golden_dataset_filename("persona", AUTHOR_A, VERSION_OLD, DATE_OLD)
+    persona_file = tmp_path / persona_filename
+    persona_file.write_text(json.dumps(VALID_DATASET_JSON))
+
+    # Call without specifying scope - should find the "persona" file
+    result = discover_latest_golden_dataset(tmp_path, author=AUTHOR_A)
+
+    assert result == persona_file
+    assert "persona" in result.name
+
+
+def test_discover_respects_scope_override(tmp_path: Path) -> None:
+    """Test that discover_latest_golden_dataset can override the default scope."""
+    # Create files with different scopes
+    persona_filename = _golden_dataset_filename("persona", AUTHOR_A, VERSION_OLD, DATE_OLD)
+    debate_filename = _golden_dataset_filename("debate", AUTHOR_A, VERSION_OLD, DATE_OLD)
+
+    persona_file = tmp_path / persona_filename
+    debate_file = tmp_path / debate_filename
+
+    persona_file.write_text(json.dumps(VALID_DATASET_JSON))
+    debate_file.write_text(json.dumps(VALID_DATASET_JSON))
+
+    # Call with explicit scope="debate" - should find the debate file, not persona
+    result = discover_latest_golden_dataset(tmp_path, scope="debate", author=AUTHOR_A)
+
+    assert result == debate_file
+    assert "debate" in result.name
+    assert "persona" not in result.name
