@@ -2,6 +2,7 @@
 
 import pytest
 
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
 from src.utils.formatting import deduplicate_sources, format_sources
 
@@ -14,7 +15,7 @@ def response_no_sources() -> ChatResponse:
         retrieved_contexts=[],
         retrieved_passage_ids=[],
         retrieved_source_titles=[],
-        language="en",
+        language=ENGLISH_ISO_CODE,
     )
 
 
@@ -26,7 +27,7 @@ def response_with_sources() -> ChatResponse:
         retrieved_contexts=["Context A", "Context B", "Context C"],
         retrieved_passage_ids=["id1", "id2", "id3"],
         retrieved_source_titles=["Source A", "Source B", "Source C"],
-        language="en",
+        language=ENGLISH_ISO_CODE,
     )
 
 
@@ -38,7 +39,7 @@ def response_with_duplicate_sources() -> ChatResponse:
         retrieved_contexts=["Context A", "Context B", "Context C", "Context D"],
         retrieved_passage_ids=["id1", "id2", "id3", "id4"],
         retrieved_source_titles=["Source A", "Source B", "Source A", "Source C"],
-        language="en",
+        language=ENGLISH_ISO_CODE,
     )
 
 
@@ -69,7 +70,7 @@ class TestDeduplicateSources:
             retrieved_contexts=["A", "B", "C"],
             retrieved_passage_ids=["1", "2", "3"],
             retrieved_source_titles=["First", "Second", "First"],
-            language="en",
+            language=ENGLISH_ISO_CODE,
         )
         result = deduplicate_sources(response)
         # First occurrence of "First" should be at index 0
@@ -81,23 +82,23 @@ class TestFormatSources:
 
     def test_no_sources_english(self, response_no_sources: ChatResponse) -> None:
         """Test format with no sources in English."""
-        result = format_sources(response_no_sources, "en")
+        result = format_sources(response_no_sources, ENGLISH_ISO_CODE)
         assert result == "**Sources:** none"
 
     def test_no_sources_french(self, response_no_sources: ChatResponse) -> None:
         """Test format with no sources in French."""
-        result = format_sources(response_no_sources, "fr")
+        result = format_sources(response_no_sources, FRENCH_ISO_CODE)
         assert result == "**Sources :** aucune"
 
     def test_with_sources_english(self, response_with_sources: ChatResponse) -> None:
         """Test format with sources in English."""
-        result = format_sources(response_with_sources, "en")
+        result = format_sources(response_with_sources, ENGLISH_ISO_CODE)
         expected = "**Sources:**\n- Source A\n- Source B\n- Source C"
         assert result == expected
 
     def test_with_sources_french(self, response_with_sources: ChatResponse) -> None:
         """Test format with sources in French."""
-        result = format_sources(response_with_sources, "fr")
+        result = format_sources(response_with_sources, FRENCH_ISO_CODE)
         expected = "**Sources :**\n- Source A\n- Source B\n- Source C"
         assert result == expected
 
@@ -105,7 +106,7 @@ class TestFormatSources:
         self, response_with_duplicate_sources: ChatResponse
     ) -> None:
         """Test that format_sources deduplicates before formatting."""
-        result = format_sources(response_with_duplicate_sources, "en")
+        result = format_sources(response_with_duplicate_sources, ENGLISH_ISO_CODE)
         # Should only show unique sources: A, B, C (not A twice)
         expected = "**Sources:**\n- Source A\n- Source B\n- Source C"
         assert result == expected
@@ -124,9 +125,9 @@ class TestFormatSources:
             retrieved_contexts=["Context"],
             retrieved_passage_ids=["id1"],
             retrieved_source_titles=["Only Source"],
-            language="en",
+            language=ENGLISH_ISO_CODE,
         )
-        result = format_sources(response, "en")
+        result = format_sources(response, ENGLISH_ISO_CODE)
         expected = "**Sources:**\n- Only Source"
         assert result == expected
 
@@ -137,8 +138,8 @@ class TestFormatSources:
             retrieved_contexts=["Contexte"],
             retrieved_passage_ids=["id1"],
             retrieved_source_titles=["Seule Source"],
-            language="fr",
+            language=FRENCH_ISO_CODE,
         )
-        result = format_sources(response, "fr")
+        result = format_sources(response, FRENCH_ISO_CODE)
         expected = "**Sources :**\n- Seule Source"
         assert result == expected

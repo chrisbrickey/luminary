@@ -16,5 +16,13 @@ DEFAULT_CHAT_MODEL = "mistral"
 # Default embedding model for vector store operations
 DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
 
+# Language codes (ISO 639-1)
+ENGLISH_ISO_CODE = "en"
+FRENCH_ISO_CODE = "fr"
+GERMAN_ISO_CODE = "de"
+ITALIAN_ISO_CODE = "it"
+SPANISH_ISO_CODE = "es"
+SWAHILI_ISO_CODE = "sw"
+
 # Default response language (overridden by language detected in user's prompt)
-DEFAULT_RESPONSE_LANGUAGE = "en"
+DEFAULT_RESPONSE_LANGUAGE = ENGLISH_ISO_CODE

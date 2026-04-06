@@ -12,11 +12,12 @@ External dependencies (LLM, embeddings) are faked to avoid network calls.
 import pytest
 
 from src.chains.chat_chain import build_chain
+from src.configs.authors import DEFAULT_AUTHOR
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
 from src.vectorstores.chroma import embed_and_store
 from src.vectorstores.retriever import build_retriever
 from tests.conftest import FakeChatModel
-from src.configs.authors import DEFAULT_AUTHOR
 
 # Test constants
 AUTHOR_1 = "test-author-1"
@@ -292,7 +293,7 @@ def test_full_rag_chain_with_retrieval(
     chain = integration_chain_setup(chunks)
 
     # Invoke chain with language parameter to override language detection
-    response = chain.invoke(TEST_QUESTION, language="fr")
+    response = chain.invoke(TEST_QUESTION, language=FRENCH_ISO_CODE)
 
     # Verify response structure
     assert isinstance(response, ChatResponse)
@@ -313,7 +314,7 @@ def test_full_rag_chain_with_retrieval(
     assert "Lettres philosophiques, page 7" in response.retrieved_source_titles
 
     # Verify language
-    assert response.language == "fr"
+    assert response.language == FRENCH_ISO_CODE
 
     # Verify contexts match original content
     contexts_set = set(response.retrieved_contexts)
@@ -367,7 +368,7 @@ def test_rag_chain_handles_missing_metadata(
     chain = integration_chain_setup(chunks)
 
     # Invoke with English language
-    response = chain.invoke("test question", language="en")
+    response = chain.invoke("test question", language=ENGLISH_ISO_CODE)
 
     # Verify all source titles are present with appropriate fallbacks
     assert len(response.retrieved_source_titles) == 3
@@ -377,7 +378,7 @@ def test_rag_chain_handles_missing_metadata(
     assert "https://example.com/doc3" in response.retrieved_source_titles
 
     # Verify language
-    assert response.language == "en"
+    assert response.language == ENGLISH_ISO_CODE
 
 
 def test_rag_chain_does_not_expose_chunk_ids_to_llm(
@@ -436,7 +437,7 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
     )
 
     # Invoke chain with French language
-    response = chain.invoke("test question", language="fr")
+    response = chain.invoke("test question", language=FRENCH_ISO_CODE)
 
     # VERIFY: Chunk IDs ARE available in the response metadata (for --show-chunks)
     assert "secret_id_001" in response.retrieved_passage_ids

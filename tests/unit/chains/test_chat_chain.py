@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 
 from src.chains.chat_chain import build_chain
-from src.configs.common import DEFAULT_CHAT_MODEL, DEFAULT_RESPONSE_LANGUAGE
+from src.configs.common import DEFAULT_CHAT_MODEL, DEFAULT_RESPONSE_LANGUAGE, GERMAN_ISO_CODE
 
 # Test constants
 SAMPLE_QUESTION = "What do you think is the most important question in philosophy?"
@@ -277,13 +277,12 @@ class TestBuildChain:
             )
 
             # Use language parameter in invoke
-            german_code = "de"
-            response = chain.invoke(SAMPLE_QUESTION, language=german_code)
+            response = chain.invoke(SAMPLE_QUESTION, language=GERMAN_ISO_CODE)
 
             # Verify custom components were used
             mock_retriever.invoke.assert_called_once_with(SAMPLE_QUESTION)
             mock_llm.invoke.assert_called_once()
-            assert response.language == german_code
+            assert response.language == GERMAN_ISO_CODE
 
         def test_chain_end_to_end_with_documents(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response

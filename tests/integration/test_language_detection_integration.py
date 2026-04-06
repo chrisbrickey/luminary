@@ -11,8 +11,14 @@ from unittest.mock import patch
 import pytest
 
 from src.chains.chat_chain import build_chain
-from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
 from src.configs.authors import DEFAULT_AUTHOR
+from src.configs.common import (
+    DEFAULT_RESPONSE_LANGUAGE,
+    ENGLISH_ISO_CODE,
+    FRENCH_ISO_CODE,
+    ITALIAN_ISO_CODE,
+    SPANISH_ISO_CODE,
+)
 from tests.conftest import FakeChatModel, FakeEmbeddings
 
 # Test questions in different languages
@@ -64,7 +70,7 @@ class TestLanguageDetectionIntegration:
         response = chain.invoke(FRENCH_QUESTION, language=detected_lang)
 
         # Verify language was detected and set in response
-        assert response.language == "fr"
+        assert response.language == FRENCH_ISO_CODE
         assert response.text is not None
         assert len(response.retrieved_passage_ids) > 0
 
@@ -80,11 +86,11 @@ class TestLanguageDetectionIntegration:
         response = chain.invoke(ENGLISH_QUESTION, language=detected_lang)
 
         # Verify language was detected and set in response
-        assert response.language == "en"
+        assert response.language == ENGLISH_ISO_CODE
         assert response.text is not None
 
     def test_italian_question_detected_as_italian(self, test_retriever) -> None:
-        """Should detect Italian (not in SUPPORTED_LANGUAGES) and still pass 'it' to chain.
+        """Should detect Italian (not in LOCALIZATION_LANGUAGES) and still pass 'it' to chain.
 
         This tests that detection works for any language, even if UI strings
         aren't available for it. The UI will fall back to English for formatting,
@@ -99,8 +105,8 @@ class TestLanguageDetectionIntegration:
         chain = build_chain(retriever=test_retriever, llm=FakeChatModel())
         response = chain.invoke(ITALIAN_QUESTION, language=detected_lang)
 
-        # Verify Italian was detected (even though not in SUPPORTED_LANGUAGES)
-        assert response.language == "it"
+        # Verify Italian was detected (even though not in LOCALIZATION_LANGUAGES)
+        assert response.language == ITALIAN_ISO_CODE
         assert response.text is not None
 
     def test_config_overrides_detection(self, test_retriever) -> None:
@@ -109,10 +115,10 @@ class TestLanguageDetectionIntegration:
         chain = build_chain(retriever=test_retriever, llm=FakeChatModel())
 
         # English question but language parameter forces Spanish
-        response = chain.invoke(ENGLISH_QUESTION, language="es")
+        response = chain.invoke(ENGLISH_QUESTION, language=SPANISH_ISO_CODE)
 
         # Should use config, not detected language
-        assert response.language == "es"
+        assert response.language == SPANISH_ISO_CODE
 
     @patch("src.utils.language.detect_langs")
     def test_detection_failure_fallback(

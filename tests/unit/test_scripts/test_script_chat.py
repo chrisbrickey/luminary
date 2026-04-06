@@ -7,6 +7,7 @@ import pytest
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.configs.authors import AuthorConfig, DEFAULT_AUTHOR
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
 
 # Test constants (for use in tests - not necessarily the actual defaults)
@@ -43,7 +44,7 @@ def create_mock_response(
     chunk_ids: list[str] | None = None,
     contexts: list[str] | None = None,
     source_titles: list[str] | None = None,
-    language: str = "fr",
+    language: str = FRENCH_ISO_CODE,
 ) -> ChatResponse:
     """Create a mock ChatResponse for testing.
 
@@ -230,9 +231,9 @@ class TestRunInteractiveChat:
 
         # Setup mocks
         mock_ollama.return_value = None
-        mock_detect.return_value = "fr"
+        mock_detect.return_value = FRENCH_ISO_CODE
         mock_chain = MagicMock()
-        mock_chain.invoke.return_value = create_mock_response(language="fr")
+        mock_chain.invoke.return_value = create_mock_response(language=FRENCH_ISO_CODE)
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
 
@@ -254,7 +255,7 @@ class TestRunInteractiveChat:
 
         # Verify chain invoked with detected language
         mock_chain.invoke.assert_called_once_with(
-            TEST_QUESTION, language="fr"
+            TEST_QUESTION, language=FRENCH_ISO_CODE
         )
 
     @patch("scripts.chat.build_chain")
@@ -389,10 +390,10 @@ class TestRunInteractiveChat:
 
         # Setup mocks
         mock_ollama.return_value = None
-        mock_detect.return_value = "en"  # Detect English
+        mock_detect.return_value = ENGLISH_ISO_CODE  # Detect English
         mock_chain = MagicMock()
         # Response language matches detected language
-        mock_chain.invoke.return_value = create_mock_response(language="en")
+        mock_chain.invoke.return_value = create_mock_response(language=ENGLISH_ISO_CODE)
         mock_build_chain.return_value = mock_chain
         mock_input.side_effect = [TEST_QUESTION, "quit"]
 
@@ -567,9 +568,9 @@ class TestRunInteractiveChat:
 
         # Setup mocks
         mock_ollama.return_value = None
-        mock_detect.return_value = "en"
+        mock_detect.return_value = ENGLISH_ISO_CODE
         mock_chain = MagicMock()
-        mock_chain.invoke.return_value = create_mock_response(language="en")
+        mock_chain.invoke.return_value = create_mock_response(language=ENGLISH_ISO_CODE)
         mock_build_chain.return_value = mock_chain
 
         questions = ["Question 1?", "Question 2?", "Question 3?", "quit"]
@@ -589,9 +590,9 @@ class TestRunInteractiveChat:
         assert mock_chain.invoke.call_count == 3
         mock_chain.invoke.assert_has_calls(
             [
-                call("Question 1?", language="en"),
-                call("Question 2?", language="en"),
-                call("Question 3?", language="en"),
+                call("Question 1?", language=ENGLISH_ISO_CODE),
+                call("Question 2?", language=ENGLISH_ISO_CODE),
+                call("Question 3?", language=ENGLISH_ISO_CODE),
             ]
         )
 

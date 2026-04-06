@@ -19,6 +19,7 @@ These tests are EXCLUDED from the default test run.
 import pytest
 
 from src.chains.chat_chain import build_chain, ChatResponse
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE, GERMAN_ISO_CODE
 
 # Mark all tests in this module as external
 pytestmark = pytest.mark.external
@@ -89,12 +90,11 @@ class TestRealLLMLanguageHandling:
         4. LLM actually responds in French
         """
         # Build and invoke chain
-        french_code = "fr"
         chain = build_chain()
-        response = chain.invoke(FRENCH_QUESTION, language=french_code)
+        response = chain.invoke(FRENCH_QUESTION, language=FRENCH_ISO_CODE)
 
         # Verify basic response properties
-        assert_valid_response(response, french_code)
+        assert_valid_response(response, FRENCH_ISO_CODE)
 
         # Verify response is actually in French (simple heuristic check)
         # French text typically contains common words like: la, le, de, les, est, que
@@ -106,12 +106,11 @@ class TestRealLLMLanguageHandling:
     def test_english_question_llm_responds_in_english(self) -> None:
         """Should detect English question and LLM should respond in English."""
         # Build and invoke chain
-        english_code = "en"
         chain = build_chain()
-        response = chain.invoke(ENGLISH_QUESTION, language=english_code)
+        response = chain.invoke(ENGLISH_QUESTION, language=ENGLISH_ISO_CODE)
 
         # Verify basic response properties
-        assert_valid_response(response, english_code)
+        assert_valid_response(response, ENGLISH_ISO_CODE)
 
         # Verify response is actually in English (simple heuristic check)
         # English text typically contains common words: the, is, of, and, to, in, a
@@ -121,19 +120,18 @@ class TestRealLLMLanguageHandling:
         )
 
     def test_german_question_llm_responds_in_german(self) -> None:
-        """Should detect German (unsupported UI language) and LLM should respond in German.
+        """Should detect German (unsupported for localization) and LLM should respond in German.
 
-        This tests that even though German is not in SUPPORTED_LANGUAGES
+        This tests that even though German is not in LOCALIZATION_LANGUAGES
         (no localization of UI strings), the content retrieved from the LLM
         is in the detected language. The UI strings will fall back to the
         default language, but the LLM response content should be in German.
         """
-        german_code = "de"
         chain = build_chain()
-        response = chain.invoke(GERMAN_QUESTION, language=german_code)
+        response = chain.invoke(GERMAN_QUESTION, language=GERMAN_ISO_CODE)
 
         # Verify basic response properties
-        assert_valid_response(response, german_code)
+        assert_valid_response(response, GERMAN_ISO_CODE)
 
         # Verify response is actually in German (simple heuristic check)
         german_indicators = [" der ", " die ", " das ", " ist ", " eine ", " und ", " den "]

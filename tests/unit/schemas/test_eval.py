@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
@@ -37,7 +38,7 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": EXAMPLE_ID,
         "question": QUESTION_TEXT,
-        "language": "en",
+        "language": ENGLISH_ISO_CODE,
         "expected_chunk_ids": [],
     }
     defaults.update(overrides)
@@ -64,7 +65,7 @@ def _chat_response_kwargs(**overrides: Any) -> dict[str, Any]:
         "retrieved_passage_ids": ["chunk_001", "chunk_002"],
         "retrieved_contexts": ["Context 1", "Context 2"],
         "retrieved_source_titles": ["Source A", "Source B"],
-        "language": "en",
+        "language": ENGLISH_ISO_CODE,
     }
     defaults.update(overrides)
     return defaults
@@ -75,7 +76,7 @@ def _example_result_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "example_id": EXAMPLE_ID,
         "question": QUESTION_TEXT,
-        "language": "en",
+        "language": ENGLISH_ISO_CODE,
         "response": ChatResponse(**_chat_response_kwargs()),
         "metrics": [],
         "passed": True,
@@ -150,7 +151,7 @@ class TestGoldenExample:
         example = GoldenExample(**_golden_example_kwargs())
         assert example.id == EXAMPLE_ID
         assert example.question == QUESTION_TEXT
-        assert example.language == "en"
+        assert example.language == ENGLISH_ISO_CODE
         assert example.expected_chunk_ids == []
 
     def test_construction_with_chunk_ids(self) -> None:
@@ -159,8 +160,8 @@ class TestGoldenExample:
         assert example.expected_chunk_ids == chunk_ids
 
     def test_language_french(self) -> None:
-        example = GoldenExample(**_golden_example_kwargs(language="fr"))
-        assert example.language == "fr"
+        example = GoldenExample(**_golden_example_kwargs(language=FRENCH_ISO_CODE))
+        assert example.language == FRENCH_ISO_CODE
 
     def test_language_invalid_pattern_raises(self) -> None:
         with pytest.raises(ValidationError, match="pattern"):
@@ -201,7 +202,7 @@ class TestGoldenDataset:
 
     def test_construction_with_examples(self) -> None:
         example1 = GoldenExample(**_golden_example_kwargs(id="example_001"))
-        example2 = GoldenExample(**_golden_example_kwargs(id="example_002", language="fr"))
+        example2 = GoldenExample(**_golden_example_kwargs(id="example_002", language=FRENCH_ISO_CODE))
         dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example1, example2]))
         assert len(dataset.examples) == 2
         assert dataset.examples[0].id == "example_001"
@@ -240,7 +241,7 @@ class TestExampleResult:
         result = ExampleResult(**_example_result_kwargs())
         assert result.example_id == EXAMPLE_ID
         assert result.question == QUESTION_TEXT
-        assert result.language == "en"
+        assert result.language == ENGLISH_ISO_CODE
         assert isinstance(result.response, ChatResponse)
         assert result.metrics == []
         assert result.passed is True
@@ -292,8 +293,8 @@ class TestEvalRun:
         aggregate_scores = {
             "overall": {"metric_a": 0.85, "metric_b": 0.90},
             "by_language": {
-                "en": {"metric_a": 0.87, "metric_b": 0.92},
-                "fr": {"metric_a": 0.83, "metric_b": 0.88}
+                ENGLISH_ISO_CODE: {"metric_a": 0.87, "metric_b": 0.92},
+                FRENCH_ISO_CODE: {"metric_a": 0.83, "metric_b": 0.88}
             },
             "cross_language": {"translation_consistency": 0.75}
         }
@@ -301,4 +302,4 @@ class TestEvalRun:
         assert "overall" in run.aggregate_scores
         assert "by_language" in run.aggregate_scores
         assert "cross_language" in run.aggregate_scores
-        assert run.aggregate_scores["by_language"]["en"]["metric_a"] == 0.87
+        assert run.aggregate_scores["by_language"][ENGLISH_ISO_CODE]["metric_a"] == 0.87

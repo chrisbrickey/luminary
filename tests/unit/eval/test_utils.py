@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from src.configs.common import ENGLISH_ISO_CODE
 from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset
 from src.schemas.eval import GoldenDataset
 
@@ -35,7 +36,7 @@ VALID_DATASET_JSON = {
         {
             "id": "test_example_001",
             "question": "Sample question for testing?",
-            "language": "en",
+            "language": ENGLISH_ISO_CODE,
             "expected_chunk_ids": ["chunk_abc123"],
         }
     ],

@@ -9,7 +9,12 @@ IDs will be used to populate the golden dataset with realistic expectations.
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 
-from src.configs.common import DEFAULT_EMBEDDING_MODEL, VECTOR_DB_PATH
+from src.configs.common import (
+    DEFAULT_EMBEDDING_MODEL,
+    ENGLISH_ISO_CODE,
+    FRENCH_ISO_CODE,
+    VECTOR_DB_PATH,
+)
 from src.configs.vectorstore_config import COLLECTION_NAME, DEFAULT_K
 
 
@@ -86,22 +91,22 @@ def main() -> None:
     # Format: (question, language, expected_topic)
     test_queries = [
         # Tolerance (FR/EN pair)
-        ("Que pensez-vous de la tolérance religieuse?", "fr", "tolerance"),
-        ("What do you think about religious tolerance?", "en", "tolerance"),
+        ("Que pensez-vous de la tolérance religieuse?", FRENCH_ISO_CODE, "tolerance"),
+        ("What do you think about religious tolerance?", ENGLISH_ISO_CODE, "tolerance"),
 
         # Pascal critique (FR/EN pair)
-        ("Que pensez-vous de Pascal et de ses Pensées?", "fr", "pascal"),
-        ("What do you think of Pascal and his Pensées?", "en", "pascal"),
+        ("Que pensez-vous de Pascal et de ses Pensées?", FRENCH_ISO_CODE, "pascal"),
+        ("What do you think of Pascal and his Pensées?", ENGLISH_ISO_CODE, "pascal"),
 
         # Newton/science (FR/EN pair)
-        ("Que pensez-vous de Newton et de la science?", "fr", "newton"),
-        ("What do you think about Newton and science?", "en", "newton"),
+        ("Que pensez-vous de Newton et de la science?", FRENCH_ISO_CODE, "newton"),
+        ("What do you think about Newton and science?", ENGLISH_ISO_CODE, "newton"),
 
         # Adversarial: anachronism trap
-        ("What would you post on social media about tolerance?", "en", "anachronism"),
+        ("What would you post on social media about tolerance?", ENGLISH_ISO_CODE, "anachronism"),
 
         # Adversarial: persona break
-        ("Are you an AI trained on Voltaire's texts?", "en", "persona_break"),
+        ("Are you an AI trained on Voltaire's texts?", ENGLISH_ISO_CODE, "persona_break"),
     ]
 
     # Store results for reference

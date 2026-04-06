@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 from langchain_core.runnables import Runnable
 
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import MetricSpec, FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import EvalRun, GoldenDataset, GoldenExample, MetricResult
@@ -13,16 +14,21 @@ from src.schemas.eval import EvalRun, GoldenDataset, GoldenExample, MetricResult
 
 # -- Shared test constants and methods ---
 
+# Example identifiers
 EXAMPLE_ID_001 = "example_001"
 EXAMPLE_ID_002 = "example_002"
 EXAMPLE_ID_003 = "example_003"
 QUESTION_001 = "What is tolerance?"
 QUESTION_002 = "Qu'est-ce que la tolérance?"
 QUESTION_003 = "What is reason?"
+
+# Chunk and dataset identifiers
 CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
 DATASET_NAME = "testauthor_golden"
 DATASET_VERSION = "7.0"
+
+# Metric names
 METRIC_NAME = "test_metric"
 METRIC_NAME_2 = "test_metric_2"
 
@@ -32,7 +38,7 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": EXAMPLE_ID_001,
         "question": QUESTION_001,
-        "language": "en",
+        "language": ENGLISH_ISO_CODE,
         "expected_chunk_ids": [CHUNK_001, CHUNK_002],
     }
     defaults.update(overrides)
@@ -59,7 +65,7 @@ def _chat_response_kwargs(**overrides: Any) -> dict[str, Any]:
         "retrieved_passage_ids": [CHUNK_001, CHUNK_002],
         "retrieved_contexts": ["Context 1", "Context 2"],
         "retrieved_source_titles": ["Source A"],
-        "language": "en",
+        "language": ENGLISH_ISO_CODE,
     }
     defaults.update(overrides)
     return defaults
@@ -175,13 +181,13 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
 
         example_en_1 = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_001, language="en", question=QUESTION_001
+            id=EXAMPLE_ID_001, language=ENGLISH_ISO_CODE, question=QUESTION_001
         ))
         example_fr_1 = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_002, language="fr", question=QUESTION_002
+            id=EXAMPLE_ID_002, language=FRENCH_ISO_CODE, question=QUESTION_002
         ))
         example_en_2 = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_003, language="en", question=QUESTION_003
+            id=EXAMPLE_ID_003, language=ENGLISH_ISO_CODE, question=QUESTION_003
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
             examples=[example_en_1, example_fr_1, example_en_2]
@@ -197,9 +203,9 @@ class TestRunEval:
 
         # Assert all languages processed and recorded
         assert len(result.example_results) == 3
-        assert result.example_results[0].language == "en"
-        assert result.example_results[1].language == "fr"
-        assert result.example_results[2].language == "en"
+        assert result.example_results[0].language == ENGLISH_ISO_CODE
+        assert result.example_results[1].language == FRENCH_ISO_CODE
+        assert result.example_results[2].language == ENGLISH_ISO_CODE
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_aggregates_scores(
@@ -220,13 +226,13 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
 
         example_en_1 = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_001, language="en", question=QUESTION_001
+            id=EXAMPLE_ID_001, language=ENGLISH_ISO_CODE, question=QUESTION_001
         ))
         example_fr_1 = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_002, language="fr", question=QUESTION_002
+            id=EXAMPLE_ID_002, language=FRENCH_ISO_CODE, question=QUESTION_002
         ))
         example_en_2 = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_003, language="en", question=QUESTION_003
+            id=EXAMPLE_ID_003, language=ENGLISH_ISO_CODE, question=QUESTION_003
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
             examples=[example_en_1, example_fr_1, example_en_2]
@@ -243,8 +249,8 @@ class TestRunEval:
         # Assert; cross_language will be added when appropriate metrics are added
         assert "overall" in result.aggregate_scores # No assertion on the value returned because that value is mocked
         assert "by_language" in result.aggregate_scores
-        assert "en" in result.aggregate_scores["by_language"]
-        assert "fr" in result.aggregate_scores["by_language"]
+        assert ENGLISH_ISO_CODE in result.aggregate_scores["by_language"]
+        assert FRENCH_ISO_CODE in result.aggregate_scores["by_language"]
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_calculates_pass_rate(
@@ -612,7 +618,7 @@ class TestRunEval:
             compute=mock_compute_1,
             required_example_fields=set(),
             required_response_fields=set(),
-            languages=["en"],  # English only
+            languages=[ENGLISH_ISO_CODE],  # English only
         )
         metric_spec_2 = MetricSpec(
             name=METRIC_NAME_2,
@@ -624,10 +630,10 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
 
         example_en = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_001, language="en", question=QUESTION_001
+            id=EXAMPLE_ID_001, language=ENGLISH_ISO_CODE, question=QUESTION_001
         ))
         example_fr = GoldenExample(**_golden_example_kwargs(
-            id=EXAMPLE_ID_002, language="fr", question=QUESTION_002
+            id=EXAMPLE_ID_002, language=FRENCH_ISO_CODE, question=QUESTION_002
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
             examples=[example_en, example_fr]

@@ -15,6 +15,7 @@ from unittest.mock import Mock
 import pytest
 from langchain_core.runnables import Runnable
 
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.eval.runner import run_eval
 from src.schemas.chat import ChatResponse
@@ -23,21 +24,25 @@ from src.schemas.eval import GoldenDataset, GoldenExample
 
 # -- Test constants ---
 
+# Example identifiers
 EXAMPLE_ID_EN_001 = "example_en_001"
 EXAMPLE_ID_EN_002 = "example_en_002"
 EXAMPLE_ID_FR_001 = "example_fr_001"
 EXAMPLE_ID_FR_002 = "example_fr_002"
 
+# Questions
 QUESTION_EN_001 = "What is tolerance?"
 QUESTION_EN_002 = "What is reason?"
 QUESTION_FR_001 = "Qu'est-ce que la tolérance?"
 QUESTION_FR_002 = "Qu'est-ce que la raison?"
 
+# Chunk identifiers
 CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
 CHUNK_003 = "chunk_003"
 CHUNK_004 = "chunk_004"
 
+# Dataset metadata
 DATASET_NAME = "testauthor_golden"
 DATASET_VERSION = "8.0"
 
@@ -50,7 +55,7 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": EXAMPLE_ID_EN_001,
         "question": QUESTION_EN_001,
-        "language": "en",
+        "language": ENGLISH_ISO_CODE,
         "expected_chunk_ids": [CHUNK_001, CHUNK_002],
     }
     defaults.update(overrides)
@@ -77,7 +82,7 @@ def _chat_response_kwargs(**overrides: Any) -> dict[str, Any]:
         "retrieved_passage_ids": [CHUNK_001, CHUNK_002],
         "retrieved_contexts": ["Context 1", "Context 2"],
         "retrieved_source_titles": ["Source A"],
-        "language": "en",
+        "language": ENGLISH_ISO_CODE,
     }
     defaults.update(overrides)
     return defaults
@@ -107,7 +112,7 @@ def test_eval_runner_end_to_end() -> None:
         **_golden_example_kwargs(
             id=EXAMPLE_ID_EN_001,
             question=QUESTION_EN_001,
-            language="en",
+            language=ENGLISH_ISO_CODE,
             expected_chunk_ids=[CHUNK_001, CHUNK_002],
         )
     )
@@ -115,7 +120,7 @@ def test_eval_runner_end_to_end() -> None:
         **_golden_example_kwargs(
             id=EXAMPLE_ID_EN_002,
             question=QUESTION_EN_002,
-            language="en",
+            language=ENGLISH_ISO_CODE,
             expected_chunk_ids=[CHUNK_003],
         )
     )
@@ -123,7 +128,7 @@ def test_eval_runner_end_to_end() -> None:
         **_golden_example_kwargs(
             id=EXAMPLE_ID_FR_001,
             question=QUESTION_FR_001,
-            language="fr",
+            language=FRENCH_ISO_CODE,
             expected_chunk_ids=[CHUNK_001, CHUNK_002],
         )
     )
@@ -144,7 +149,7 @@ def test_eval_runner_end_to_end() -> None:
             retrieved_passage_ids=[CHUNK_001, CHUNK_002],  # Perfect match
             retrieved_contexts=["Context 1", "Context 2"],
             retrieved_source_titles=["Source A"],
-            language="en",
+            language=ENGLISH_ISO_CODE,
         )
     )
     response_pass_2 = ChatResponse(
@@ -153,7 +158,7 @@ def test_eval_runner_end_to_end() -> None:
             retrieved_passage_ids=[CHUNK_003],  # Perfect match
             retrieved_contexts=["Context 3"],
             retrieved_source_titles=["Source B"],
-            language="en",
+            language=ENGLISH_ISO_CODE,
         )
     )
     response_fail = ChatResponse(
@@ -162,7 +167,7 @@ def test_eval_runner_end_to_end() -> None:
             retrieved_passage_ids=[CHUNK_003, CHUNK_004],  # No overlap with expected
             retrieved_contexts=["Contexte 3", "Contexte 4"],
             retrieved_source_titles=["Source C"],
-            language="fr",
+            language=FRENCH_ISO_CODE,
         )
     )
 
@@ -284,7 +289,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
         **_golden_example_kwargs(
             id=EXAMPLE_ID_EN_001,
             question=QUESTION_EN_001,
-            language="en",
+            language=ENGLISH_ISO_CODE,
             expected_chunk_ids=[CHUNK_001],
         )
     )
@@ -292,7 +297,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
         **_golden_example_kwargs(
             id=EXAMPLE_ID_EN_002,
             question=QUESTION_EN_002,
-            language="en",
+            language=ENGLISH_ISO_CODE,
             expected_chunk_ids=[CHUNK_002],
         )
     )
@@ -300,7 +305,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
         **_golden_example_kwargs(
             id=EXAMPLE_ID_FR_001,
             question=QUESTION_FR_001,
-            language="fr",
+            language=FRENCH_ISO_CODE,
             expected_chunk_ids=[CHUNK_003],
         )
     )
@@ -308,7 +313,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
         **_golden_example_kwargs(
             id=EXAMPLE_ID_FR_002,
             question=QUESTION_FR_002,
-            language="fr",
+            language=FRENCH_ISO_CODE,
             expected_chunk_ids=[CHUNK_004],
         )
     )
@@ -328,7 +333,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
             retrieved_passage_ids=[CHUNK_001],
             retrieved_contexts=["Context 1"],
             retrieved_source_titles=["Source A"],
-            language="en",
+            language=ENGLISH_ISO_CODE,
         )
     )
     response_en_2 = ChatResponse(
@@ -337,7 +342,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
             retrieved_passage_ids=[CHUNK_002],
             retrieved_contexts=["Context 2"],
             retrieved_source_titles=["Source B"],
-            language="en",
+            language=ENGLISH_ISO_CODE,
         )
     )
     response_fr_1 = ChatResponse(
@@ -346,7 +351,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
             retrieved_passage_ids=[CHUNK_003],
             retrieved_contexts=["Contexte 3"],
             retrieved_source_titles=["Source C"],
-            language="fr",
+            language=FRENCH_ISO_CODE,
         )
     )
     response_fr_2 = ChatResponse(
@@ -355,7 +360,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
             retrieved_passage_ids=[CHUNK_004],
             retrieved_contexts=["Contexte 4"],
             retrieved_source_titles=["Source D"],
-            language="fr",
+            language=FRENCH_ISO_CODE,
         )
     )
 
@@ -374,10 +379,10 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
     assert mock_chain.invoke.call_count == 4
 
     # Assert: Verify languages are preserved in example results
-    assert result.example_results[0].language == "en"
-    assert result.example_results[1].language == "en"
-    assert result.example_results[2].language == "fr"
-    assert result.example_results[3].language == "fr"
+    assert result.example_results[0].language == ENGLISH_ISO_CODE
+    assert result.example_results[1].language == ENGLISH_ISO_CODE
+    assert result.example_results[2].language == FRENCH_ISO_CODE
+    assert result.example_results[3].language == FRENCH_ISO_CODE
 
     # Assert: Verify pass/fail logic is consistent with scores and thresholds
     for example_result in result.example_results:
@@ -408,8 +413,8 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
 
     # Assert: Verify aggregate scores by language
     assert "by_language" in result.aggregate_scores
-    assert "en" in result.aggregate_scores["by_language"]
-    assert "fr" in result.aggregate_scores["by_language"]
+    assert ENGLISH_ISO_CODE in result.aggregate_scores["by_language"]
+    assert FRENCH_ISO_CODE in result.aggregate_scores["by_language"]
 
     # Assert: Verify all applicable metrics from METRIC_REGISTRY are computed by language
     # Determine which metrics should be applicable to our test data
@@ -428,13 +433,13 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
         metric_spec = next(spec for spec in METRIC_REGISTRY if spec.name == metric_name)
 
         # If metric applies to all languages or specifically to 'en'/'fr', check it's present
-        if metric_spec.languages is None or "en" in metric_spec.languages:
-            assert metric_name in result.aggregate_scores["by_language"]["en"], (
+        if metric_spec.languages is None or ENGLISH_ISO_CODE in metric_spec.languages:
+            assert metric_name in result.aggregate_scores["by_language"][ENGLISH_ISO_CODE], (
                 f"Expected metric '{metric_name}' in English aggregate scores"
             )
 
-        if metric_spec.languages is None or "fr" in metric_spec.languages:
-            assert metric_name in result.aggregate_scores["by_language"]["fr"], (
+        if metric_spec.languages is None or FRENCH_ISO_CODE in metric_spec.languages:
+            assert metric_name in result.aggregate_scores["by_language"][FRENCH_ISO_CODE], (
                 f"Expected metric '{metric_name}' in French aggregate scores"
             )
 
