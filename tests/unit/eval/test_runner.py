@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 import pytest
 from langchain_core.runnables import Runnable
 
-from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import MetricSpec, FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
@@ -23,10 +22,14 @@ QUESTION_001 = "What is tolerance?"
 QUESTION_002 = "Qu'est-ce que la tolérance?"
 QUESTION_003 = "What is reason?"
 
+# authors are mocked, ok if not in AUTHOR_CONFIGS
+TEST_AUTHOR_1 = "test_author1"
+TEST_AUTHOR_2 = "test_author2"
+
 # Chunk and dataset identifiers
 CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
-DATASET_NAME = f"persona_{DEFAULT_AUTHOR}"
+DATASET_NAME = f"persona_{TEST_AUTHOR_1}"
 DATASET_VERSION = "7.0"
 DATASET_DATE = "2029-05-09"
 
@@ -40,7 +43,7 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": EXAMPLE_ID_001,
         "question": QUESTION_001,
-        "author": DEFAULT_AUTHOR,
+        "author": TEST_AUTHOR_1,
         "language": ENGLISH_ISO_CODE,
         "expected_chunk_ids": [CHUNK_001, CHUNK_002],
     }
@@ -86,6 +89,7 @@ def _metric_result_kwargs(**overrides: Any) -> dict[str, Any]:
     return defaults
 
 
+@patch("src.configs.authors.AUTHOR_CONFIGS", {TEST_AUTHOR_1: Mock(), TEST_AUTHOR_2: Mock()})
 class TestRunEval:
     """Tests for run_eval() function."""
 
@@ -108,16 +112,17 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[TEST_AUTHOR_1], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         # Import here to avoid circular dependency during collection
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert
         assert isinstance(result, EvalRun)
@@ -152,17 +157,18 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example1, example2, example3]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        run_eval(mock_chain, dataset)
+        run_eval(dataset, chains)
 
         # Assert
         assert mock_chain.invoke.call_count == 3
@@ -196,17 +202,18 @@ class TestRunEval:
             id=EXAMPLE_ID_003, language=ENGLISH_ISO_CODE, question=QUESTION_003
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example_en_1, example_fr_1, example_en_2]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert all languages processed and recorded
         assert len(result.example_results) == 3
@@ -242,17 +249,18 @@ class TestRunEval:
             id=EXAMPLE_ID_003, language=ENGLISH_ISO_CODE, question=QUESTION_003
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example_en_1, example_fr_1, example_en_2]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert; cross_language will be added when appropriate metrics are added
         assert "overall" in result.aggregate_scores # No assertion on the value returned because that value is mocked
@@ -289,17 +297,18 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example1, example2, example3]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert
         assert result.overall_pass_rate == pytest.approx(0.667, abs=0.01)
@@ -334,15 +343,16 @@ class TestRunEval:
         }
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[TEST_AUTHOR_1], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert
         #  run_eval() calls _get_system_version(); if it didn't, the mock wouldn't be hit
@@ -380,18 +390,19 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example1, example2, example3]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act - override threshold to 0.7 (lower than 0.8 of FALLBACK_THRESHOLD)
         custom_thresholds = {METRIC_NAME: 0.7}
-        result = run_eval(mock_chain, dataset, override_thresholds=custom_thresholds)
+        result = run_eval(dataset, chains, override_thresholds=custom_thresholds)
 
         # Assert - verify custom threshold is used for pass/fail
         # With threshold 0.7: 0.75 passes, 0.65 fails, 0.85 passes
@@ -435,17 +446,18 @@ class TestRunEval:
         example1 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_001))
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example1, example2]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert - both metrics computed for each example
         assert mock_compute_1.call_count == 2  # Called once per example
@@ -487,15 +499,16 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[TEST_AUTHOR_1], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert - both metrics appear in aggregate scores
         assert "overall" in result.aggregate_scores
@@ -544,17 +557,18 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example1, example2, example3]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert - only example 1 passes (both metrics >= 0.8)
         assert result.example_results[0].passed is True   # Both pass: 0.9, 0.85
@@ -594,15 +608,16 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[TEST_AUTHOR_1], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert - both thresholds recorded
         assert METRIC_NAME in result.effective_thresholds
@@ -648,17 +663,18 @@ class TestRunEval:
             id=EXAMPLE_ID_002, language=FRENCH_ISO_CODE, question=QUESTION_002
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
-            authors=[DEFAULT_AUTHOR],
+            authors=[TEST_AUTHOR_1],
             examples=[example_en, example_fr]
         ))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
 
         from src.eval.runner import run_eval
 
         # Act
-        result = run_eval(mock_chain, dataset)
+        result = run_eval(dataset, chains)
 
         # Assert - English example has both metrics
         en_result = result.example_results[0]
@@ -671,3 +687,214 @@ class TestRunEval:
         fr_metric_names = [mr.name for mr in fr_result.metrics]
         assert METRIC_NAME not in fr_metric_names  # English-only metric skipped
         assert METRIC_NAME_2 in fr_metric_names    # All-language metric applies
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_routes_to_correct_chain_per_author(
+        self, mock_registry: Mock
+    ) -> None:
+        """Each example routes to its corresponding author's chain."""
+        # Arrange - create metric
+        mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        metric_spec = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
+
+        # Create examples for two different authors
+        example1 = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_001, author=TEST_AUTHOR_1
+        ))
+        example2 = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_002, author=TEST_AUTHOR_2
+        ))
+        example3 = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_003, author=TEST_AUTHOR_1
+        ))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[TEST_AUTHOR_1, TEST_AUTHOR_2],
+            examples=[example1, example2, example3]
+        ))
+
+        # Create two distinct mock chains with different responses
+        mock_chain_1 = Mock(spec=Runnable)
+        mock_chain_1.invoke.return_value = ChatResponse(**_chat_response_kwargs(
+            text="Response from chain 1"
+        ))
+
+        mock_chain_2 = Mock(spec=Runnable)
+        mock_chain_2.invoke.return_value = ChatResponse(**_chat_response_kwargs(
+            text="Response from chain 2"
+        ))
+
+        chains = {
+            TEST_AUTHOR_1: mock_chain_1,
+            TEST_AUTHOR_2: mock_chain_2,
+        }
+
+        from src.eval.runner import run_eval
+
+        # Act
+        result = run_eval(dataset, chains)
+
+        # Assert - chain 1 called twice (for example1 and example3)
+        assert mock_chain_1.invoke.call_count == 2
+
+        # Assert - chain 2 called once (for example2)
+        assert mock_chain_2.invoke.call_count == 1
+
+        # Assert - responses match expected chains
+        assert result.example_results[0].response.text == "Response from chain 1"
+        assert result.example_results[1].response.text == "Response from chain 2"
+        assert result.example_results[2].response.text == "Response from chain 1"
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_validates_missing_chains(
+        self, mock_registry: Mock
+    ) -> None:
+        """ValueError raised if required chain is missing."""
+        # Arrange
+        mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        metric_spec = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
+
+        # Dataset requires two authors
+        example1 = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_001, author=TEST_AUTHOR_1
+        ))
+        example2 = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_002, author=TEST_AUTHOR_2
+        ))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[TEST_AUTHOR_1, TEST_AUTHOR_2],
+            examples=[example1, example2]
+        ))
+
+        # Only provide chain for TEST_AUTHOR_1 (missing TEST_AUTHOR_2)
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
+
+        from src.eval.runner import run_eval
+
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            run_eval(dataset, chains)
+
+        assert "Missing chains for authors" in str(exc_info.value)
+        assert TEST_AUTHOR_2 in str(exc_info.value)
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_warns_on_extra_chains(
+        self, mock_registry: Mock
+    ) -> None:
+        """Warning issued if extra chains provided that aren't needed."""
+        # Arrange
+        mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        metric_spec = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
+
+        # Dataset only requires TEST_AUTHOR_1
+        example = GoldenExample(**_golden_example_kwargs())
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[TEST_AUTHOR_1],
+            examples=[example]
+        ))
+
+        # Provide chains for both authors (TEST_AUTHOR_2 is extra)
+        mock_chain_1 = Mock(spec=Runnable)
+        mock_chain_1.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        mock_chain_2 = Mock(spec=Runnable)
+        mock_chain_2.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+
+        chains = {
+            TEST_AUTHOR_1: mock_chain_1,
+            TEST_AUTHOR_2: mock_chain_2,
+        }
+
+        from src.eval.runner import run_eval
+
+        # Act & Assert
+        with pytest.warns(UserWarning, match="Extra chains provided"):
+            result = run_eval(dataset, chains)
+
+        # Assert - eval still succeeds
+        assert len(result.example_results) == 1
+
+        # Assert - only chain_1 was invoked (chain_2 is unused)
+        assert mock_chain_1.invoke.call_count == 1
+        assert mock_chain_2.invoke.call_count == 0
+
+    @patch("src.eval.runner.METRIC_REGISTRY")
+    def test_run_eval_passes_language_to_chain(
+        self, mock_registry: Mock
+    ) -> None:
+        """Chain.invoke called with both question and language parameter."""
+        # Arrange
+        mock_compute = Mock(return_value=MetricResult(**_metric_result_kwargs(
+            name=METRIC_NAME, score=0.9
+        )))
+        metric_spec = MetricSpec(
+            name=METRIC_NAME,
+            compute=mock_compute,
+            required_example_fields=set(),
+            required_response_fields=set(),
+            languages=None,
+        )
+        mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
+
+        # Create examples with different languages
+        example_en = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_001, language=ENGLISH_ISO_CODE, question=QUESTION_001
+        ))
+        example_fr = GoldenExample(**_golden_example_kwargs(
+            id=EXAMPLE_ID_002, language=FRENCH_ISO_CODE, question=QUESTION_002
+        ))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[TEST_AUTHOR_1],
+            examples=[example_en, example_fr]
+        ))
+
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
+        chains = {TEST_AUTHOR_1: mock_chain}
+
+        from src.eval.runner import run_eval
+
+        # Act
+        run_eval(dataset, chains)
+
+        # Assert - chain.invoke called with language kwarg for each example
+        assert mock_chain.invoke.call_count == 2
+
+        # Check first call (English example)
+        first_call = mock_chain.invoke.call_args_list[0]
+        assert first_call[0][0] == QUESTION_001  # positional arg: question
+        assert first_call[1]["language"] == ENGLISH_ISO_CODE  # kwarg: language
+
+        # Check second call (French example)
+        second_call = mock_chain.invoke.call_args_list[1]
+        assert second_call[0][0] == QUESTION_002  # positional arg: question
+        assert second_call[1]["language"] == FRENCH_ISO_CODE  # kwarg: language

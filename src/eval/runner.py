@@ -177,30 +177,93 @@ def _check_example_passed(
             return False
     return True
 
-def run_eval(
-    chain: Runnable[str, ChatResponse],
-    golden_dataset: GoldenDataset,
-    override_thresholds: dict[str, float] | None = None,
-) -> EvalRun:
-    """Run evaluation harness on a chain using a golden dataset.
 
-    This is the main entry point for evaluation.
-    1. Accepts a LangChain runnable and a golden dataset
-    2. Invokes the chain for each example in the dataset
-    3. Applies metrics to each response
-    4. Aggregates scores across all examples
-    5. Returns a complete EvalRun object (machine-readable artifact)
+def _validate_chains(
+    dataset_authors: list[str],
+    chains: dict[str, Runnable[str, ChatResponse]],
+) -> None:
+    """Validate that all required chains are provided.
 
     Args:
-        chain: LangChain runnable that takes a question string and returns ChatResponse
+        dataset_authors: List of authors from GoldenDataset
+        chains: Mapping from author key to chain
+
+    Raises:
+        ValueError: If any required chain is missing
+
+    Warns:
+        If extra chains are provided that aren't needed by the dataset
+    """
+    import warnings
+
+    chain_authors = set(chains.keys())
+    required_authors = set(dataset_authors)
+
+    missing = required_authors - chain_authors
+    if missing:
+        raise ValueError(
+            f"Missing chains for authors: {sorted(missing)}. "
+            f"Dataset requires chains for: {sorted(required_authors)}"
+        )
+
+    # Warn on extra chains (helpful for debugging)
+    extra = chain_authors - required_authors
+    if extra:
+        warnings.warn(
+            f"Extra chains provided that are not needed by dataset: {sorted(extra)}. "
+            f"Dataset only requires: {sorted(required_authors)}",
+            UserWarning,
+            stacklevel=3,
+        )
+
+def run_eval(
+    golden_dataset: GoldenDataset,
+    author_chains: dict[str, Runnable[str, ChatResponse]],
+    override_thresholds: dict[str, float] | None = None,
+) -> EvalRun:
+    """Run evaluation harness on multiple author-specific chains using a golden dataset.
+
+    This is the main entry point for evaluation.
+    1. Accepts a golden dataset and a dict of author-specific LangChain runnables
+    2. Routes each example to its corresponding author's chain
+    3. Invokes the chain with the question and language
+    4. Applies metrics to each response
+    5. Aggregates scores across all examples
+    6. Returns a complete EvalRun object (machine-readable artifact)
+
+    Example usage:
+        from src.chains.chat_chain import build_chain
+
+        # Build but do not yet invoke chains for all authors in dataset
+        chains = {
+            "voltaire": build_chain(author="voltaire"),
+            "gouges": build_chain(author="gouges"),
+        }
+
+        result = run_eval(golden_dataset, chains)
+
+    Args:
         golden_dataset: GoldenDataset with test examples
+        author_chains: Dict mapping author keys to LangChain runnables.
+            Each chain takes a question string and returns ChatResponse.
+            Must include chains for all authors in golden_dataset.authors.
         override_thresholds: Optional dict to override default thresholds per metric.
             Keys are metric names, values are threshold scores (0.0 to 1.0).
             If not provided, uses default_threshold from each MetricSpec.
 
     Returns:
         EvalRun object containing all results, scores, and metadata
+
+    Raises:
+        ValueError: If any required chain is missing from the chains dict
+
+    Warns:
+        If extra chains are provided that aren't needed by the dataset
     """
+    # Validate chains before processing
+    _validate_chains(golden_dataset.authors, author_chains)
+
+    # Determine thresholds to use for each metric
     effective_thresholds: dict[str, float] = _build_effective_thresholds(override_thresholds)
 
     # Process each example
@@ -208,8 +271,11 @@ def run_eval(
     passed_count = 0
 
     for example in golden_dataset.examples:
-        # Invoke chain with the question
-        response = chain.invoke(example.question)
+        # Route to the appropriate author's chain
+        chain = author_chains[example.author]
+
+        # Invoke chain with the question and language
+        response = chain.invoke(example.question, language=example.language)
 
         # Apply metrics
         metrics = _apply_metrics(example, response)

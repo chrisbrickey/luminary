@@ -547,6 +547,7 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Eval runner takes a collection of runnable chains - one for each author in the examples of the golden dataset. Add validation that all required chains are present.
   - **Filenames and metadata**: 
     - Added name field to GoldenDataset schema to prevent reconstruction of a dataset name within the eval harness runner. This metadata field may be populated by the caller (e.g. script), which is appropriate because the caller will load the dataset from file.
     - Updated golden dataset filename convention to `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`. In the nearterm, all golden datasets will have scope `persona` to emphasize individual response quality, grounding, and persona fidelity.
