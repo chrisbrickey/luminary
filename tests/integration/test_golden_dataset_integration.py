@@ -117,6 +117,53 @@ class TestGoldenDatasetIntegration:
                 "Example must have expected_chunk_ids list"
             )
 
+    @pytest.mark.parametrize("author", AUTHOR_CONFIGS.keys())
+    def test_golden_dataset_authors_field_matches_examples(self, author: str) -> None:
+        """Should verify that dataset.authors aligns with authors in examples.
+
+        This test verifies:
+        1. The authors field exists and is non-empty
+        2. Every author in dataset.authors appears in at least one example
+        3. Every unique author from examples is in dataset.authors
+        4. No duplicates in dataset.authors
+
+        The model_validator on GoldenDataset already enforces this,
+        but this test explicitly verifies the real golden datasets comply.
+        """
+        # Arrange: Discover and load the dataset
+        dataset_path = discover_latest_golden_dataset(
+            directory=DEFAULT_GOLDEN_DATASET_PATH,
+            author=author,
+            scope="persona",
+        )
+        dataset = load_golden_dataset(dataset_path)
+
+        # Act: Extract authors from metadata and examples
+        metadata_authors = set(dataset.authors)
+        example_authors = {ex.author for ex in dataset.examples}
+
+        # Assert: No duplicates in authors field
+        assert len(dataset.authors) == len(metadata_authors), (
+            f"Duplicate authors in dataset.authors: {dataset.authors}"
+        )
+
+        # Assert: Authors field is non-empty
+        assert len(metadata_authors) > 0, "dataset.authors must not be empty"
+
+        # Assert: Perfect alignment (model_validator should enforce this)
+        assert metadata_authors == example_authors, (
+            f"Mismatch in {dataset_path.name}: "
+            f"metadata.authors={sorted(metadata_authors)}, "
+            f"example authors={sorted(example_authors)}"
+        )
+
+        # Assert: For single-author datasets, verify it matches the discovery author
+        if len(metadata_authors) == 1:
+            assert author in metadata_authors, (
+                f"Single-author dataset for '{author}' should contain that author. "
+                f"Got: {metadata_authors}"
+            )
+
     def test_all_golden_datasets_discoverable(self) -> None:
         """Should be able to discover golden datasets for all registered authors.
 

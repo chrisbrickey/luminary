@@ -272,7 +272,9 @@ All test development in this plan follows this workflow:
   - Created helper scripts not in original plan: `scripts/query_for_golden_dataset.py` (queries ChromaDB to get realistic chunk IDs) and `scripts/validate_golden_dataset.py` (validates golden dataset against schema)
   - Used actual chunk IDs from ingested Voltaire corpus instead of placeholders 
   - Dataset includes 8 examples (6 main philosophical topics as FR/EN pairs + 2 adversarial examples) with realistic chunk IDs from *Lettres philosophiques*
-  - Implemented later: Move location of golden dataset to `evals/golden` (still gitignored). Change filename nomenclature of golden datasets to `golden_{author}_v{version}_{YYYY-MM-DD}.json`
+  - Implemented later: 
+    - Move location of golden dataset to `evals/golden` (still gitignored). Change filename nomenclature of golden datasets to `golden_{author}_v{version}_{YYYY-MM-DD}.json`
+    - Add author field to GoldenExample and authors field to GoldenDataset. Validation requires that all authors in these fields are in `AUTHOR_CONFIGS` and that all authors of examples within a dataset are included in the authors field of the dataset.
 
 ---
 
@@ -645,6 +647,7 @@ All test development in this plan follows this workflow:
        - `--verbose` (optional): Enable debug logging
      - Calls `check_ollama_available()` at startup
      - Auto-discovers latest golden dataset if `--golden` not provided
+     - Calls `run_eval()` on `runner.py` with the built chains that correspond to each author in the `authors` field of the golden dataset 
      - Loads dataset, populates metadata of GoldenDataset as needed, builds chain, runs eval, saves artifact, prints summary
      - Clear error messages for common failures (Ollama not running, dataset not found, invalid author)
 
