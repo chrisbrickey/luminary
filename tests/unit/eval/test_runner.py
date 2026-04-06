@@ -27,6 +27,7 @@ CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
 DATASET_NAME = "golden_testauthor"
 DATASET_VERSION = "7.0"
+DATASET_DATE = "2029-05-09"
 
 # Metric names
 METRIC_NAME = "test_metric"
@@ -50,7 +51,7 @@ def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "name": DATASET_NAME,
         "version": DATASET_VERSION,
-        "created_date": "2029-05-09",
+        "created_date": DATASET_DATE,
         "description": "test dataset for evaluation",
         "examples": [],
     }
@@ -117,8 +118,9 @@ class TestRunEval:
 
         # Assert
         assert isinstance(result, EvalRun)
-        assert result.dataset_version == DATASET_VERSION
         assert result.dataset_name == DATASET_NAME
+        assert result.dataset_version == DATASET_VERSION
+        assert result.dataset_date == DATASET_DATE
         assert len(result.example_results) == 1
         assert "overall" in result.aggregate_scores
         assert 0.0 <= result.overall_pass_rate <= 1.0

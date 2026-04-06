@@ -241,8 +241,9 @@ def run_eval(
 
     # Create and return EvalRun
     return EvalRun(
-        dataset_version=golden_dataset.version,
         dataset_name=golden_dataset.name,
+        dataset_version=golden_dataset.version,
+        dataset_date=golden_dataset.created_date,
         run_timestamp=datetime.now(timezone.utc).isoformat(),
         system_version=system_version,
         effective_thresholds=effective_thresholds,

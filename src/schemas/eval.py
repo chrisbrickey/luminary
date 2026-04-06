@@ -107,8 +107,9 @@ class EvalRun(BaseModel):
     """
 
     # Metadata
+    dataset_name: str = Field(..., description="Name of the input, the prefix of a real golden datset; e.g., golden_voltaire")
     dataset_version: str = Field(..., description="Version of the golden dataset used")
-    dataset_name: str = Field(..., description="Name of the dataset (e.g., 'golden_voltaire')")
+    dataset_date: str = Field(..., description="ISO 8601 date from GoldenDataset.created_date (YYYY-MM-DD)")
     run_timestamp: str = Field(..., description="ISO 8601 timestamp with timezone")
 
     # System configuration (for reproducibility)
