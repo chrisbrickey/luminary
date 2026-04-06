@@ -11,10 +11,11 @@ from typing import Any
 
 import yaml
 
-from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
+from src.configs.common import DEFAULT_RESPONSE_LANGUAGE, ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 
-# Explicitly declare supported languages for static strings; facilitates constant-time lookup
-SUPPORTED_LANGUAGES: frozenset[str] = frozenset({"en", "fr"})
+# Languages supported by localization of static strings in the UI; frozenset facilitates constant-time lookup
+# This collection is independent of other language collections such as those used in the evaluation harness
+LOCALIZATION_LANGUAGES: frozenset[str] = frozenset({ENGLISH_ISO_CODE, FRENCH_ISO_CODE})
 
 # Cache for loaded locale data to avoid re-reading files
 _LOCALE_CACHE: dict[str, dict[str, Any]] = {}
@@ -56,9 +57,9 @@ def load_messages(language: str) -> dict[str, Any]:
 
     # If not cached...
 
-    # Check if language is supported; Fallback to default language if not supported
-    # CI ensures that default response language is always supported.
-    if language not in SUPPORTED_LANGUAGES:
+    # Check if language localization is supported; Fallback to default language if not supported
+    # CI ensures that default response language is always supported for localization.
+    if language not in LOCALIZATION_LANGUAGES:
         return load_messages(DEFAULT_RESPONSE_LANGUAGE)
 
     # Load localization yaml file

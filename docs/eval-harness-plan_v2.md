@@ -549,6 +549,8 @@ All test development in this plan follows this workflow:
   - Make unit tests on the runner independent from real, registered metrics and ensure scenarios with multiple metrics are tested. Only use the METRIC_REGISTRY in the integration test.
   - Move threshold assignment to individual metrics via new property `default_threshold` on MetricSpec on `base.py`. Add FALLBACK_THRESHOLD on `base.py` to which metric-specific thresholds default.
   - Add capability to override metric thresholds in the eval runner including test coverage. Add effective_thresholds property to EvalRun so that actual thresholds used per run are recorded for traceability.
+  - Extract all language code references to constants on `configs/common.py` (e.g. ENGLISH_ISO_CODE, FRENCH_ISO_CODE); Clarify difference between language sets: `LOCALIZATION_LANGUAGES` (on `messages.py` for localization of string literals in UI) vs `EVALUATED_LANGUAGES` (on `eval.py` for evaluation harness).
+  - 
 
 ---
 
@@ -1322,13 +1324,13 @@ This process should be repeated throughout development of subsequent sections.
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/eval/test_language_metric.py`
    - Test cases (2 tests minimum):
-     - `test_matching_language_metadata()` - "fr" == "fr" → score 1.0
-     - `test_mismatching_language_metadata()` - "en" != "fr" → score 0.0
+     - `test_matching_language_metadata()` - FRENCH_ISO_CODE == FRENCH_ISO_CODE → score 1.0
+     - `test_mismatching_language_metadata()` - ENGLISH_ISO_CODE != FRENCH_ISO_CODE → score 0.0
      - 
 2. **Implement language metadata compliance metric**
    - Create `src/eval/metrics/language.py`
    - Function signature: `language_metadata_compliance(expected_language: str, response_language: str) -> MetricResult`
-   - Logic: exact match between expected and actual language metadata (ISO 639-1 codes: "en", "fr")
+   - Logic: exact match between expected and actual language metadata (ISO 639-1 codes: ENGLISH_ISO_CODE, FRENCH_ISO_CODE)
    - Score calculation: `1.0` if match, `0.0` if mismatch
    - Return `MetricResult(name="language_metadata_compliance", score=..., details={"expected": expected, "actual": response_language})`
 
@@ -1340,10 +1342,10 @@ This process should be repeated throughout development of subsequent sections.
    - **Follow Test Development Workflow (see top of document)**
    - Update `tests/unit/eval/test_language_metric.py`
    - Test cases (4 tests minimum):
-     - `test_french_content_detected()` - French text with expected="fr" → score 1.0
-     - `test_english_content_detected()` - English text with expected="en" → score 1.0
-     - `test_french_content_mismatch()` - French text with expected="en" → score 0.0
-     - `test_english_content_mismatch()` - English text with expected="fr" → score 0.0
+     - `test_french_content_detected()` - French text with expected=FRENCH_ISO_CODE → score 1.0
+     - `test_english_content_detected()` - English text with expected=ENGLISH_ISO_CODE → score 1.0
+     - `test_french_content_mismatch()` - French text with expected=ENGLISH_ISO_CODE → score 0.0
+     - `test_english_content_mismatch()` - English text with expected=FRENCH_ISO_CODE → score 0.0
    - Use realistic sample text in both languages (not single words - langdetect needs ~20+ chars)
 
 5. **Implement language content compliance metric**
@@ -1354,7 +1356,7 @@ This process should be repeated throughout development of subsequent sections.
    - Score calculation: `1.0` if detected == expected, `0.0` if mismatch
    - Return `MetricResult(name="language_content_compliance", score=..., details={"expected": expected, "detected": detected_language})`
 
-   **Rationale:** This metric validates that the LLM actually responds in the correct language, not just that the metadata is set correctly. It catches cases where `ChatResponse.language="fr"` but the LLM responds in English anyway (LLM non-compliance with system prompts).
+   **Rationale:** This metric validates that the LLM actually responds in the correct language, not just that the metadata is set correctly. It catches cases where `ChatResponse.language=FRENCH_ISO_CODE` but the LLM responds in English anyway (LLM non-compliance with system prompts).
 
    **Design note:** Requires adding `langdetect` to dependencies (`uv add langdetect`). This is a lightweight library with no external API calls (runs locally).
 

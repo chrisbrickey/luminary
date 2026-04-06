@@ -4,7 +4,14 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas.chat import ChatResponse
+
+# Languages evaluated
+EVALUATED_LANGUAGES = [ENGLISH_ISO_CODE, FRENCH_ISO_CODE]
+
+# Build language validation pattern dynamically from EVALUATED_LANGUAGES
+_LANG_PATTERN = f"^({'|'.join(EVALUATED_LANGUAGES)})$"
 
 
 class MetricResult(BaseModel):
@@ -28,7 +35,7 @@ class GoldenExample(BaseModel):
 
     id: str = Field(..., description="Unique identifier (e.g., 'tolerance_fr', 'pascal_en')")
     question: str = Field(..., description="The question to ask the philosopher")
-    language: Annotated[str, Field(pattern=r"^(en|fr)$")] = Field(..., description="ISO 639-1 code: 'en' or 'fr'")
+    language: Annotated[str, Field(pattern=_LANG_PATTERN)] = Field(..., description="ISO 639-1 code from EVALUATED_LANGUAGES")
 
     # retrieval metrics
     expected_chunk_ids: list[str] = Field(
@@ -71,7 +78,7 @@ class ExampleResult(BaseModel):
 
     example_id: str = Field(..., description="Unique identifier for this example")
     question: str = Field(..., description="The question that was asked")
-    language: Annotated[str, Field(pattern=r"^(en|fr)$")] = Field(..., description="Language of the question")
+    language: Annotated[str, Field(pattern=_LANG_PATTERN)] = Field(..., description="Language of the question")
     response: ChatResponse = Field(..., description="The chat response from the system")
     metrics: list[MetricResult] = Field(..., description="List of metric results for this example")
     passed: bool = Field(..., description="True if all required metrics above threshold")

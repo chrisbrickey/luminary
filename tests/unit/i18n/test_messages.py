@@ -4,9 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
-from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
+from src.configs.common import DEFAULT_RESPONSE_LANGUAGE, ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.i18n import clear_cache, get_message, load_messages
-from src.i18n.messages import SUPPORTED_LANGUAGES, _get_locale_path
+from src.i18n.messages import LOCALIZATION_LANGUAGES, _get_locale_path
 from src.i18n.key_registry import ALL_REQUIRED_KEYS
 
 from src.i18n.keys import (
@@ -21,12 +21,13 @@ from src.i18n.keys import (
     STATUS_REFLECTING,
 )
 
-class TestDefaultLanguageSupport:
-    """Tests to verify default language is always supported by parseable locale file.
+class TestDefaultLanguageLocalization:
+    """Tests to verify default language is always supported with
+    localization of string literals in the UI via a parseable locale file.
 
-    Some of these tests intentionally duplicate the tests on SUPPORTED_LANGUAGES.
-    Support for the default response language is critical to the performance of this app.
-    So test coverage remains independent from implementation of SUPPORTED_LANGUAGES."""
+    Some of these tests intentionally duplicate the tests on LOCALIZATION_LANGUAGES.
+    Localization support for the default response language is critical to the performance of this app.
+    So test coverage remains independent from implementation of LOCALIZATION_LANGUAGES."""
 
     def test_default_language_has_locale_file(self) -> None:
         from src.i18n.messages import _get_locale_path
@@ -48,43 +49,43 @@ class TestDefaultLanguageSupport:
             assert isinstance(result, str)
             assert len(result) > 0
 
-    def test_default_language_listed_as_supported_language(self) -> None:
-        assert DEFAULT_RESPONSE_LANGUAGE in SUPPORTED_LANGUAGES, (
-            f"Default language ({DEFAULT_RESPONSE_LANGUAGE}) is not in SUPPORTED_LANGUAGES: {SUPPORTED_LANGUAGES}"
+    def test_default_language_listed_as_localization_language(self) -> None:
+        assert DEFAULT_RESPONSE_LANGUAGE in LOCALIZATION_LANGUAGES, (
+            f"Default language ({DEFAULT_RESPONSE_LANGUAGE}) is not in LOCALIZATION_LANGUAGES: {LOCALIZATION_LANGUAGES}"
         )
 
-class TestSupportedLanguagesConfiguration:
-    """Tests to verify list of SUPPORTED_LANGUAGES matches reality
+class TestLocalizationLanguagesConfiguration:
+    """Tests to verify list of LOCALIZATION_LANGUAGES matches reality
     and that each of those languages has a valid locale file."""
 
-    def test_all_supported_languages_have_locale_files(self) -> None:
-        for language in SUPPORTED_LANGUAGES:
+    def test_all_localization_languages_have_locale_files(self) -> None:
+        for language in LOCALIZATION_LANGUAGES:
             locale_path = _get_locale_path(language)
             assert locale_path.exists(), (
-                f"Language ({language}) is in SUPPORTED_LANGUAGES but no file exists at {locale_path}"
+                f"Language ({language}) is in LOCALIZATION_LANGUAGES but no file exists at {locale_path}"
             )
 
     def test_no_orphaned_locale_files(self) -> None:
-        """Should warn if YAML files exist that aren't in SUPPORTED_LANGUAGES."""
+        """Should warn if YAML files exist that aren't in LOCALIZATION_LANGUAGES."""
 
         # Find all YAML files
         from src.i18n.messages import _get_locale_path
         locales_dir = _get_locale_path(DEFAULT_RESPONSE_LANGUAGE).parent
         locale_files = set(p.stem for p in locales_dir.glob("*.yaml"))
 
-        # Isolate orphan files (not in SUPPORTED_LANGUAGES)
-        orphans = locale_files - SUPPORTED_LANGUAGES
+        # Isolate orphan files (not in LOCALIZATION_LANGUAGES)
+        orphans = locale_files - LOCALIZATION_LANGUAGES
 
         # Verify no orphan files
         assert not orphans, (
-            f"Found locale files not declared in SUPPORTED_LANGUAGES: {orphans}. "
-            f"Either add them to SUPPORTED_LANGUAGES or remove the orphaned files."
+            f"Found locale files not declared in LOCALIZATION_LANGUAGES: {orphans}. "
+            f"Either add them to LOCALIZATION_LANGUAGES or remove the orphaned files."
         )
 
     @pytest.mark.parametrize("key", list(ALL_REQUIRED_KEYS))
-    def test_all_supported_languages_define_all_required_keys(self, key: str) -> None:
-        """All supported languages should define all required keys."""
-        for language in SUPPORTED_LANGUAGES:
+    def test_all_localization_languages_define_all_required_keys(self, key: str) -> None:
+        """All localization languages should define all required keys."""
+        for language in LOCALIZATION_LANGUAGES:
             message = get_message(key, language)
             assert isinstance(message, str)
             assert len(message) > 0
@@ -97,10 +98,10 @@ class TestSupportedLanguagesConfiguration:
 
         The content of the default english yaml file is sufficiently tested in TestGetMessage.
         I do not believe it is necessary to run this kind of test for every
-        language file as the number of supported languages grows."""
+        language file as the size of LOCALIZATION_LANGUAGES grows."""
 
         # Load the french locale file
-        messages = load_messages("fr")
+        messages = load_messages(FRENCH_ISO_CODE)
 
         # Collect all string values
         all_text = []
@@ -134,7 +135,7 @@ class TestLoadMessages:
             return {"chat": {"input_prompt": "Vous : "}}
 
         with patch("yaml.safe_load", side_effect=capture_file_path):
-            load_messages("fr")
+            load_messages(FRENCH_ISO_CODE)
 
             # Verify that the correct file was loaded
             assert loaded_file_path is not None, "yaml.safe_load should have been called"
@@ -144,41 +145,42 @@ class TestLoadMessages:
 
     def test_caches_loaded_messages(self) -> None:
         """Should cache messages to avoid re-reading files."""
-        messages1 = load_messages("en")
-        messages2 = load_messages("en")
+        messages1 = load_messages(ENGLISH_ISO_CODE)
+        messages2 = load_messages(ENGLISH_ISO_CODE)
 
         # Verify returns the same cached object
         assert messages1 is messages2
 
     def test_clear_cache_reloads_messages(self) -> None:
         """Should reload messages after cache is cleared."""
-        messages1 = load_messages("en")
+        messages1 = load_messages(ENGLISH_ISO_CODE)
         clear_cache()
-        messages2 = load_messages("en")
+        messages2 = load_messages(ENGLISH_ISO_CODE)
 
         # Verify not the same object even though content is the same
         assert messages1 == messages2
         assert messages1 is not messages2
 
-    def test_falls_back_to_default_for_unsupported_language(self) -> None:
-        """Should fall back to default language for unsupported language."""
+    def test_falls_back_to_default_for_unlocalized_language(self) -> None:
+        """Should fall back to default language when detected language
+        is not supported with localization."""
         # Call for Icelandic language, which is not supported by localization
         messages = load_messages("is")
 
         # Verify fallback to default language (English)
-        assert messages == load_messages("en")
+        assert messages == load_messages(DEFAULT_RESPONSE_LANGUAGE)
 
-    def test_caches_fallback_to_default_for_unsupported_language(self) -> None:
+    def test_caches_fallback_to_default_for_unlocalized_language(self) -> None:
         """Should cache the default language when falling back."""
-        # First call to rare, unsupported language (Hungarian)
+        # First call to rare, unlocalized language (Hungarian)
         messages1 = load_messages("hu")
 
-        # Second call to same unsupported language
+        # Second call to same unlocalized language
         messages2 = load_messages("hu")
 
         # Verify returns the cached object, which should be in default language (English)
         assert messages1 is messages2
-        assert messages1 == load_messages("en")
+        assert messages1 == load_messages(ENGLISH_ISO_CODE)
 
 class TestGetMessage:
     """Tests behavior of get_message function including parsed values.
@@ -222,7 +224,7 @@ class TestGetMessage:
         assert result5 == "Reflecting... (response time varies with the amount of data retrieved and the connection)"
 
     def test_parses_non_default_language(self) -> None:
-        result = get_message(STATUS_REFLECTING, "fr")
+        result = get_message(STATUS_REFLECTING, FRENCH_ISO_CODE)
         assert result == "Réflexion... (le délai dépend de la taille des données et la connexion)"
 
     def test_interpolates_variables(self) -> None:

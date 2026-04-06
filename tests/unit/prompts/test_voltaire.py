@@ -3,12 +3,13 @@
 import pytest
 from langchain_core.prompts import ChatPromptTemplate
 
+from src.configs.common import ENGLISH_ISO_CODE
 from src.prompts.voltaire import build_voltaire_prompt
 
 # Test constants
 SAMPLE_CONTEXT = "Sample passage from works"
 SAMPLE_QUESTION = "What is your view?"
-SAMPLE_LANGUAGE = "en"
+SAMPLE_LANGUAGE = ENGLISH_ISO_CODE
 
 
 @pytest.fixture

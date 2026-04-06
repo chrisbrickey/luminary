@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas.chat import ChatResponse
 
 # --- Shared test constants ---
@@ -19,7 +20,7 @@ def _chat_kwargs(**overrides: Any) -> dict[str, Any]:
         "retrieved_passage_ids": [],
         "retrieved_contexts": [],
         "retrieved_source_titles": [],
-        "language": "fr",
+        "language": FRENCH_ISO_CODE,
     }
     defaults.update(overrides)
     return defaults
@@ -36,14 +37,14 @@ class TestChatResponse:
             )
         )
         assert response.text == "La tolérance est une vertu cardinale."
-        assert response.language == "fr"
+        assert response.language == FRENCH_ISO_CODE
         assert len(response.retrieved_passage_ids) == 2
 
     def test_language_valid_english(self) -> None:
         response = ChatResponse(
-            **_chat_kwargs(text="Tolerance is a cardinal virtue.", language="en")
+            **_chat_kwargs(text="Tolerance is a cardinal virtue.", language=ENGLISH_ISO_CODE)
         )
-        assert response.language == "en"
+        assert response.language == ENGLISH_ISO_CODE
 
     def test_language_must_be_two_lowercase_letters(self) -> None:
         with pytest.raises(ValidationError, match="pattern"):

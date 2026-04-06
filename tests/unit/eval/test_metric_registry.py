@@ -2,6 +2,7 @@
 
 from unittest.mock import Mock
 
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE, SPANISH_ISO_CODE
 from src.eval.metrics.base import (
     METRIC_REGISTRY,
     MetricSpec,
@@ -28,14 +29,14 @@ class TestMetricSpec:
             compute=mock_compute,
             required_example_fields={"field1", "field2"},
             required_response_fields={"field3"},
-            languages={"en", "fr"},
+            languages={ENGLISH_ISO_CODE, FRENCH_ISO_CODE},
         )
 
         assert spec.name == METRIC_NAME
         assert spec.compute == mock_compute
         assert spec.required_example_fields == {"field1", "field2"}
         assert spec.required_response_fields == {"field3"}
-        assert spec.languages == {"en", "fr"}
+        assert spec.languages == {ENGLISH_ISO_CODE, FRENCH_ISO_CODE}
 
     def test_create_metric_spec_with_no_language_constraint(self) -> None:
         """MetricSpec with languages=None applies to all languages."""
@@ -207,9 +208,9 @@ class TestIsMetricApplicable:
             languages=None,
         )
 
-        example_en = Mock(language="en")
-        example_fr = Mock(language="fr")
-        example_es = Mock(language="es")
+        example_en = Mock(language=ENGLISH_ISO_CODE)
+        example_fr = Mock(language=FRENCH_ISO_CODE)
+        example_es = Mock(language=SPANISH_ISO_CODE)
         response = Mock()
 
         assert is_metric_applicable(spec, example_en, response) is True
@@ -223,11 +224,11 @@ class TestIsMetricApplicable:
             compute=Mock(),
             required_example_fields=set(),
             required_response_fields=set(),
-            languages={"en", "fr"},
+            languages={ENGLISH_ISO_CODE, FRENCH_ISO_CODE},
         )
 
-        example_en = Mock(language="en")
-        example_fr = Mock(language="fr")
+        example_en = Mock(language=ENGLISH_ISO_CODE)
+        example_fr = Mock(language=FRENCH_ISO_CODE)
         response = Mock()
 
         assert is_metric_applicable(spec, example_en, response) is True
@@ -240,10 +241,10 @@ class TestIsMetricApplicable:
             compute=Mock(),
             required_example_fields=set(),
             required_response_fields=set(),
-            languages={"en"},
+            languages={ENGLISH_ISO_CODE},
         )
 
-        example_fr = Mock(language="fr")
+        example_fr = Mock(language=FRENCH_ISO_CODE)
         response = Mock()
 
         assert is_metric_applicable(spec, example_fr, response) is False
@@ -255,7 +256,7 @@ class TestIsMetricApplicable:
             compute=Mock(),
             required_example_fields=set(),
             required_response_fields=set(),
-            languages={"en"},
+            languages={ENGLISH_ISO_CODE},
         )
 
         example = Mock(spec=[])  # No language attribute
@@ -272,10 +273,10 @@ class TestIsMetricApplicable:
             compute=Mock(),
             required_example_fields={"missing_field"},
             required_response_fields=set(),
-            languages={"en"},
+            languages={ENGLISH_ISO_CODE},
         )
 
-        example = Mock(language="en", spec=[])  # Has language but not missing_field
+        example = Mock(language=ENGLISH_ISO_CODE, spec=[])  # Has language but not missing_field
         response = Mock()
 
         assert is_metric_applicable(spec, example, response) is False
@@ -287,10 +288,10 @@ class TestIsMetricApplicable:
             compute=Mock(),
             required_example_fields={"expected_data"},
             required_response_fields={"actual_data"},
-            languages={"fr"},
+            languages={FRENCH_ISO_CODE},
         )
 
-        example = Mock(language="fr", expected_data=["item1"])
+        example = Mock(language=FRENCH_ISO_CODE, expected_data=["item1"])
         response = Mock(actual_data=["item2"])
 
         assert is_metric_applicable(spec, example, response) is True

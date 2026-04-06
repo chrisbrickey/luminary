@@ -141,7 +141,7 @@ def run_interactive_chat(
             if show_chunks:
                 print(format_chunks_output(response))
 
-            # Always print sources footer in detected language (if language is supported)
+            # Print sources footer in detected language (if localization is supported)
             print(format_sources(response, detected_lang))
             print()
 

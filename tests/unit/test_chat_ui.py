@@ -11,6 +11,7 @@ from chat_ui import (
     initialize_or_rebuild_chain,
 )
 from src.configs.authors import AUTHOR_CONFIGS, AuthorConfig, DEFAULT_AUTHOR
+from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
 
 
@@ -547,14 +548,14 @@ def test_main_processes_user_input(
     mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_detect: Mock
 ) -> None:
     """Test that main processes user input with language detection."""
-    mock_detect.return_value = "fr"
+    mock_detect.return_value = FRENCH_ISO_CODE
     mock_chain = Mock()
     mock_response = ChatResponse(
         text="Test response",
         retrieved_passage_ids=["id1"],
         retrieved_contexts=["context1"],
         retrieved_source_titles=["Source A"],
-        language="fr",
+        language=FRENCH_ISO_CODE,
     )
     mock_chain.invoke.return_value = mock_response
 
@@ -586,7 +587,7 @@ def test_main_processes_user_input(
 
     # Verify chain was invoked with detected language
     mock_chain.invoke.assert_called_once_with(
-        "What is tolerance?", language="fr"
+        "What is tolerance?", language=FRENCH_ISO_CODE
     )
 
     # Verify chat_message was called with correct avatars
@@ -618,14 +619,14 @@ def test_main_shows_sources_caption(
     mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_detect: Mock
 ) -> None:
     """Test that main displays sources caption using detected language."""
-    mock_detect.return_value = "fr"
+    mock_detect.return_value = FRENCH_ISO_CODE
     mock_chain = Mock()
     mock_response = ChatResponse(
         text="Test response",
         retrieved_passage_ids=["id1", "id2"],
         retrieved_contexts=["context1", "context2"],
         retrieved_source_titles=["Source A", "Source B"],
-        language="fr",
+        language=FRENCH_ISO_CODE,
     )
     mock_chain.invoke.return_value = mock_response
 
@@ -698,7 +699,7 @@ def test_main_chain_invocation_error(
     mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_detect: Mock
 ) -> None:
     """Test that main handles chain invocation errors with localized messages."""
-    mock_detect.return_value = "en"
+    mock_detect.return_value = ENGLISH_ISO_CODE
     mock_chain = Mock()
     mock_chain.invoke.side_effect = Exception("Chain error")
 
