@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 from langchain_core.runnables import Runnable
 
+from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import MetricSpec, FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
@@ -25,7 +26,7 @@ QUESTION_003 = "What is reason?"
 # Chunk and dataset identifiers
 CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
-DATASET_NAME = "persona_testauthor"
+DATASET_NAME = f"persona_{DEFAULT_AUTHOR}"
 DATASET_VERSION = "7.0"
 DATASET_DATE = "2029-05-09"
 
@@ -39,6 +40,7 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": EXAMPLE_ID_001,
         "question": QUESTION_001,
+        "author": DEFAULT_AUTHOR,
         "language": ENGLISH_ISO_CODE,
         "expected_chunk_ids": [CHUNK_001, CHUNK_002],
     }
@@ -52,6 +54,7 @@ def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
         "name": DATASET_NAME,
         "version": DATASET_VERSION,
         "created_date": DATASET_DATE,
+        "authors": [],
         "description": "test dataset for evaluation",
         "examples": [],
     }
@@ -105,7 +108,7 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
@@ -149,6 +152,7 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example1, example2, example3]
         ))
 
@@ -192,6 +196,7 @@ class TestRunEval:
             id=EXAMPLE_ID_003, language=ENGLISH_ISO_CODE, question=QUESTION_003
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example_en_1, example_fr_1, example_en_2]
         ))
 
@@ -237,6 +242,7 @@ class TestRunEval:
             id=EXAMPLE_ID_003, language=ENGLISH_ISO_CODE, question=QUESTION_003
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example_en_1, example_fr_1, example_en_2]
         ))
 
@@ -283,6 +289,7 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example1, example2, example3]
         ))
 
@@ -327,7 +334,7 @@ class TestRunEval:
         }
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
@@ -373,6 +380,7 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example1, example2, example3]
         ))
 
@@ -427,6 +435,7 @@ class TestRunEval:
         example1 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_001))
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example1, example2]
         ))
 
@@ -478,7 +487,7 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
@@ -535,6 +544,7 @@ class TestRunEval:
         example2 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_002))
         example3 = GoldenExample(**_golden_example_kwargs(id=EXAMPLE_ID_003))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example1, example2, example3]
         ))
 
@@ -584,7 +594,7 @@ class TestRunEval:
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec_1, metric_spec_2]))
 
         example = GoldenExample(**_golden_example_kwargs())
-        dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example]))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example]))
 
         mock_chain = Mock(spec=Runnable)
         mock_chain.invoke.return_value = ChatResponse(**_chat_response_kwargs())
@@ -638,6 +648,7 @@ class TestRunEval:
             id=EXAMPLE_ID_002, language=FRENCH_ISO_CODE, question=QUESTION_002
         ))
         dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example_en, example_fr]
         ))
 

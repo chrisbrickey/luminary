@@ -27,14 +27,16 @@ NONEXISTENT_FILE = "does_not_exist.json"
 
 # Test data constants
 VALID_DATASET_JSON = {
-    "name": f"persona_{AUTHOR_A}",
+    "name": f"persona_{DEFAULT_AUTHOR}",
     "version": VERSION_OLD,
     "created_date": DATE_OLD,
+    "authors": [DEFAULT_AUTHOR],
     "description": "Test dataset for unit tests",
     "examples": [
         {
             "id": "test_example_001",
             "question": "Sample question for testing?",
+            "author": DEFAULT_AUTHOR,
             "language": ENGLISH_ISO_CODE,
             "expected_chunk_ids": ["chunk_abc123"],
         }

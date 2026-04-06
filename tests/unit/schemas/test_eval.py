@@ -15,11 +15,12 @@ from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExampl
 METRIC_NAME = "test_metric"
 VALID_SCORE = FALLBACK_THRESHOLD
 EXAMPLE_ID = "test_example_001"
+AUTHOR = "voltaire"
 QUESTION_TEXT = "What is the meaning of tolerance?"
 RUN_TIMESTAMP = "2029-05-09T14:30:45+00:00"
 
 # Golden datasets
-DATASET_NAME = "persona_testauthor"
+DATASET_NAME = f"persona_{AUTHOR}"
 DATASET_VERSION = "3.0"
 DATASET_DATE = "2029-05-09"
 DATASET_DESCRIPTION = "Test dataset for evaluation"
@@ -40,6 +41,7 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": EXAMPLE_ID,
         "question": QUESTION_TEXT,
+        "author": AUTHOR,
         "language": ENGLISH_ISO_CODE,
         "expected_chunk_ids": [],
     }
@@ -53,6 +55,7 @@ def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
         "name": DATASET_NAME,
         "version": DATASET_VERSION,
         "created_date": DATASET_DATE,
+        "authors": [],
         "description": DATASET_DESCRIPTION,
         "examples": [],
     }
@@ -154,6 +157,7 @@ class TestGoldenExample:
         example = GoldenExample(**_golden_example_kwargs())
         assert example.id == EXAMPLE_ID
         assert example.question == QUESTION_TEXT
+        assert example.author == AUTHOR
         assert example.language == ENGLISH_ISO_CODE
         assert example.expected_chunk_ids == []
 
@@ -182,6 +186,12 @@ class TestGoldenExample:
             del kwargs["question"]
             GoldenExample(**kwargs)  # type: ignore[call-arg]
 
+    def test_missing_author_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            kwargs = _golden_example_kwargs()
+            del kwargs["author"]
+            GoldenExample(**kwargs)  # type: ignore[call-arg]
+
     def test_missing_language_raises(self) -> None:
         with pytest.raises(ValidationError):
             kwargs = _golden_example_kwargs()
@@ -200,16 +210,19 @@ class TestGoldenDataset:
         dataset = GoldenDataset(**_golden_dataset_kwargs())
         assert dataset.version == DATASET_VERSION
         assert dataset.created_date == DATASET_DATE
+        assert dataset.authors == []
         assert dataset.description == DATASET_DESCRIPTION
         assert dataset.examples == []
 
     def test_construction_with_examples(self) -> None:
         example1 = GoldenExample(**_golden_example_kwargs(id="example_001"))
         example2 = GoldenExample(**_golden_example_kwargs(id="example_002", language=FRENCH_ISO_CODE))
-        dataset = GoldenDataset(**_golden_dataset_kwargs(examples=[example1, example2]))
+        # Both examples have author=AUTHOR, so authors field should be [AUTHOR]
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[AUTHOR], examples=[example1, example2]))
         assert len(dataset.examples) == 2
         assert dataset.examples[0].id == "example_001"
         assert dataset.examples[1].id == "example_002"
+        assert dataset.authors == [AUTHOR]
 
     def test_version_invalid_pattern_raises(self) -> None:
         with pytest.raises(ValidationError, match="pattern"):
@@ -236,6 +249,43 @@ class TestGoldenDataset:
             kwargs = _golden_dataset_kwargs()
             del kwargs["description"]
             GoldenDataset(**kwargs)  # type: ignore[call-arg]
+
+    def test_missing_authors_raises(self) -> None:
+        """Missing authors field raises ValidationError."""
+        with pytest.raises(ValidationError):
+            kwargs = _golden_dataset_kwargs()
+            del kwargs["authors"]
+            GoldenDataset(**kwargs)  # type: ignore[call-arg]
+
+    def test_invalid_author_in_example_raises(self) -> None:
+        """GoldenExample with invalid author raises ValidationError."""
+        with pytest.raises(ValidationError, match="not found in AUTHOR_CONFIGS"):
+            GoldenExample(**_golden_example_kwargs(author="nonexistent_author"))
+
+    def test_invalid_author_in_dataset_metadata_raises(self) -> None:
+        """GoldenDataset with invalid author in metadata raises ValidationError."""
+        with pytest.raises(ValidationError, match="not found in AUTHOR_CONFIGS"):
+            GoldenDataset(**_golden_dataset_kwargs(authors=["invalid_author"]))
+
+    def test_authors_mismatch_with_examples_raises(self) -> None:
+        """GoldenDataset with mismatched authors field raises ValidationError."""
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author=AUTHOR))
+        # Metadata claims no authors, but example has voltaire
+        with pytest.raises(ValidationError, match="Mismatch between dataset.authors and example authors"):
+            GoldenDataset(**_golden_dataset_kwargs(authors=[], examples=[example1]))
+
+    @pytest.mark.skip(reason="Requires multiple authors in AUTHOR_CONFIGS to test properly")
+    def test_extra_author_in_metadata_raises(self) -> None:
+        """GoldenDataset with extra author in metadata (not in examples) raises ValidationError."""
+        # This test would work if we had multiple valid authors in AUTHOR_CONFIGS
+
+    def test_authors_match_examples_passes(self) -> None:
+        """GoldenDataset with matching authors field passes validation."""
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author=AUTHOR))
+        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author=AUTHOR))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[AUTHOR], examples=[example1, example2]))
+        assert dataset.authors == [AUTHOR]
+        assert len(dataset.examples) == 2
 
 
 class TestExampleResult:

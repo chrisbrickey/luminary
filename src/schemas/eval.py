@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas.chat import ChatResponse
@@ -35,6 +35,7 @@ class GoldenExample(BaseModel):
 
     id: str = Field(..., description="Unique identifier (e.g., 'tolerance_fr', 'pascal_en')")
     question: str = Field(..., description="The question to ask the philosopher")
+    author: str = Field(..., description="Which author should answer (must be in AUTHOR_CONFIGS)")
     language: Annotated[str, Field(pattern=_LANG_PATTERN)] = Field(..., description="ISO 639-1 code from EVALUATED_LANGUAGES")
 
     # retrieval metrics
@@ -42,6 +43,18 @@ class GoldenExample(BaseModel):
         default_factory=list,
         description="Expected chunk IDs to be retrieved"
     )
+
+    @field_validator('author')
+    @classmethod
+    def validate_author_in_configs(cls, v: str) -> str:
+        """Ensure author exists in AUTHOR_CONFIGS registry."""
+        from src.configs.authors import AUTHOR_CONFIGS
+        if v not in AUTHOR_CONFIGS:
+            valid = list(AUTHOR_CONFIGS.keys())
+            raise ValueError(
+                f"Author '{v}' not found in AUTHOR_CONFIGS. Valid authors: {valid}"
+            )
+        return v
 
 
 class GoldenDataset(BaseModel):
@@ -53,17 +66,53 @@ class GoldenDataset(BaseModel):
     - name field identifies the dataset (e.g., 'persona_voltaire', 'persona_gouges')
     - version field enables traceability
     - created_date provides temporal context for eval run comparisons
+    - authors lists all philosophers covered by this dataset (must match examples)
     - examples contain language-specific validation data (bilingual by design)
     """
 
-    name: str = Field(..., description="Dataset name; format: '{scope}_{authors)'")
+    name: str = Field(..., description="Dataset name; format: '{scope}_{authors}'")
     version: Annotated[str, Field(pattern=r"^\d+\.\d+$")] = Field(
         ...,
         description="Semantic version (e.g., '1.0', '2.0')"
     )
     created_date: str = Field(..., description="ISO 8601 date (YYYY-MM-DD)")
+    authors: list[str] = Field(
+        ...,
+        description="All authors covered by this dataset (must be in AUTHOR_CONFIGS)"
+    )
     description: str = Field(..., description="What this dataset tests")
     examples: list[GoldenExample] = Field(..., description="List of test examples")
+
+    @field_validator('authors')
+    @classmethod
+    def validate_all_authors_in_configs(cls, v: list[str]) -> list[str]:
+        """Ensure all authors exist in AUTHOR_CONFIGS registry."""
+        from src.configs.authors import AUTHOR_CONFIGS
+        invalid = [author for author in v if author not in AUTHOR_CONFIGS]
+        if invalid:
+            valid = list(AUTHOR_CONFIGS.keys())
+            raise ValueError(
+                f"Authors {invalid} not found in AUTHOR_CONFIGS. Valid authors: {valid}"
+            )
+        return v
+
+    @model_validator(mode='after')
+    def validate_authors_match_examples(self) -> 'GoldenDataset':
+        """Ensure dataset.authors contains exactly the authors from all examples."""
+        example_authors = {ex.author for ex in self.examples}
+        metadata_authors = set(self.authors)
+
+        if example_authors != metadata_authors:
+            missing_in_metadata = example_authors - metadata_authors
+            extra_in_metadata = metadata_authors - example_authors
+            msg = "Mismatch between dataset.authors and example authors."
+            if missing_in_metadata:
+                msg += f" Missing in metadata: {sorted(missing_in_metadata)}."
+            if extra_in_metadata:
+                msg += f" Extra in metadata: {sorted(extra_in_metadata)}."
+            raise ValueError(msg)
+
+        return self
 
 
 class ExampleResult(BaseModel):

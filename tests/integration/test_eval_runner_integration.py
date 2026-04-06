@@ -15,6 +15,7 @@ from unittest.mock import Mock
 import pytest
 from langchain_core.runnables import Runnable
 
+from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.eval.runner import run_eval
@@ -43,7 +44,7 @@ CHUNK_003 = "chunk_003"
 CHUNK_004 = "chunk_004"
 
 # Dataset metadata
-DATASET_NAME = "persona_testauthor"
+DATASET_NAME = f"persona_{DEFAULT_AUTHOR}"
 DATASET_VERSION = "8.0"
 DATASET_DATE = "2029-05-10"
 
@@ -56,6 +57,7 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": EXAMPLE_ID_EN_001,
         "question": QUESTION_EN_001,
+        "author": DEFAULT_AUTHOR,
         "language": ENGLISH_ISO_CODE,
         "expected_chunk_ids": [CHUNK_001, CHUNK_002],
     }
@@ -69,6 +71,7 @@ def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
         "name": DATASET_NAME,
         "version": DATASET_VERSION,
         "created_date": DATASET_DATE,
+        "authors": [],
         "description": "test dataset for integration testing",
         "examples": [],
     }
@@ -136,6 +139,7 @@ def test_eval_runner_end_to_end() -> None:
 
     dataset = GoldenDataset(
         **_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example_pass_1, example_pass_2, example_fail]
         )
     )
@@ -322,6 +326,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
 
     dataset = GoldenDataset(
         **_golden_dataset_kwargs(
+            authors=[DEFAULT_AUTHOR],
             examples=[example_en_1, example_en_2, example_fr_1, example_fr_2]
         )
     )
