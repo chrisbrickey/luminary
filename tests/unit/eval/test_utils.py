@@ -28,7 +28,7 @@ NONEXISTENT_FILE = "does_not_exist.json"
 
 # Test data constants
 VALID_DATASET_JSON = {
-    "name": f"{AUTHOR_A}_golden",
+    "name": f"golden_{AUTHOR_A}",
     "version": VERSION_OLD,
     "created_date": DATE_OLD,
     "description": "Test dataset for unit tests",
@@ -55,9 +55,9 @@ MALFORMED_JSON_CONTENT = '{"version": "1.0", "created_date": "2024-05-15"'  # Mi
 def _golden_dataset_filename(author: str, version: str, date: str) -> str:
     """Generate a golden dataset filename following the naming convention.
 
-    Pattern: {author}_{scope}_v{version}_{YYYY-MM-DD}.json
+    Pattern: {scope}_{author}_v{version}_{YYYY-MM-DD}.json
     """
-    return f"{author}_{DATASET_SCOPE}_v{version}_{date}.json"
+    return f"{DATASET_SCOPE}_{author}_v{version}_{date}.json"
 
 
 # --- Tests for load_golden_dataset() ---
@@ -155,7 +155,7 @@ def test_discover_lexicographic_sort_limitation(tmp_path: Path) -> None:
 
 def test_discover_no_matches(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset raises FileNotFoundError when no files match."""
-    expected_pattern = f"{AUTHOR_A}_{DATASET_SCOPE}_v*.json"
+    expected_pattern = f"{DATASET_SCOPE}_{AUTHOR_A}_v*.json"
 
     with pytest.raises(FileNotFoundError) as exc_info:
         discover_latest_golden_dataset(tmp_path, author=AUTHOR_A)

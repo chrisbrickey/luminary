@@ -272,6 +272,7 @@ All test development in this plan follows this workflow:
   - Created helper scripts not in original plan: `scripts/query_for_golden_dataset.py` (queries ChromaDB to get realistic chunk IDs) and `scripts/validate_golden_dataset.py` (validates golden dataset against schema)
   - Used actual chunk IDs from ingested Voltaire corpus instead of placeholders 
   - Dataset includes 8 examples (6 main philosophical topics as FR/EN pairs + 2 adversarial examples) with realistic chunk IDs from *Lettres philosophiques*
+  - Implemented later: Move location of golden dataset to `evals/golden` (still gitignored). Change filename nomenclature of golden datasets to `golden_{author}_v{version}_{YYYY-MM-DD}.json`
 
 ---
 
@@ -283,7 +284,7 @@ All test development in this plan follows this workflow:
 1. **Add configuration constant and tests**
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/configs/test_config_common.py`: Add `test_golden_dataset_path_is_path_object()` to verify it is a `Path` and not a string
-   - Modify `src/configs/common.py`: add `DEFAULT_GOLDEN_DATASET_PATH = Path("data/raw/golden")` to reference the location of golden datasets
+   - Modify `src/configs/common.py`: add `DEFAULT_GOLDEN_DATASET_PATH = Path("data/raw/golden")` to reference the location of golden datasets; Later updated to `evals/golden`.
    - **Rationale:** Following dependency injection pattern from existing pipelines (e.g. `VECTOR_DB_PATH` is a `Path`, not `_DIR`). These configs are sensible defaults that work for most users that can be overridden programmatically or via CLI flags for advanced use cases.
 
 2. **Add tests for utilities for loading golden datasets**
@@ -351,7 +352,7 @@ All test development in this plan follows this workflow:
        Find most recent golden dataset for an author.
 
        Filename format: {author}_{scope}_v{version}_{YYYY-MM-DD}.json
-       Example: voltaire_golden_v1.0_2026-03-28.json
+       Example: golden__voltaire_v1.0_2026-03-28.json
 
        Args:
            directory: Directory to search (usually DEFAULT_GOLDEN_DATASET_PATH)
@@ -389,6 +390,7 @@ All test development in this plan follows this workflow:
   - Changed location of eval utils to the eval module: `src/eval/utils.py` instead of adding to `src/utils/`. Updated subsequent steps in this plan to use this file structure.
   - Removed display of DEFAULT_GOLDEN_DATASET_PATH from error handling in the loading utilities because the path is injected and these utilities should be generic so that they can be reused with any path.
   - Added test to document an accepted edge case where a multi-digit decimal verion (e.g. `v1.12`) will not sort correctly. This edge case is accepted because it is not necessary for our use cases and the golden dataset validations will prevent a multi-digit decimal version.
+  - Implemented later: Added integration testing to verify existence of real golden datasets for each registered author as well as adherence to schema. ; Removed `scripts/validate_golden_dataset.py` which manually validated a hard-coded golden dataset against schema.
 
 ---
 
@@ -430,7 +432,7 @@ All test development in this plan follows this workflow:
        """Complete results from running evaluation harness (the JSON artifact)."""
        # Metadata
        dataset_version: str = Field(..., description="Version of the golden dataset used")
-       dataset_name: str = Field(..., description="Name of the dataset (e.g., 'voltaire_golden')")
+       dataset_name: str = Field(..., description="Name of the dataset (e.g., 'golden_voltaire')")
        run_timestamp: str = Field(..., description="ISO 8601 timestamp with timezone")
        author: str = Field(..., description="Author being evaluated")
 
@@ -550,7 +552,6 @@ All test development in this plan follows this workflow:
   - Move threshold assignment to individual metrics via new property `default_threshold` on MetricSpec on `base.py`. Add FALLBACK_THRESHOLD on `base.py` to which metric-specific thresholds default.
   - Add capability to override metric thresholds in the eval runner including test coverage. Add effective_thresholds property to EvalRun so that actual thresholds used per run are recorded for traceability.
   - Extract all language code references to constants on `configs/common.py` (e.g. ENGLISH_ISO_CODE, FRENCH_ISO_CODE); Clarify difference between language sets: `LOCALIZATION_LANGUAGES` (on `messages.py` for localization of string literals in UI) vs `EVALUATED_LANGUAGES` (on `eval.py` for evaluation harness).
-  - 
 
 ---
 
@@ -703,7 +704,7 @@ All test development in this plan follows this workflow:
   def test_run_eval_cli_end_to_end(tmp_path, mock_llm_chain):
      """Integration test: CLI loads dataset, runs eval, saves artifacts."""
      # Arrange: Create minimal golden dataset file
-     golden_path = tmp_path / "golden" / "voltaire_golden_v1.0_2026-03-29.json"
+     golden_path = tmp_path / "golden" / "golden_voltaire_v1.0_2026-03-29.json"
      golden_path.parent.mkdir(parents=True)
      # ... write minimal dataset ...
 
@@ -738,7 +739,7 @@ All test development in this plan follows this workflow:
   **Prerequisites:**
   - Ollama running (`ollama serve`)
   - Corpus ingested (`uv run python scripts/ingest.py`)
-  - Golden dataset created (`data/raw/golden/voltaire_golden_v1.0_*.json`)
+  - Golden dataset created (`evals/golden/golden_voltaire_v1.0_*.json`)
 
   **Run evaluation:**
   ```bash
@@ -746,7 +747,7 @@ All test development in this plan follows this workflow:
   uv run python scripts/run_eval.py
 
   # Specify dataset explicitly (for reproducibility)
-  uv run python scripts/run_eval.py --golden data/raw/golden/voltaire_golden_v1.0_2026-03-28.json
+  uv run python scripts/run_eval.py --golden evals/golden/golden_{AUTHOR}_v{VERSION}_{YYYY-MM-DD}.json
 
   # Different author (after Step 14)
   uv run python scripts/run_eval.py --author gouges
@@ -763,7 +764,7 @@ All test development in this plan follows this workflow:
 
   **Troubleshooting:**
   - **"Ollama is not running":** Start Ollama with `ollama serve`
-  - **"No golden dataset found":** Create golden dataset in `data/raw/golden/` with correct naming pattern
+  - **"No golden dataset found":** Create golden dataset in `evals/golden/` with correct naming pattern
   - **"Invalid author":** Check author is registered in `src/chains/chat_chain.py::_AUTHOR_CONFIGS`
 
   **After running:**
@@ -891,12 +892,12 @@ All test development in this plan follows this workflow:
    - Update design notes in GoldenExample docstring to document citation field usage
 
 8. **Update golden dataset file with citation data**
-   - Modify `data/raw/golden/voltaire_golden_v1.0_*.json`
+   - Modify `data/raw/golden/golden_voltaire_v1.0_*.json`
    - Add `expected_source_titles: ["Lettres philosophiques"]` to all relevant examples
    - Add `expected_source_titles: []` to adversarial examples (no valid sources)
    - Update version to "1.1" in the JSON file
    - Update description to reflect addition of citation metrics
-   - Rename file to `voltaire_golden_v1.1_{current-date}.json` (schema change warrants version increment)
+   - Rename file to `golden_voltaire_v1.1_{current-date}.json` (schema change warrants version increment)
 
 9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
 
@@ -966,7 +967,7 @@ Compare the new artifact with the first run:
    - **Git Commit:** [full hash]
 
    ## Dataset
-   - **Source:** `data/raw/golden/{author}_golden_v{version}_{date}.json`
+   - **Source:** `evals/golden/golden_{author}_v{version}_{date}.json`
    - **Version:** [1.0|1.1|...]
    - **Size:** [N] examples
    - **Coverage:** [Topics tested]
@@ -1420,7 +1421,7 @@ This process should be repeated throughout development of subsequent sections.
      - EN tolerance: `"expected_keywords_en": ["tolerance", "conscience", "persecution"]`
    - Update version to "1.2" in the JSON file
    - Update description to reflect addition of faithfulness metrics
-   - Rename file to `voltaire_golden_v1.2_{current-date}.json`
+   - Rename file to `golden_voltaire_v1.2_{current-date}.json`
 
 12. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
 
@@ -1525,7 +1526,7 @@ This is the first full report documenting metric additions and system improvemen
      - Adversarial examples → `"translation_pair_id": null`
    - Update version to "1.3" in the JSON file
    - Update description to reflect addition of translation consistency metric
-   - Rename file to `voltaire_golden_v1.3_{current-date}.json`
+   - Rename file to `golden_voltaire_v1.3_{current-date}.json`
 
 9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
 
@@ -1642,7 +1643,7 @@ After implementing advanced quality metrics:
        - Example: `"forbidden_phrases_en": ["social media", "post", "tweet", "Facebook", "internet", "I am an AI"]`
    - Update version to "1.4" in the JSON file
    - Update description to reflect final schema for Step 13
-   - Rename file to `voltaire_golden_v1.4_{current-date}.json` (final schema for evaluation harness)
+   - Rename file to `golden_voltaire_v1.4_{current-date}.json` (final schema for evaluation harness)
 
 6. **(Optional) Add metadata field for extensibility**
    - If needed for future metrics, add `metadata: dict[str, Any] = Field(default_factory=dict, description="Extra fields for future metrics")` to GoldenExample class
