@@ -3,4 +3,4 @@
 from pathlib import Path
 
 # used by eval harness for loading golden datasets
-DEFAULT_GOLDEN_DATASET_PATH = Path("data/raw/golden")
+DEFAULT_GOLDEN_DATASET_PATH = Path("evals/golden")

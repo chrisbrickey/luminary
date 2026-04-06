@@ -37,8 +37,8 @@ def discover_latest_golden_dataset(
 ) -> Path:
     """Find most recent golden dataset for an author.
 
-    Filename format: {author}_{scope}_v{version}_{YYYY-MM-DD}.json
-    Example: voltaire_golden_v1.0_2028-02-28.json
+    Filename format: {scope}_{author}_v{version}_{YYYY-MM-DD}.json
+    Example: golden_voltaire_v1.0_2028-02-28.json
 
     Args:
         directory: Directory to search
@@ -57,7 +57,7 @@ def discover_latest_golden_dataset(
     #   2. Version format (\d+\.\d+) sorts correctly for typical cases: v2.0 > v1.1 > v1.0 (alphabetically)
     #   3. reverse=True puts newest first: Higher versions come first; More recent dates come first
     #   edge case: v1.2 > v1.10 (lexicographically sorted but semantically wrong); Ok because the schema prevents multiple decimal places
-    pattern = f"{author}_{scope}_v*.json"
+    pattern = f"{scope}_{author}_v*.json"
     matches = sorted(directory.glob(pattern), reverse=True)
 
     if not matches:

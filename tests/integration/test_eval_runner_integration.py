@@ -43,7 +43,7 @@ CHUNK_003 = "chunk_003"
 CHUNK_004 = "chunk_004"
 
 # Dataset metadata
-DATASET_NAME = "testauthor_golden"
+DATASET_NAME = "golden_testauthor"
 DATASET_VERSION = "8.0"
 
 

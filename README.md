@@ -112,17 +112,20 @@ EVALUATION (on-demand quality measurement)
 
 ```
 luminary/
+├── chat_ui.py               # web ui for chat
 ├── pyproject.toml           # project metadata, dependencies, and configuration
 ├── uv.lock                  # locked dependency versions
-├── chat_ui.py               # web ui for chat
 │
-├── data/                    # (gitignored)
+├── data/                    (gitignored)
 │   ├── chroma_db/           # ChromaDB vector database
 │   └── raw/
-│       ├── golden/          # versioned golden datasets for evaluation
 │       └── <document_id>/   # scraped documents saved as JSON
 │
-├── locales/                 # user-facing messages that should adapt to detected language
+├── docs/
+├── evals/                   (gitignored)
+│      └── golden/           # versioned golden datasets for the evaluation harness
+│
+├── locales/                 # standard user-facing messages that should adapt to detected language
 │
 ├── src/
 │   ├── chains/              # RAG chain orchestration with retrieval + LLM
@@ -137,7 +140,6 @@ luminary/
 │
 ├── scripts/                 # CLI entrypoints for ingestion, chat, eval, etc.
 │
-├── docs/
 └── tests/
     ├── unit/                # fast offline tests; all external boundaries mocked
     └── integration/         # tests across modules and services*
@@ -163,7 +165,7 @@ Luminary uses a bespoke, automated evaluation harness to measure quality and pre
 
 **Golden datasets:**
 - Golden datasets are versioned collections of test cases that validate system behavior. Versioning allows comparing results across time and referencing the correct snapshot of data when creating eval reports. 
-- They live in `data/raw/golden/` (gitignored) with naming convention: `{author}_golden_v{version}_{YYYY-MM-DD}.json`
+- They live in `evals/golden/` (gitignored) with naming convention: `golden_{author}_v{version}_{YYYY-MM-DD}.json`
 
 **Eval Artifacts:**
 - Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{author}_{YYYY-MM-DD}T{HH-MM-SS}.json`.

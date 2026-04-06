@@ -11,7 +11,7 @@ def test_golden_dataset_path_is_path_object() -> None:
 
 
 def test_golden_dataset_path_points_to_golden_dir() -> None:
-    """Test that DEFAULT_GOLDEN_DATASET_PATH points to data/raw/golden."""
-    assert DEFAULT_GOLDEN_DATASET_PATH == Path("data/raw/golden")
+    """Test that DEFAULT_GOLDEN_DATASET_PATH points to evals/golden."""
+    assert DEFAULT_GOLDEN_DATASET_PATH == Path("evals/golden")
     assert DEFAULT_GOLDEN_DATASET_PATH.name == "golden"
-    assert DEFAULT_GOLDEN_DATASET_PATH.parent == Path("data/raw")
+    assert DEFAULT_GOLDEN_DATASET_PATH.parent == Path("evals")
