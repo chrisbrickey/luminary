@@ -546,11 +546,17 @@ All test development in this plan follows this workflow:
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
   - Added name field to GoldenDataset schema to prevent reconstruction of a dataset name within the eval harness runner. This metadata field may be populated by the caller (e.g. script), which is appropriate because the caller will load the dataset from file.
-  - Remove author field from EvalRun because it is redundant with dataset_name and not necessary for the MVP use cases.
-  - Implement registry pattern (METRIC_REGISTRY) for metrics so that metrics can be automatically discovered by the eval runner (instead of updating the runner every time a metric is added).
-  - Make unit tests on the runner independent from real, registered metrics and ensure scenarios with multiple metrics are tested. Only use the METRIC_REGISTRY in the integration test.
-  - Move threshold assignment to individual metrics via new property `default_threshold` on MetricSpec on `base.py`. Add FALLBACK_THRESHOLD on `base.py` to which metric-specific thresholds default.
-  - Add capability to override metric thresholds in the eval runner including test coverage. Add effective_thresholds property to EvalRun so that actual thresholds used per run are recorded for traceability.
+  - **EvalRun schema**: 
+    - Remove author field from EvalRun because it is redundant with dataset_name and not necessary for the MVP use cases. 
+    - Add dataset_created_date field to support complete traceability to a specific dataset (requires name and version and date).
+  - **METRIC_REGISTRY**:
+    - Implement registry pattern for metrics so that the eval runner may automatically discover all metrics (instead of updating the runner every time a metric is added).
+    - Make unit tests on the runner independent from real, registered metrics and ensure scenarios with multiple metrics are tested. Only use the METRIC_REGISTRY in the integration test.
+  - **Evaluation Thresholds**: 
+    - Move threshold assignment to individual metrics via new property `default_threshold` on MetricSpec on `base.py`. 
+    - Add FALLBACK_THRESHOLD on `base.py` to which metric-specific thresholds default.
+    - Add capability to override metric thresholds in the eval runner including test coverage. 
+    - Add effective_thresholds property to EvalRun so that actual thresholds used per run are recorded for traceability.
   - Extract all language code references to constants on `configs/common.py` (e.g. ENGLISH_ISO_CODE, FRENCH_ISO_CODE); Clarify difference between language sets: `LOCALIZATION_LANGUAGES` (on `messages.py` for localization of string literals in UI) vs `EVALUATED_LANGUAGES` (on `eval.py` for evaluation harness).
 
 ---

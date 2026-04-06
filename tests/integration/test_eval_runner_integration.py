@@ -45,6 +45,7 @@ CHUNK_004 = "chunk_004"
 # Dataset metadata
 DATASET_NAME = "golden_testauthor"
 DATASET_VERSION = "8.0"
+DATASET_DATE = "2029-05-10"
 
 
 # -- Helper functions ---
@@ -67,7 +68,7 @@ def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "name": DATASET_NAME,
         "version": DATASET_VERSION,
-        "created_date": "2029-05-10",
+        "created_date": DATASET_DATE,
         "description": "test dataset for integration testing",
         "examples": [],
     }
@@ -179,6 +180,7 @@ def test_eval_runner_end_to_end() -> None:
     # Assert: Verify EvalRun structure
     assert result.dataset_name == DATASET_NAME
     assert result.dataset_version == DATASET_VERSION
+    assert result.dataset_date == DATASET_DATE
     assert len(result.example_results) == 3
 
     # Assert: Verify chain was invoked for each example

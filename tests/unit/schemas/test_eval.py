@@ -88,8 +88,9 @@ def _example_result_kwargs(**overrides: Any) -> dict[str, Any]:
 def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
     """Return default EvalRun kwargs, with optional overrides."""
     defaults: dict[str, Any] = {
-        "dataset_version": DATASET_VERSION,
         "dataset_name": DATASET_NAME,
+        "dataset_version": DATASET_VERSION,
+        "dataset_date": DATASET_DATE,
         "run_timestamp": RUN_TIMESTAMP,
         "system_version": {"chat_model": "test-model", "commit": "abc123"},
         "effective_thresholds": {METRIC_NAME: FALLBACK_THRESHOLD},
@@ -272,8 +273,9 @@ class TestEvalRun:
     def test_construction_with_required_fields(self) -> None:
         """Valid fields construct successfully."""
         run = EvalRun(**_eval_run_kwargs())
-        assert run.dataset_version == DATASET_VERSION
         assert run.dataset_name == DATASET_NAME
+        assert run.dataset_version == DATASET_VERSION
+        assert run.dataset_date == DATASET_DATE
         assert run.run_timestamp == RUN_TIMESTAMP
         assert run.system_version == {"chat_model": "test-model", "commit": "abc123"}
         assert run.effective_thresholds == {METRIC_NAME: FALLBACK_THRESHOLD}
