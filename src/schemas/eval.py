@@ -50,13 +50,13 @@ class GoldenDataset(BaseModel):
     Tracks version and creation date to enable reproducible evaluation runs
     and comparison of results over time.
 
-    - name field identifies the dataset (e.g., 'golden_voltaire', 'golden_gouges')
+    - name field identifies the dataset (e.g., 'persona_voltaire', 'persona_gouges')
     - version field enables traceability
     - created_date provides temporal context for eval run comparisons
     - examples contain language-specific validation data (bilingual by design)
     """
 
-    name: str = Field(..., description="Dataset name (e.g., 'golden_voltaire', 'golden_gouges')")
+    name: str = Field(..., description="Dataset name; format: '{scope}_{authors)'")
     version: Annotated[str, Field(pattern=r"^\d+\.\d+$")] = Field(
         ...,
         description="Semantic version (e.g., '1.0', '2.0')"
@@ -107,7 +107,7 @@ class EvalRun(BaseModel):
     """
 
     # Metadata
-    dataset_name: str = Field(..., description="Name of the input, the prefix of a real golden datset; e.g., golden_voltaire")
+    dataset_name: str = Field(..., description="Name of the input dataset; format '{scope}_{authors}'")
     dataset_version: str = Field(..., description="Version of the golden dataset used")
     dataset_date: str = Field(..., description="ISO 8601 date from GoldenDataset.created_date (YYYY-MM-DD)")
     run_timestamp: str = Field(..., description="ISO 8601 timestamp with timezone")

@@ -32,19 +32,19 @@ class TestGoldenDatasetIntegration:
         1. discover_latest_golden_dataset returns a path for the author
         2. The path exists on disk
         3. The path points to the correct directory (DEFAULT_GOLDEN_DATASET_PATH)
-        4. The filename matches the expected pattern: golden_{author}_v*.json
+        4. The filename matches the expected pattern: persona_{author}_v*.json
         """
         # Act: Discover the latest golden dataset for this author
         dataset_path = discover_latest_golden_dataset(
             directory=DEFAULT_GOLDEN_DATASET_PATH,
             author=author,
-            scope="golden",
+            scope="persona",
         )
 
         # Assert: Path exists
         assert dataset_path.exists(), (
             f"Golden dataset file not found for author '{author}'. "
-            f"Expected to find file matching pattern 'golden_{author}_v*.json' "
+            f"Expected to find file matching pattern 'persona_{author}_v*.json' "
             f"in {DEFAULT_GOLDEN_DATASET_PATH}"
         )
 
@@ -55,9 +55,9 @@ class TestGoldenDatasetIntegration:
         )
 
         # Assert: Filename matches expected pattern
-        assert dataset_path.name.startswith(f"golden_{author}_v"), (
+        assert dataset_path.name.startswith(f"persona_{author}_v"), (
             f"Golden dataset filename doesn't match pattern. "
-            f"Expected: golden_{author}_v*.json, Got: {dataset_path.name}"
+            f"Expected: persona_{author}_v*.json, Got: {dataset_path.name}"
         )
         assert dataset_path.suffix == ".json", (
             f"Golden dataset file must be JSON. Got: {dataset_path.suffix}"
@@ -80,7 +80,7 @@ class TestGoldenDatasetIntegration:
         dataset_path = discover_latest_golden_dataset(
             directory=DEFAULT_GOLDEN_DATASET_PATH,
             author=author,
-            scope="golden",
+            scope="persona",
         )
 
         # Act: Load and validate the dataset (Pydantic validation happens here)
@@ -131,7 +131,7 @@ class TestGoldenDatasetIntegration:
                 dataset_path = discover_latest_golden_dataset(
                     directory=DEFAULT_GOLDEN_DATASET_PATH,
                     author=author,
-                    scope="golden",
+                    scope="persona",
                 )
                 discovered_authors.append((author, dataset_path.name))
             except FileNotFoundError:

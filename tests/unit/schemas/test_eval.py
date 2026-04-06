@@ -16,11 +16,13 @@ METRIC_NAME = "test_metric"
 VALID_SCORE = FALLBACK_THRESHOLD
 EXAMPLE_ID = "test_example_001"
 QUESTION_TEXT = "What is the meaning of tolerance?"
+RUN_TIMESTAMP = "2029-05-09T14:30:45+00:00"
+
+# Golden datasets
+DATASET_NAME = "persona_testauthor"
 DATASET_VERSION = "3.0"
 DATASET_DATE = "2029-05-09"
 DATASET_DESCRIPTION = "Test dataset for evaluation"
-RUN_TIMESTAMP = "2029-05-09T14:30:45+00:00"
-DATASET_NAME = "test_dataset_golden"
 
 
 def _metric_kwargs(**overrides: Any) -> dict[str, Any]:

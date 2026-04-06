@@ -25,7 +25,7 @@ QUESTION_003 = "What is reason?"
 # Chunk and dataset identifiers
 CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
-DATASET_NAME = "golden_testauthor"
+DATASET_NAME = "persona_testauthor"
 DATASET_VERSION = "7.0"
 DATASET_DATE = "2029-05-09"
 
