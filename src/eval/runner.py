@@ -307,7 +307,9 @@ def run_eval(
 
     # Create and return EvalRun
     return EvalRun(
-        dataset_name=golden_dataset.name,
+        dataset_scope=golden_dataset.scope,
+        dataset_authors=sorted(golden_dataset.authors),
+        dataset_identifier=golden_dataset.identifier,
         dataset_version=golden_dataset.version,
         dataset_date=golden_dataset.created_date,
         run_timestamp=datetime.now(timezone.utc).isoformat(),

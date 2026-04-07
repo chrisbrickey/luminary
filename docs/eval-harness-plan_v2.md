@@ -392,7 +392,9 @@ All test development in this plan follows this workflow:
   - Changed location of eval utils to the eval module: `src/eval/utils.py` instead of adding to `src/utils/`. Updated subsequent steps in this plan to use this file structure.
   - Removed display of DEFAULT_GOLDEN_DATASET_PATH from error handling in the loading utilities because the path is injected and these utilities should be generic so that they can be reused with any path.
   - Added test to document an accepted edge case where a multi-digit decimal verion (e.g. `v1.12`) will not sort correctly. This edge case is accepted because it is not necessary for our use cases and the golden dataset validations will prevent a multi-digit decimal version.
-  - Implemented later: Added integration testing to verify existence of real golden datasets for each registered author as well as adherence to schema. ; Removed `scripts/validate_golden_dataset.py` which manually validated a hard-coded golden dataset against schema.
+  - Implemented later: 
+    - Added integration testing to verify existence of real golden datasets for each registered author as well as adherence to schema. ; Removed `scripts/validate_golden_dataset.py` which manually validated a hard-coded golden dataset against schema.
+    - discover_latest_golden_dataset: Changed the author (str) parameter to authors (list[str]) so that it can find datasets that contain multiple authors.
 
 ---
 
@@ -548,10 +550,11 @@ All test development in this plan follows this workflow:
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
   - Eval runner takes a collection of runnable chains - one for each author in the examples of the golden dataset. Add validation that all required chains are present.
-  - **Filenames and metadata**: 
-    - Added name field to GoldenDataset schema to prevent reconstruction of a dataset name within the eval harness runner. This metadata field may be populated by the caller (e.g. script), which is appropriate because the caller will load the dataset from file.
+  - **Traceability (filenames and metadata)**: 
     - Updated golden dataset filename convention to `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`. In the nearterm, all golden datasets will have scope `persona` to emphasize individual response quality, grounding, and persona fidelity.
-    - In this plan, remove author from filenames of eval run artifacts and reports in order to decouple eval runs from a specific author. Links to golden datasets will be persisted in other ways.
+    - Added compiled identifier field (unique combination of scope + authors + version + date) to GoldenDataset schema; This is referenced on EvalRun (dataset_identifier) to strengthen the connection between the two components. I considered storing a hash of the file content as an id, but it's not human readable and not necessary for the MVP. This field is also used to provide the filename for the actual golden dataset json file.
+    - Strengthened test coverage on the linkage between golden datasets and eval runs.
+    - In subsequent sections of this plan, I removed author from filenames of eval run artifacts and reports because it was redundant and unnecessarily complex to manage. Referencing of golden datasets should now use the identifier field, which is both human-readable and unique.
   - **EvalRun schema**: 
     - Remove author field from EvalRun because it is redundant with dataset_name and not necessary for the MVP use cases. 
     - Add dataset_created_date field to support complete traceability to a specific dataset (requires name and version and date).
