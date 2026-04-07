@@ -146,6 +146,7 @@ def test_eval_runner_end_to_end() -> None:
 
     # Arrange: Create mock chain that returns different responses per example
     mock_chain = Mock(spec=Runnable)
+    chains = {DEFAULT_AUTHOR: mock_chain}
 
     # Define responses: perfect match for first 2, no match for 3rd
     response_pass_1 = ChatResponse(
@@ -179,7 +180,7 @@ def test_eval_runner_end_to_end() -> None:
     mock_chain.invoke.side_effect = [response_pass_1, response_pass_2, response_fail]
 
     # Act: Run eval with real runner + real metrics + mock chain
-    result = run_eval(mock_chain, dataset)
+    result = run_eval(dataset, chains)
 
     # Assert: Verify EvalRun structure
     assert result.dataset_name == DATASET_NAME
@@ -333,6 +334,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
 
     # Arrange: Create mock chain with multilingual responses
     mock_chain = Mock(spec=Runnable)
+    chains = {DEFAULT_AUTHOR: mock_chain}
 
     response_en_1 = ChatResponse(
         **_chat_response_kwargs(
@@ -379,7 +381,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
     ]
 
     # Act: Run eval with multilingual dataset
-    result = run_eval(mock_chain, dataset)
+    result = run_eval(dataset, chains)
 
     # Assert: Verify all examples processed
     assert len(result.example_results) == 4
