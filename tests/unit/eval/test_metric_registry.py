@@ -1,5 +1,6 @@
 """Tests for src/eval/metrics/base.py — metric registry infrastructure."""
 
+from pathlib import Path
 from unittest.mock import Mock
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE, SPANISH_ISO_CODE
@@ -295,3 +296,114 @@ class TestIsMetricApplicable:
         response = Mock(actual_data=["item2"])
 
         assert is_metric_applicable(spec, example, response) is True
+
+
+class TestMetricRegistryCompleteness:
+    """Tests that validate all metrics are properly registered."""
+
+    def test_every_metric_file_registers_at_least_one_metric(self) -> None:
+        """Every .py file in src/eval/metrics/ (except base/__init__) registers at least one metric.
+
+        This ensures new metric files don't forget to call register_metric().
+        """
+        # Import metrics to trigger auto-registration
+        import src.eval.metrics  # noqa: F401
+
+        # Find all metric module files
+        metrics_dir = Path("src/eval/metrics")
+        metric_files = {
+            f.stem
+            for f in metrics_dir.glob("*.py")
+            if f.stem not in ("__init__", "base")
+        }
+
+        # Build mapping of module → metrics
+        module_to_metrics: dict[str, list[str]] = {}
+        for spec in METRIC_REGISTRY:
+            # Extract module name from compute function
+            module_name = spec.compute.__module__
+            # Extract just the file stem (e.g., "src.eval.metrics.retrieval" → "retrieval")
+            if module_name.startswith("src.eval.metrics."):
+                file_stem = module_name.split(".")[-1]
+                if file_stem not in module_to_metrics:
+                    module_to_metrics[file_stem] = []
+                module_to_metrics[file_stem].append(spec.name)
+
+        # Verify every metric file has at least one registered metric
+        files_without_metrics = metric_files - set(module_to_metrics.keys())
+
+        assert not files_without_metrics, (
+            f"Metric files found with no registered metrics: {sorted(files_without_metrics)}. "
+            f"Each .py file in src/eval/metrics/ must register at least one metric. "
+            f"Files with metrics: {sorted(module_to_metrics.keys())}"
+        )
+
+    def test_all_registered_metrics_come_from_metrics_directory(self) -> None:
+        """Every metric in METRIC_REGISTRY must be defined in src/eval/metrics/.
+
+        This prevents metrics from being registered from outside the metrics directory.
+        """
+        # Import metrics to trigger auto-registration
+        import src.eval.metrics  # noqa: F401
+
+        # Check all metrics come from the metrics directory
+        invalid_metrics = []
+        for spec in METRIC_REGISTRY:
+            module_name = spec.compute.__module__
+            if not module_name.startswith("src.eval.metrics."):
+                invalid_metrics.append((spec.name, module_name))
+
+        assert not invalid_metrics, (
+            f"Metrics registered from outside src.eval.metrics/: {invalid_metrics}. "
+            f"All metrics must be defined in modules under src/eval/metrics/"
+        )
+
+    def test_no_duplicate_metric_names(self) -> None:
+        """Each metric name appears only once in the registry.
+
+        This prevents bugs where two metrics use the same name and one
+        silently overwrites the other.
+        """
+        # Import metrics to trigger auto-registration
+        import src.eval.metrics  # noqa: F401
+
+        metric_names = [spec.name for spec in METRIC_REGISTRY]
+        unique_names = set(metric_names)
+
+        assert len(metric_names) == len(unique_names), (
+            f"Duplicate metric names found. "
+            f"All names: {sorted(metric_names)}. "
+            f"Unique names: {sorted(unique_names)}"
+        )
+
+    def test_registry_sanity_checks(self) -> None:
+        """Basic sanity checks for the registry.
+
+        Verifies that:
+        - At least one metric file exists
+        - At least one metric is registered
+        - Known metrics are present (regression prevention)
+        """
+        # Import metrics to trigger auto-registration
+        import src.eval.metrics  # noqa: F401
+
+        # Check metric files exist
+        metrics_dir = Path("src/eval/metrics")
+        metric_files = [
+            f.stem
+            for f in metrics_dir.glob("*.py")
+            if f.stem not in ("__init__", "base")
+        ]
+        assert len(metric_files) > 0, "No metric files found in src/eval/metrics/"
+
+        # Check metrics are registered
+        registered_names = {spec.name for spec in METRIC_REGISTRY}
+        assert len(registered_names) > 0, "METRIC_REGISTRY is empty - no metrics registered"
+
+        # Verify known metrics exist (prevents regressions)
+        expected_metrics = {"retrieval_relevance"}
+        missing_metrics = expected_metrics - registered_names
+        assert not missing_metrics, (
+            f"Expected metrics not registered: {sorted(missing_metrics)}. "
+            f"Registered metrics: {sorted(registered_names)}"
+        )

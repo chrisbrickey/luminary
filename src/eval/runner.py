@@ -17,8 +17,8 @@ from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult
 
-# Import all metric modules to ensure they register themselves
-import src.eval.metrics.retrieval  # noqa: F401
+# Auto-register all metrics; Skip unused import warning
+import src.eval.metrics  # noqa: F401
 
 
 def _get_system_version() -> dict[str, str]:
