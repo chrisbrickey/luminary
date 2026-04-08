@@ -1,10 +1,11 @@
 """Utility functions for evaluation harness."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from src.configs.authors import DEFAULT_AUTHOR
-from src.schemas.eval import GoldenDataset
+from src.schemas.eval import GoldenDataset, EvalRun
 
 
 def load_golden_dataset(path: Path) -> GoldenDataset:
@@ -20,17 +21,36 @@ def load_golden_dataset(path: Path) -> GoldenDataset:
         Validated GoldenDataset object
 
     Raises:
-        FileNotFoundError: If path does not exist (include path in message)
+        IsADirectoryError: If path points to a directory, not a file
+        FileNotFoundError: If path does not exist
+        PermissionError: If file cannot be read due to permissions
         json.JSONDecodeError: If file is not valid JSON
         ValidationError: If JSON doesn't match GoldenDataset schema (Pydantic)
     """
     if not path.exists():
         raise FileNotFoundError(f"Golden dataset not found: {path}\n")
 
-    with path.open() as f:
-        data = json.load(f)
+    try:
+        # Load JSON data
+        with path.open() as f:
+            data = json.load(f)
 
-    # Pydantic validation
+    except PermissionError as e:
+        raise PermissionError(
+            f"Permission denied: Cannot read file '{path}'. Check file permissions and retry."
+        ) from e
+    except IsADirectoryError as e:
+        raise IsADirectoryError(
+            f"Expected file but found directory: '{path}'"
+        ) from e
+    except json.JSONDecodeError as e:
+        raise json.JSONDecodeError(
+            f"Invalid JSON in '{path}'; {e.msg}",
+            e.doc,
+            e.pos
+        ) from e
+
+    # Pydantic validation (let ValidationError bubble up with its detailed messages)
     return GoldenDataset(**data)
 
 
@@ -85,3 +105,59 @@ def discover_latest_golden_dataset(
         )
 
     return matches[0]
+
+def save_eval_run(eval_run: EvalRun, output_dir: Path) -> Path:
+    """Save EvalRun to timestamped JSON file.
+
+    Filename format: {YYYY-MM-DD}T{HH-MM-SS}.json
+    Example: 2026-03-28T14-30-45.json
+
+    Args:
+        eval_run: EvalRun object to save
+        output_dir: Directory to save to (created if doesn't exist)
+
+    Returns:
+        Path to saved file
+
+    Raises:
+        PermissionError: If cannot create directory or write file
+        OSError: If disk is full or other OS-level error
+        TypeError: If eval_run contains non-JSON-serializable data
+    """
+
+    # Create output directory if it doesn't exist
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        raise PermissionError(
+            f"Permission denied: Cannot create directory '{output_dir}'. "
+            f"Check file permissions and try again."
+        ) from e
+    except OSError as e:
+        raise OSError(
+            f"Failed to create directory '{output_dir}': {e}"
+        ) from e
+
+    # Generate timestamped filename
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    filename = f"{timestamp}.json"
+    filepath = output_dir / filename
+
+    # Save EvalRun as JSON
+    try:
+        with filepath.open("w") as f:
+            json.dump(eval_run.model_dump(), f, indent=2)
+    except PermissionError as e:
+        raise PermissionError(
+            f"Permission denied: Cannot write to file '{filepath}'. Check file permissions and retry."
+        ) from e
+    except OSError as e:
+        raise OSError(
+            f"Failed to write file '{filepath}': {e}. Check available disk space."
+        ) from e
+    except TypeError as e:
+        raise TypeError(
+            f"Failed to serialize EvalRun to JSON: {e}. EvalRun contains non-serializable data."
+        ) from e
+
+    return filepath

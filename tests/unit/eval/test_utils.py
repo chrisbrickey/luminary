@@ -1,6 +1,9 @@
 """Unit tests for eval utility functions."""
 
 import json
+import os
+import re
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,8 +12,8 @@ from pydantic import ValidationError
 
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE
-from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset
-from src.schemas.eval import GoldenDataset
+from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset, save_eval_run
+from src.schemas.eval import EvalRun, GoldenDataset
 
 # --- Pytest fixtures ---
 
@@ -65,6 +68,49 @@ INVALID_SCHEMA_JSON = {
 }
 
 MALFORMED_JSON_CONTENT = '{"version": "1.0", "created_date": "2024-05-15"'  # Missing closing brace
+
+# Test data for save_eval_run
+VALID_EVAL_RUN_DICT = {
+    "dataset_scope": SCOPE,
+    "dataset_authors": [AUTHOR_A],
+    "dataset_identifier": f"{SCOPE}_{AUTHOR_A}_v{VERSION_OLD}_{DATE_OLD}",
+    "dataset_version": VERSION_OLD,
+    "dataset_date": DATE_OLD,
+    "run_timestamp": "2025-06-15T14:30:45+00:00",
+    "system_version": {
+        "chat_model": "test-model",
+        "commit": "abc123def456"
+    },
+    "effective_thresholds": {
+        "test_metric": 0.7
+    },
+    "example_results": [
+        {
+            "example_id": "test_example_001",
+            "question": "Sample question for testing?",
+            "language": ENGLISH_ISO_CODE,
+            "response": {
+                "text": "Sample response",
+                "retrieved_passage_ids": ["chunk_abc123"],
+                "retrieved_contexts": ["Sample context text"],
+                "retrieved_source_titles": ["Sample Source"],
+                "language": ENGLISH_ISO_CODE
+            },
+            "metrics": [
+                {
+                    "name": "test_metric",
+                    "score": 0.85,
+                    "details": {"status": "ok"}
+                }
+            ],
+            "passed": True
+        }
+    ],
+    "aggregate_scores": {
+        "overall": {"test_metric": 0.85}
+    },
+    "overall_pass_rate": 1.0
+}
 
 
 def _golden_dataset_filename(scope: str, authors: list[str], version: str, date: str) -> str:
@@ -128,6 +174,40 @@ def test_load_invalid_schema(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError):
         load_golden_dataset(invalid_schema_file)
+
+
+def test_load_permission_denied(tmp_path: Path) -> None:
+    """Test that load_golden_dataset raises PermissionError with context when file is unreadable."""
+    dataset_file = tmp_path / "unreadable.json"
+    dataset_file.write_text(json.dumps(VALID_DATASET_JSON))
+
+    # Make file unreadable (Unix-like systems only)
+    os.chmod(dataset_file, 0o000)
+
+    try:
+        with pytest.raises(PermissionError) as exc_info:
+            load_golden_dataset(dataset_file)
+
+        error_message = str(exc_info.value)
+        assert "Permission denied" in error_message
+        assert str(dataset_file) in error_message
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(dataset_file, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_load_is_directory_error(tmp_path: Path) -> None:
+    """Test that load_golden_dataset raises IsADirectoryError when path is a directory."""
+    # Create a directory instead of a file
+    directory_path = tmp_path / "not_a_file"
+    directory_path.mkdir()
+
+    with pytest.raises(IsADirectoryError) as exc_info:
+        load_golden_dataset(directory_path)
+
+    error_message = str(exc_info.value)
+    assert "Expected file but found directory" in error_message
+    assert str(directory_path) in error_message
 
 
 # --- Tests for discover_latest_golden_dataset() ---
@@ -273,4 +353,120 @@ def test_discover_multi_author_sorts_authors(tmp_path: Path) -> None:
     # Should still find the file because function sorts author names before matching
     assert result == multi_author_file
     assert f"{AUTHOR_A}_{AUTHOR_B}" in result.name
+
+
+# --- Tests for save_eval_run() ---
+
+
+def test_save_creates_directory(tmp_path: Path) -> None:
+    """Test that save_eval_run creates the output directory if it doesn't exist."""
+    nonexistent_dir = tmp_path / "new_directory" / "nested"
+    eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+
+    # Directory should not exist yet
+    assert not nonexistent_dir.exists()
+
+    # Save should create the directory
+    result_path = save_eval_run(eval_run, nonexistent_dir)
+
+    # Directory should now exist
+    assert nonexistent_dir.exists()
+    assert nonexistent_dir.is_dir()
+    assert result_path.parent == nonexistent_dir
+
+
+def test_save_generates_valid_filename(tmp_path: Path) -> None:
+    """Test that save_eval_run generates filename matching pattern {YYYY-MM-DD}T{HH-MM-SS}.json."""
+    eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+
+    result_path = save_eval_run(eval_run, tmp_path)
+
+    # Filename should match pattern: {YYYY-MM-DD}T{HH-MM-SS}.json
+    timestamp_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}"
+    expected_pattern = rf"^{timestamp_pattern}\.json$"
+
+    assert result_path.parent == tmp_path
+    assert re.match(expected_pattern, result_path.name), (
+        f"Filename '{result_path.name}' does not match expected pattern '{expected_pattern}'"
+    )
+
+    # Verify file was created and contains valid JSON
+    assert result_path.exists()
+    assert result_path.is_file()
+
+
+def test_save_preserves_all_fields(tmp_path: Path) -> None:
+    """Test that save_eval_run preserves all EvalRun fields in JSON output."""
+    eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+
+    result_path = save_eval_run(eval_run, tmp_path)
+
+    # Load saved JSON and reconstruct EvalRun
+    saved_data = json.loads(result_path.read_text())
+    loaded_eval_run = EvalRun(**saved_data)
+
+    # Verify all top-level fields are preserved
+    assert loaded_eval_run.dataset_scope == eval_run.dataset_scope
+    assert loaded_eval_run.dataset_authors == eval_run.dataset_authors
+    assert loaded_eval_run.dataset_identifier == eval_run.dataset_identifier
+    assert loaded_eval_run.dataset_version == eval_run.dataset_version
+    assert loaded_eval_run.dataset_date == eval_run.dataset_date
+    assert loaded_eval_run.run_timestamp == eval_run.run_timestamp
+    assert loaded_eval_run.system_version == eval_run.system_version
+    assert loaded_eval_run.effective_thresholds == eval_run.effective_thresholds
+    assert loaded_eval_run.aggregate_scores == eval_run.aggregate_scores
+    assert loaded_eval_run.overall_pass_rate == eval_run.overall_pass_rate
+
+    # Verify example_results structure is preserved
+    assert len(loaded_eval_run.example_results) == len(eval_run.example_results)
+    for loaded_ex, orig_ex in zip(loaded_eval_run.example_results, eval_run.example_results):
+        assert loaded_ex.example_id == orig_ex.example_id
+        assert loaded_ex.question == orig_ex.question
+        assert loaded_ex.language == orig_ex.language
+        assert loaded_ex.passed == orig_ex.passed
+        assert loaded_ex.response.text == orig_ex.response.text
+        assert loaded_ex.response.retrieved_passage_ids == orig_ex.response.retrieved_passage_ids
+        assert len(loaded_ex.metrics) == len(orig_ex.metrics)
+
+
+def test_save_permission_error_on_directory_creation(tmp_path: Path) -> None:
+    """Test that save_eval_run raises PermissionError or OSError when directory creation fails."""
+    eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+
+    # Create a file where we want to create a directory (will cause error)
+    blocking_file = tmp_path / "blocking_file"
+    blocking_file.write_text("content")
+
+    # Try to create directory with same name as file (should fail)
+    output_dir = blocking_file / "nested"
+
+    with pytest.raises((PermissionError, OSError)) as exc_info:
+        save_eval_run(eval_run, output_dir)
+
+    error_message = str(exc_info.value)
+    # Error message should contain helpful context
+    assert str(output_dir) in error_message or str(blocking_file) in error_message
+
+
+def test_save_permission_error_on_file_write(tmp_path: Path) -> None:
+    """Test that save_eval_run raises PermissionError when file write is denied."""
+    eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+
+    # Create read-only directory (Unix-like systems only)
+    read_only_dir = tmp_path / "read_only"
+    read_only_dir.mkdir()
+
+    # Make directory read-only (no write permission)
+    os.chmod(read_only_dir, stat.S_IRUSR | stat.S_IXUSR)
+
+    try:
+        with pytest.raises(PermissionError) as exc_info:
+            save_eval_run(eval_run, read_only_dir)
+
+        error_message = str(exc_info.value)
+        assert "Permission denied" in error_message
+        assert "write" in error_message.lower()
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(read_only_dir, stat.S_IRWXU)
 
