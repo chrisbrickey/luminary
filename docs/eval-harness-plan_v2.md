@@ -24,7 +24,14 @@ All test development in this plan follows this workflow:
    - Use obviously fake values: "test-user", "sample-text", "item_001", 42, "https://example.com"
    - Never use real-world names, brands, URLs, or domain-specific data
    - Use gender-neutral names (Alex, Sam, Jordan) and avoid stereotypes
-6. **Verify complete:** Ensure entire test suite (including mypy) passes before marking subsection complete
+6. **Mock appropriately:**
+   - Unit tests: Use fake authors (condorcet, wollstonecraft, diderot)
+   - Exceptions: Config tests: tests/unit/configs/test_config_authors.py correctly tests real production configs
+   - Integration tests: Use real authors from production AUTHOR_CONFIGS (voltaire, gouges)
+7. **Flag external tests for exclusion:**
+   - Any tests that make rpc calls (real HTTP/gRPC) should be tagged as `external` and excluded from the general test command.
+   - Unit tests (fast, no network): `uv run pytest`; External tests (real HTTP/gRPC): `uv run pytest -m external`
+8. **Verify complete:** Ensure entire test suite (including mypy) passes before marking subsection complete
 
 ---
 
@@ -550,6 +557,10 @@ All test development in this plan follows this workflow:
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
   - Eval runner takes a collection of runnable chains - one for each author in the examples of the golden dataset. Add validation that all required chains are present.
+  - Mocked AUTHOR_CONFIGS in all unit tests; Testing strategy established:
+    - Unit tests: Use fake authors (condorcet, wollstonecraft, diderot)
+    - Exceptions: Config tests: tests/unit/configs/test_config_authors.py correctly tests real production configs
+    - Integration tests: Use real authors from production AUTHOR_CONFIGS (voltaire, gouges)
   - **Traceability (filenames and metadata)**: 
     - Updated golden dataset filename convention to `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`. In the nearterm, all golden datasets will have scope `persona` to emphasize individual response quality, grounding, and persona fidelity.
     - Added compiled identifier field (unique combination of scope + authors + version + date) to GoldenDataset schema; This is referenced on EvalRun (dataset_identifier) to strengthen the connection between the two components. I considered storing a hash of the file content as an id, but it's not human readable and not necessary for the MVP. This field is also used to provide the filename for the actual golden dataset json file.

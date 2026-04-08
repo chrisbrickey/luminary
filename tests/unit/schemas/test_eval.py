@@ -1,22 +1,31 @@
 """Tests for src/schemas/eval.py - evaluation harness schemas"""
 
 from typing import Any
-from unittest.mock import Mock, patch
 
 import pytest
 from pydantic import ValidationError
 
+from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
+
+# --- Pytest fixtures ---
+
+
+@pytest.fixture(autouse=True)
+def _mock_authors(mock_author_configs):
+    """Apply author mocking to all tests in this file."""
+
 
 # --- Shared test constants ---
 
 METRIC_NAME = "test_metric"
 VALID_SCORE = FALLBACK_THRESHOLD
 EXAMPLE_ID = "test_example_001"
-AUTHOR = "voltaire"
+# Use centralized fake author constant from conftest
+AUTHOR = FAKE_AUTHOR_A
 QUESTION_TEXT = "What is the meaning of tolerance?"
 RUN_TIMESTAMP = "2029-05-09T14:30:45+00:00"
 
@@ -298,15 +307,16 @@ class TestGoldenDataset:
         expected_identifier = f"{DATASET_SCOPE}_{AUTHOR}_v{DATASET_VERSION}_{DATASET_DATE}"
         assert dataset.identifier == expected_identifier
 
-    @patch("src.configs.authors.AUTHOR_CONFIGS", {"voltaire": Mock(), "gouges": Mock()})
     def test_authors_unsorted_raises_validation_error(self) -> None:
         """GoldenDataset.authors must be sorted alphabetically."""
         # Create examples for two authors
-        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author="voltaire"))
-        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author="gouges"))
+        # Note: "wollstonecraft" > "diderot" alphabetically
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author=FAKE_AUTHOR_B))
+        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author=FAKE_AUTHOR_C))
 
         # Provide authors in reverse alphabetical order (unsorted)
-        authors_unsorted = ["voltaire", "gouges"]
+        # [wollstonecraft, diderot] is wrong - should be [diderot, wollstonecraft]
+        authors_unsorted = [FAKE_AUTHOR_B, FAKE_AUTHOR_C]
 
         # Assert: Unsorted authors raise ValidationError
         with pytest.raises(ValidationError, match="must be sorted alphabetically"):
@@ -315,63 +325,63 @@ class TestGoldenDataset:
                 examples=[example1, example2]
             ))
 
-    @patch("src.configs.authors.AUTHOR_CONFIGS", {"voltaire": Mock(), "gouges": Mock()})
     def test_identifier_with_sorted_authors(self) -> None:
         """GoldenDataset.identifier correctly formats with sorted authors."""
         # Create examples for two authors
-        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author="voltaire"))
-        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author="gouges"))
+        # Note: "diderot" < "wollstonecraft" alphabetically
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author=FAKE_AUTHOR_C))
+        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author=FAKE_AUTHOR_B))
 
         # Provide authors in sorted alphabetical order
-        authors_sorted = ["gouges", "voltaire"]
+        authors_sorted = [FAKE_AUTHOR_C, FAKE_AUTHOR_B]
         dataset = GoldenDataset(**_golden_dataset_kwargs(
             authors=authors_sorted,
             examples=[example1, example2]
         ))
 
         # Assert: .authors field maintains sorted order
-        assert dataset.authors == ["gouges", "voltaire"]
+        assert dataset.authors == [FAKE_AUTHOR_C, FAKE_AUTHOR_B]
 
-        # Assert: .identifier uses sorted authors (gouges < voltaire)
-        expected_identifier = f"{DATASET_SCOPE}_gouges_voltaire_v{DATASET_VERSION}_{DATASET_DATE}"
+        # Assert: .identifier uses sorted authors
+        expected_identifier = f"{DATASET_SCOPE}_{FAKE_AUTHOR_C}_{FAKE_AUTHOR_B}_v{DATASET_VERSION}_{DATASET_DATE}"
         assert dataset.identifier == expected_identifier
-        assert "gouges_voltaire" in dataset.identifier  # gouges comes first
+        assert f"{FAKE_AUTHOR_C}_{FAKE_AUTHOR_B}" in dataset.identifier
 
-    @patch("src.configs.authors.AUTHOR_CONFIGS", {"gouges": Mock(), "voltaire": Mock()})
     def test_identifier_sorts_authors_already_sorted_input(self) -> None:
         """GoldenDataset.identifier works correctly when authors already sorted."""
         # Create examples for two authors
-        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author="gouges"))
-        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author="voltaire"))
+        # Note: "diderot" < "wollstonecraft" alphabetically
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author=FAKE_AUTHOR_C))
+        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author=FAKE_AUTHOR_B))
 
         # Provide authors already in alphabetical order
-        authors_sorted = ["gouges", "voltaire"]
+        authors_sorted = [FAKE_AUTHOR_C, FAKE_AUTHOR_B]
         dataset = GoldenDataset(**_golden_dataset_kwargs(
             authors=authors_sorted,
             examples=[example1, example2]
         ))
 
         # Assert: .authors field preserves (already sorted) input order
-        assert dataset.authors == ["gouges", "voltaire"]
+        assert dataset.authors == [FAKE_AUTHOR_C, FAKE_AUTHOR_B]
 
         # Assert: .identifier maintains sorted order
-        expected_identifier = f"{DATASET_SCOPE}_gouges_voltaire_v{DATASET_VERSION}_{DATASET_DATE}"
+        expected_identifier = f"{DATASET_SCOPE}_{FAKE_AUTHOR_C}_{FAKE_AUTHOR_B}_v{DATASET_VERSION}_{DATASET_DATE}"
         assert dataset.identifier == expected_identifier
 
-    @patch("src.configs.authors.AUTHOR_CONFIGS", {"author_a": Mock(), "author_b": Mock(), "author_c": Mock()})
     def test_identifier_with_three_sorted_authors(self) -> None:
         """GoldenDataset.identifier correctly formats with three sorted authors."""
         scope = "retrieval"
         version = "2.5"
         date = "2030-12-31"
 
-        # Create examples for each author
-        example_a = GoldenExample(**_golden_example_kwargs(id="ex_a", author="author_a"))
-        example_b = GoldenExample(**_golden_example_kwargs(id="ex_b", author="author_b"))
-        example_c = GoldenExample(**_golden_example_kwargs(id="ex_c", author="author_c"))
+        # Create examples for each author (all three fake authors)
+        # Alphabetical order: condorcet < diderot < wollstonecraft (A < C < B)
+        example_a = GoldenExample(**_golden_example_kwargs(id="ex_a", author=FAKE_AUTHOR_A))
+        example_b = GoldenExample(**_golden_example_kwargs(id="ex_b", author=FAKE_AUTHOR_B))
+        example_c = GoldenExample(**_golden_example_kwargs(id="ex_c", author=FAKE_AUTHOR_C))
 
         # Provide authors in sorted alphabetical order
-        authors_sorted = ["author_a", "author_b", "author_c"]
+        authors_sorted = [FAKE_AUTHOR_A, FAKE_AUTHOR_C, FAKE_AUTHOR_B]
         dataset = GoldenDataset(**_golden_dataset_kwargs(
             scope=scope,
             authors=authors_sorted,
@@ -381,25 +391,25 @@ class TestGoldenDataset:
         ))
 
         # Assert: .authors field maintains sorted order
-        assert dataset.authors == ["author_a", "author_b", "author_c"]
+        assert dataset.authors == [FAKE_AUTHOR_A, FAKE_AUTHOR_C, FAKE_AUTHOR_B]
         assert dataset.authors == sorted(dataset.authors)
 
         # Assert: .identifier uses sorted authors
-        expected = f"{scope}_author_a_author_b_author_c_v{version}_{date}"
+        expected = f"{scope}_{FAKE_AUTHOR_A}_{FAKE_AUTHOR_C}_{FAKE_AUTHOR_B}_v{version}_{date}"
         assert dataset.identifier == expected
 
-    @patch("src.configs.authors.AUTHOR_CONFIGS", {"author_a": Mock(), "author_b": Mock(), "author_c": Mock()})
     def test_identifier_format_structure(self) -> None:
         """GoldenDataset.identifier follows exact format: {scope}_{sorted_authors}_v{version}_{date}."""
         scope = "retrieval"
-        authors = ["author_a", "author_b", "author_c"]
+        # Alphabetical order: condorcet < diderot < wollstonecraft (A < C < B)
+        authors = [FAKE_AUTHOR_A, FAKE_AUTHOR_C, FAKE_AUTHOR_B]
         version = "2.5"
         date = "2030-12-31"
 
         # Create examples for each author
-        example_a = GoldenExample(**_golden_example_kwargs(id="ex_a", author="author_a"))
-        example_b = GoldenExample(**_golden_example_kwargs(id="ex_b", author="author_b"))
-        example_c = GoldenExample(**_golden_example_kwargs(id="ex_c", author="author_c"))
+        example_a = GoldenExample(**_golden_example_kwargs(id="ex_a", author=FAKE_AUTHOR_A))
+        example_b = GoldenExample(**_golden_example_kwargs(id="ex_b", author=FAKE_AUTHOR_B))
+        example_c = GoldenExample(**_golden_example_kwargs(id="ex_c", author=FAKE_AUTHOR_C))
 
         dataset = GoldenDataset(**_golden_dataset_kwargs(
             scope=scope,
@@ -409,8 +419,8 @@ class TestGoldenDataset:
             examples=[example_a, example_b, example_c]
         ))
 
-        # Verify exact format with sorted authors
-        expected = f"{scope}_author_a_author_b_author_c_v{version}_{date}"
+        # Verify exact format with sorted authors (A < C < B alphabetically)
+        expected = f"{scope}_{FAKE_AUTHOR_A}_{FAKE_AUTHOR_C}_{FAKE_AUTHOR_B}_v{version}_{date}"
         assert dataset.identifier == expected
 
         # Verify structure components

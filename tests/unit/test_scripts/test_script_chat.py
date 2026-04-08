@@ -4,14 +4,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-from langchain_core.prompts import ChatPromptTemplate
 
-from src.configs.authors import AuthorConfig, DEFAULT_AUTHOR
+from tests.fake_authors import FAKE_AUTHOR_A
+from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
 
-# Test constants (for use in tests - not necessarily the actual defaults)
-TEST_AUTHOR = "condorcet"
+# Use centralized fake author constant from conftest
+TEST_AUTHOR = FAKE_AUTHOR_A
 TEST_DB_PATH = "data/chroma_db"
 TEST_QUESTION = "What progress do you foresee for humanity?"
 TEST_RESPONSE_TEXT = "Humanity will advance indefinitely through reason, science, and moral improvement."
@@ -25,18 +25,6 @@ TEST_SOURCE_TITLES = [
     "Esquisse d'un tableau historique, Page 9",
     "Esquisse d'un tableau historique, Page 12" # duplicate
 ]
-
-
-def _fake_prompt_factory() -> ChatPromptTemplate:
-    """Fake prompt factory for test author."""
-    return ChatPromptTemplate.from_messages([("system", "You are {author}"), ("human", "{question}")])
-
-
-# Mock AuthorConfig for test author
-TEST_AUTHOR_CONFIG = AuthorConfig(
-    prompt_factory=_fake_prompt_factory,
-    exit_message="Au revoir - Condorcet",
-)
 
 
 def create_mock_response(
@@ -107,9 +95,10 @@ class TestFormatChunksOutput:
 
 
 @pytest.fixture(autouse=True)
-def mock_author_configs():
-    """Patch AUTHOR_CONFIGS with test author for all tests."""
-    with patch("scripts.chat.AUTHOR_CONFIGS", {TEST_AUTHOR: TEST_AUTHOR_CONFIG}):
+def _mock_authors(mock_author_configs):
+    """Apply author mocking to all tests in this file."""
+    # Also need to patch the scripts.chat module since it imports AUTHOR_CONFIGS directly
+    with patch("scripts.chat.AUTHOR_CONFIGS", mock_author_configs):
         yield
 
 
