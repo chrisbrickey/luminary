@@ -37,7 +37,7 @@ class TestGoldenDatasetIntegration:
         # Act: Discover the latest golden dataset for this author
         dataset_path = discover_latest_golden_dataset(
             directory=DEFAULT_GOLDEN_DATASET_PATH,
-            author=author,
+            authors=[author],
             scope="persona",
         )
 
@@ -79,7 +79,7 @@ class TestGoldenDatasetIntegration:
         # Arrange: Discover the dataset
         dataset_path = discover_latest_golden_dataset(
             directory=DEFAULT_GOLDEN_DATASET_PATH,
-            author=author,
+            authors=[author],
             scope="persona",
         )
 
@@ -91,9 +91,15 @@ class TestGoldenDatasetIntegration:
             f"Loaded dataset for '{author}' is not a GoldenDataset instance"
         )
 
-        # Assert: Dataset name contains the author name
-        assert author in dataset.name.lower(), (
-            f"Dataset name '{dataset.name}' should contain author name '{author}'"
+        # Assert: Dataset authors includes the expected author
+        assert author in dataset.authors, (
+            f"Dataset authors {dataset.authors} should contain author '{author}'"
+        )
+        # Assert: Dataset identifier follows exact format: {scope}_{sorted_authors}_v{version}_{date}
+        expected_identifier = f"{dataset.scope}_{'_'.join(sorted(dataset.authors))}_v{dataset.version}_{dataset.created_date}"
+        assert dataset.identifier == expected_identifier, (
+            f"Dataset identifier '{dataset.identifier}' should match expected format. "
+            f"Expected: '{expected_identifier}'"
         )
 
         # Assert: Dataset has required metadata
@@ -133,7 +139,7 @@ class TestGoldenDatasetIntegration:
         # Arrange: Discover and load the dataset
         dataset_path = discover_latest_golden_dataset(
             directory=DEFAULT_GOLDEN_DATASET_PATH,
-            author=author,
+            authors=[author],
             scope="persona",
         )
         dataset = load_golden_dataset(dataset_path)
@@ -177,7 +183,7 @@ class TestGoldenDatasetIntegration:
             try:
                 dataset_path = discover_latest_golden_dataset(
                     directory=DEFAULT_GOLDEN_DATASET_PATH,
-                    author=author,
+                    authors=[author],
                     scope="persona",
                 )
                 discovered_authors.append((author, dataset_path.name))

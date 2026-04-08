@@ -63,37 +63,49 @@ class GoldenDataset(BaseModel):
     Tracks version and creation date to enable reproducible evaluation runs
     and comparison of results over time.
 
-    - name field identifies the dataset (e.g., 'persona_voltaire', 'persona_gouges')
+    Identifies datasets by explicit scope + authors with computed full identifier.
+
+    - scope field identifies the dataset category (e.g., 'persona', 'retrieval')
+    - authors lists all philosophers covered by this dataset (must match examples)
     - version field enables traceability
     - created_date provides temporal context for eval run comparisons
-    - authors lists all philosophers covered by this dataset (must match examples)
     - examples contain language-specific validation data (bilingual by design)
+    - identifier property (computed): '{scope}_{sorted_authors}_v{version}_{date}'
     """
 
-    name: str = Field(..., description="Dataset name; format: '{scope}_{authors}'")
+    scope: str = Field(..., description="Dataset scope (e.g., 'persona', 'retrieval', 'bilingual')")
+    authors: list[str] = Field(
+        ...,
+        description="All authors covered by this dataset (must be in AUTHOR_CONFIGS)"
+    )
     version: Annotated[str, Field(pattern=r"^\d+\.\d+$")] = Field(
         ...,
         description="Semantic version (e.g., '1.0', '2.0')"
     )
     created_date: str = Field(..., description="ISO 8601 date (YYYY-MM-DD)")
-    authors: list[str] = Field(
-        ...,
-        description="All authors covered by this dataset (must be in AUTHOR_CONFIGS)"
-    )
     description: str = Field(..., description="What this dataset tests")
     examples: list[GoldenExample] = Field(..., description="List of test examples")
 
     @field_validator('authors')
     @classmethod
-    def validate_all_authors_in_configs(cls, v: list[str]) -> list[str]:
-        """Ensure all authors exist in AUTHOR_CONFIGS registry."""
+    def validate_all_authors_in_configs_and_sorted(cls, v: list[str]) -> list[str]:
+        """Ensure all authors exist in AUTHOR_CONFIGS registry and list is sorted."""
         from src.configs.authors import AUTHOR_CONFIGS
+
+        # Check all authors are valid
         invalid = [author for author in v if author not in AUTHOR_CONFIGS]
         if invalid:
             valid = list(AUTHOR_CONFIGS.keys())
             raise ValueError(
                 f"Authors {invalid} not found in AUTHOR_CONFIGS. Valid authors: {valid}"
             )
+
+        # Check list is sorted alphabetically
+        if v != sorted(v):
+            raise ValueError(
+                f"Authors list must be sorted alphabetically. Got {v}, expected {sorted(v)}"
+            )
+
         return v
 
     @model_validator(mode='after')
@@ -113,6 +125,18 @@ class GoldenDataset(BaseModel):
             raise ValueError(msg)
 
         return self
+
+    @property
+    def identifier(self) -> str:
+        """Unique human-readable identifier composed of dataset properties including version and date.
+        Use as dataset filename and as the unique reference for traceability.
+
+        Format: {scope}_{sorted_authors}_v{version}_{date}
+
+        Returns:
+            Complete identifier (e.g., 'persona_voltaire_v1.0_2026-04-01')
+        """
+        return f"{self.scope}_{'_'.join(sorted(self.authors))}_v{self.version}_{self.created_date}"
 
 
 class ExampleResult(BaseModel):
@@ -153,10 +177,14 @@ class EvalRun(BaseModel):
     - aggregate_scores has nested structure:
       {"overall": {...}, "by_language": {"en": {...}, "fr": {...}}, "cross_language": {...}}
     - This artifact is saved to evals/runs/ and referenced in narrative reports
+    - dataset_scope and dataset_authors are explicit fields for queryability
+    - dataset_identifier stores the full versioned identifier for traceability
     """
 
-    # Metadata
-    dataset_name: str = Field(..., description="Name of the input dataset; format '{scope}_{authors}'")
+    # Metadata - Dataset identification
+    dataset_scope: str = Field(..., description="Scope from GoldenDataset (e.g., 'persona', 'retrieval')")
+    dataset_authors: list[str] = Field(..., description="Authors from GoldenDataset (sorted)")
+    dataset_identifier: str = Field(..., description="Full identifier: '{scope}_{sorted_authors}_v{version}_{date}'")
     dataset_version: str = Field(..., description="Version of the golden dataset used")
     dataset_date: str = Field(..., description="ISO 8601 date from GoldenDataset.created_date (YYYY-MM-DD)")
     run_timestamp: str = Field(..., description="ISO 8601 timestamp with timezone")

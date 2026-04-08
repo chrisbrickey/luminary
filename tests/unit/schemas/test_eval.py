@@ -1,6 +1,7 @@
 """Tests for src/schemas/eval.py - evaluation harness schemas"""
 
 from typing import Any
+from unittest.mock import Mock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -20,10 +21,11 @@ QUESTION_TEXT = "What is the meaning of tolerance?"
 RUN_TIMESTAMP = "2029-05-09T14:30:45+00:00"
 
 # Golden datasets
-DATASET_NAME = f"persona_{AUTHOR}"
+DATASET_SCOPE = "persona"
 DATASET_VERSION = "3.0"
 DATASET_DATE = "2029-05-09"
 DATASET_DESCRIPTION = "Test dataset for evaluation"
+DATASET_IDENTIFIER = f"{DATASET_SCOPE}_{AUTHOR}_v{DATASET_VERSION}_{DATASET_DATE}"
 
 
 def _metric_kwargs(**overrides: Any) -> dict[str, Any]:
@@ -52,10 +54,10 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
 def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
     """Return default GoldenDataset kwargs, with optional overrides."""
     defaults: dict[str, Any] = {
-        "name": DATASET_NAME,
+        "scope": DATASET_SCOPE,
+        "authors": [],
         "version": DATASET_VERSION,
         "created_date": DATASET_DATE,
-        "authors": [],
         "description": DATASET_DESCRIPTION,
         "examples": [],
     }
@@ -93,7 +95,9 @@ def _example_result_kwargs(**overrides: Any) -> dict[str, Any]:
 def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
     """Return default EvalRun kwargs, with optional overrides."""
     defaults: dict[str, Any] = {
-        "dataset_name": DATASET_NAME,
+        "dataset_scope": DATASET_SCOPE,
+        "dataset_authors": [AUTHOR],
+        "dataset_identifier": DATASET_IDENTIFIER,
         "dataset_version": DATASET_VERSION,
         "dataset_date": DATASET_DATE,
         "run_timestamp": RUN_TIMESTAMP,
@@ -287,6 +291,133 @@ class TestGoldenDataset:
         assert dataset.authors == [AUTHOR]
         assert len(dataset.examples) == 2
 
+    def test_identifier_single_author(self) -> None:
+        """GoldenDataset.identifier returns correct format for single author."""
+        example = GoldenExample(**_golden_example_kwargs(author=AUTHOR))
+        dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[AUTHOR], examples=[example]))
+        expected_identifier = f"{DATASET_SCOPE}_{AUTHOR}_v{DATASET_VERSION}_{DATASET_DATE}"
+        assert dataset.identifier == expected_identifier
+
+    @patch("src.configs.authors.AUTHOR_CONFIGS", {"voltaire": Mock(), "gouges": Mock()})
+    def test_authors_unsorted_raises_validation_error(self) -> None:
+        """GoldenDataset.authors must be sorted alphabetically."""
+        # Create examples for two authors
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author="voltaire"))
+        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author="gouges"))
+
+        # Provide authors in reverse alphabetical order (unsorted)
+        authors_unsorted = ["voltaire", "gouges"]
+
+        # Assert: Unsorted authors raise ValidationError
+        with pytest.raises(ValidationError, match="must be sorted alphabetically"):
+            GoldenDataset(**_golden_dataset_kwargs(
+                authors=authors_unsorted,
+                examples=[example1, example2]
+            ))
+
+    @patch("src.configs.authors.AUTHOR_CONFIGS", {"voltaire": Mock(), "gouges": Mock()})
+    def test_identifier_with_sorted_authors(self) -> None:
+        """GoldenDataset.identifier correctly formats with sorted authors."""
+        # Create examples for two authors
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author="voltaire"))
+        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author="gouges"))
+
+        # Provide authors in sorted alphabetical order
+        authors_sorted = ["gouges", "voltaire"]
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=authors_sorted,
+            examples=[example1, example2]
+        ))
+
+        # Assert: .authors field maintains sorted order
+        assert dataset.authors == ["gouges", "voltaire"]
+
+        # Assert: .identifier uses sorted authors (gouges < voltaire)
+        expected_identifier = f"{DATASET_SCOPE}_gouges_voltaire_v{DATASET_VERSION}_{DATASET_DATE}"
+        assert dataset.identifier == expected_identifier
+        assert "gouges_voltaire" in dataset.identifier  # gouges comes first
+
+    @patch("src.configs.authors.AUTHOR_CONFIGS", {"gouges": Mock(), "voltaire": Mock()})
+    def test_identifier_sorts_authors_already_sorted_input(self) -> None:
+        """GoldenDataset.identifier works correctly when authors already sorted."""
+        # Create examples for two authors
+        example1 = GoldenExample(**_golden_example_kwargs(id="ex1", author="gouges"))
+        example2 = GoldenExample(**_golden_example_kwargs(id="ex2", author="voltaire"))
+
+        # Provide authors already in alphabetical order
+        authors_sorted = ["gouges", "voltaire"]
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            authors=authors_sorted,
+            examples=[example1, example2]
+        ))
+
+        # Assert: .authors field preserves (already sorted) input order
+        assert dataset.authors == ["gouges", "voltaire"]
+
+        # Assert: .identifier maintains sorted order
+        expected_identifier = f"{DATASET_SCOPE}_gouges_voltaire_v{DATASET_VERSION}_{DATASET_DATE}"
+        assert dataset.identifier == expected_identifier
+
+    @patch("src.configs.authors.AUTHOR_CONFIGS", {"author_a": Mock(), "author_b": Mock(), "author_c": Mock()})
+    def test_identifier_with_three_sorted_authors(self) -> None:
+        """GoldenDataset.identifier correctly formats with three sorted authors."""
+        scope = "retrieval"
+        version = "2.5"
+        date = "2030-12-31"
+
+        # Create examples for each author
+        example_a = GoldenExample(**_golden_example_kwargs(id="ex_a", author="author_a"))
+        example_b = GoldenExample(**_golden_example_kwargs(id="ex_b", author="author_b"))
+        example_c = GoldenExample(**_golden_example_kwargs(id="ex_c", author="author_c"))
+
+        # Provide authors in sorted alphabetical order
+        authors_sorted = ["author_a", "author_b", "author_c"]
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            scope=scope,
+            authors=authors_sorted,
+            version=version,
+            created_date=date,
+            examples=[example_a, example_b, example_c]
+        ))
+
+        # Assert: .authors field maintains sorted order
+        assert dataset.authors == ["author_a", "author_b", "author_c"]
+        assert dataset.authors == sorted(dataset.authors)
+
+        # Assert: .identifier uses sorted authors
+        expected = f"{scope}_author_a_author_b_author_c_v{version}_{date}"
+        assert dataset.identifier == expected
+
+    @patch("src.configs.authors.AUTHOR_CONFIGS", {"author_a": Mock(), "author_b": Mock(), "author_c": Mock()})
+    def test_identifier_format_structure(self) -> None:
+        """GoldenDataset.identifier follows exact format: {scope}_{sorted_authors}_v{version}_{date}."""
+        scope = "retrieval"
+        authors = ["author_a", "author_b", "author_c"]
+        version = "2.5"
+        date = "2030-12-31"
+
+        # Create examples for each author
+        example_a = GoldenExample(**_golden_example_kwargs(id="ex_a", author="author_a"))
+        example_b = GoldenExample(**_golden_example_kwargs(id="ex_b", author="author_b"))
+        example_c = GoldenExample(**_golden_example_kwargs(id="ex_c", author="author_c"))
+
+        dataset = GoldenDataset(**_golden_dataset_kwargs(
+            scope=scope,
+            authors=authors,
+            version=version,
+            created_date=date,
+            examples=[example_a, example_b, example_c]
+        ))
+
+        # Verify exact format with sorted authors
+        expected = f"{scope}_author_a_author_b_author_c_v{version}_{date}"
+        assert dataset.identifier == expected
+
+        # Verify structure components
+        assert dataset.identifier.startswith(f"{scope}_")
+        assert f"_v{version}_" in dataset.identifier
+        assert dataset.identifier.endswith(f"_{date}")
+
 
 class TestExampleResult:
     def test_construction_with_required_fields(self) -> None:
@@ -325,12 +456,20 @@ class TestEvalRun:
     def test_construction_with_required_fields(self) -> None:
         """Valid fields construct successfully."""
         run = EvalRun(**_eval_run_kwargs())
-        assert run.dataset_name == DATASET_NAME
+
+        # Dataset identification
+        assert run.dataset_scope == DATASET_SCOPE
+        assert run.dataset_authors == [AUTHOR]
+        assert run.dataset_identifier == DATASET_IDENTIFIER
         assert run.dataset_version == DATASET_VERSION
         assert run.dataset_date == DATASET_DATE
+
+        # Run metadata
         assert run.run_timestamp == RUN_TIMESTAMP
         assert run.system_version == {"chat_model": "test-model", "commit": "abc123"}
         assert run.effective_thresholds == {METRIC_NAME: FALLBACK_THRESHOLD}
+
+        # Results
         assert run.example_results == []
         assert run.aggregate_scores == {"overall": {}}
         assert run.overall_pass_rate == 0.0

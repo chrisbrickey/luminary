@@ -44,9 +44,10 @@ CHUNK_003 = "chunk_003"
 CHUNK_004 = "chunk_004"
 
 # Dataset metadata
-DATASET_NAME = f"persona_{DEFAULT_AUTHOR}"
+DATASET_SCOPE = "persona"
 DATASET_VERSION = "8.0"
 DATASET_DATE = "2029-05-10"
+DATASET_IDENTIFIER = f"{DATASET_SCOPE}_{DEFAULT_AUTHOR}_v{DATASET_VERSION}_{DATASET_DATE}"
 
 
 # -- Helper functions ---
@@ -68,10 +69,10 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
 def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
     """Return default GoldenDataset kwargs, with optional overrides."""
     defaults: dict[str, Any] = {
-        "name": DATASET_NAME,
+        "scope": DATASET_SCOPE,
+        "authors": [],
         "version": DATASET_VERSION,
         "created_date": DATASET_DATE,
-        "authors": [],
         "description": "test dataset for integration testing",
         "examples": [],
     }
@@ -182,10 +183,12 @@ def test_eval_runner_end_to_end() -> None:
     # Act: Run eval with real runner + real metrics + mock chain
     result = run_eval(dataset, chains)
 
-    # Assert: Verify EvalRun structure
-    assert result.dataset_name == DATASET_NAME
-    assert result.dataset_version == DATASET_VERSION
-    assert result.dataset_date == DATASET_DATE
+    # Assert: Verify EvalRun correctly extracts metadata from GoldenDataset
+    assert result.dataset_scope == dataset.scope
+    assert result.dataset_authors == dataset.authors
+    assert result.dataset_identifier == dataset.identifier
+    assert result.dataset_version == dataset.version
+    assert result.dataset_date == dataset.created_date
     assert len(result.example_results) == 3
 
     # Assert: Verify chain was invoked for each example

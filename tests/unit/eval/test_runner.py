@@ -29,9 +29,10 @@ TEST_AUTHOR_2 = "test_author2"
 # Chunk and dataset identifiers
 CHUNK_001 = "chunk_001"
 CHUNK_002 = "chunk_002"
-DATASET_NAME = f"persona_{TEST_AUTHOR_1}"
+DATASET_SCOPE = "persona"
 DATASET_VERSION = "7.0"
 DATASET_DATE = "2029-05-09"
+DATASET_IDENTIFIER = f"{DATASET_SCOPE}_{TEST_AUTHOR_1}_v{DATASET_VERSION}_{DATASET_DATE}"
 
 # Metric names
 METRIC_NAME = "test_metric"
@@ -54,10 +55,10 @@ def _golden_example_kwargs(**overrides: Any) -> dict[str, Any]:
 def _golden_dataset_kwargs(**overrides: Any) -> dict[str, Any]:
     """Return default GoldenDataset kwargs, with optional overrides."""
     defaults: dict[str, Any] = {
-        "name": DATASET_NAME,
+        "scope": DATASET_SCOPE,
+        "authors": [],
         "version": DATASET_VERSION,
         "created_date": DATASET_DATE,
-        "authors": [],
         "description": "test dataset for evaluation",
         "examples": [],
     }
@@ -126,9 +127,13 @@ class TestRunEval:
 
         # Assert
         assert isinstance(result, EvalRun)
-        assert result.dataset_name == DATASET_NAME
-        assert result.dataset_version == DATASET_VERSION
-        assert result.dataset_date == DATASET_DATE
+        # Dataset identification - verify EvalRun extracts metadata from GoldenDataset
+        assert result.dataset_scope == dataset.scope
+        assert result.dataset_authors == dataset.authors
+        assert result.dataset_identifier == dataset.identifier
+        assert result.dataset_version == dataset.version
+        assert result.dataset_date == dataset.created_date
+        # Results structure
         assert len(result.example_results) == 1
         assert "overall" in result.aggregate_scores
         assert 0.0 <= result.overall_pass_rate <= 1.0
