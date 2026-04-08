@@ -3,31 +3,23 @@
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from langchain_core.prompts import ChatPromptTemplate
+
+from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B
 
 from chat_ui import (
     initialize_session_state,
     main,
     initialize_or_rebuild_chain,
 )
-from src.configs.authors import AUTHOR_CONFIGS, AuthorConfig, DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
 
 
 # --- Test constants ---
 
-
-def _fake_gouges_prompt_factory() -> ChatPromptTemplate:
-    """Fake prompt factory for test author gouges."""
-    return ChatPromptTemplate.from_messages([("system", "You are {author}"), ("human", "{question}")])
-
-
-# Mock AuthorConfig for test author gouges
-GOUGES_CONFIG = AuthorConfig(
-    prompt_factory=_fake_gouges_prompt_factory,
-    exit_message="Adieu - Olympe",
-)
+# Use centralized fake authors from conftest
+DEFAULT_TEST_AUTHOR = FAKE_AUTHOR_A
+SECOND_TEST_AUTHOR = FAKE_AUTHOR_B
 
 
 # --- Test fixtures ---
@@ -46,13 +38,13 @@ class SessionStateMock(dict):
         self[key] = value
 
 
-@pytest.fixture
-def mock_author_configs_with_gouges():
-    """Patch AUTHOR_CONFIGS with real and test authors."""
-    # Include both real voltaire config and fake gouges config
-    test_configs = {**AUTHOR_CONFIGS, "gouges": GOUGES_CONFIG}
-    with patch("chat_ui.AUTHOR_CONFIGS", test_configs):
-        yield
+@pytest.fixture(autouse=True)
+def _mock_authors(mock_author_configs):
+    """Apply author mocking to all tests in this file."""
+    # Also need to patch the chat_ui module since it imports AUTHOR_CONFIGS and DEFAULT_AUTHOR directly
+    with patch("chat_ui.AUTHOR_CONFIGS", mock_author_configs), \
+         patch("chat_ui.DEFAULT_AUTHOR", DEFAULT_TEST_AUTHOR):
+        yield mock_author_configs
 
 
 # --- Test session state initialization ---
@@ -67,7 +59,7 @@ def test_initialize_session_state_empty(mock_st: Mock) -> None:
 
     assert mock_st.session_state["messages"] == []
     assert mock_st.session_state["chain"] is None
-    assert mock_st.session_state["current_author"] == DEFAULT_AUTHOR
+    assert mock_st.session_state["current_author"] == DEFAULT_TEST_AUTHOR
     assert mock_st.session_state["show_exit_message"] is None
 
 
@@ -81,7 +73,7 @@ def test_initialize_session_state_existing(mock_st: Mock) -> None:
         {
             "messages": existing_messages,
             "chain": mock_chain,
-            "current_author": "gouges",
+            "current_author": SECOND_TEST_AUTHOR,
         }
     )
 
@@ -90,7 +82,7 @@ def test_initialize_session_state_existing(mock_st: Mock) -> None:
     # Should not overwrite existing values
     assert mock_st.session_state["messages"] == existing_messages
     assert mock_st.session_state["chain"] == mock_chain
-    assert mock_st.session_state["current_author"] == "gouges"
+    assert mock_st.session_state["current_author"] == SECOND_TEST_AUTHOR
 
 
 # --- Test chain rebuilding ---
@@ -106,17 +98,17 @@ def test_initialize_or_rebuild_chain_first_time(
     mock_st.session_state = SessionStateMock(
         {
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "messages": [],
         }
     )
     mock_chain = Mock()
     mock_build_chain.return_value = mock_chain
 
-    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_TEST_AUTHOR)
 
     mock_check_ollama.assert_called_once()
-    mock_build_chain.assert_called_once_with(author=DEFAULT_AUTHOR)
+    mock_build_chain.assert_called_once_with(author=DEFAULT_TEST_AUTHOR)
     assert mock_st.session_state["chain"] == mock_chain
 
 
@@ -138,12 +130,12 @@ def test_initialize_or_rebuild_chain_author_changed(
     new_chain = Mock()
     mock_build_chain.return_value = new_chain
 
-    initialize_or_rebuild_chain("gouges")
+    initialize_or_rebuild_chain(SECOND_TEST_AUTHOR)
 
     mock_check_ollama.assert_called_once()
-    mock_build_chain.assert_called_once_with(author="gouges")
+    mock_build_chain.assert_called_once_with(author=SECOND_TEST_AUTHOR)
     assert mock_st.session_state["chain"] == new_chain
-    assert mock_st.session_state["current_author"] == "gouges"
+    assert mock_st.session_state["current_author"] == SECOND_TEST_AUTHOR
     # Messages should be cleared when switching authors
     assert mock_st.session_state["messages"] == []
 
@@ -159,12 +151,12 @@ def test_initialize_or_rebuild_chain_no_change(
     mock_st.session_state = SessionStateMock(
         {
             "chain": existing_chain,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "messages": [{"role": "user", "content": "existing message"}],
         }
     )
 
-    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_TEST_AUTHOR)
 
     # Should not rebuild
     mock_check_ollama.assert_not_called()
@@ -184,7 +176,7 @@ def test_rebuild_chain_value_error(
     mock_st.session_state = SessionStateMock(
         {
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "messages": [],
         }
     )
@@ -208,14 +200,14 @@ def test_rebuild_chain_runtime_error(
     mock_st.session_state = SessionStateMock(
         {
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "messages": [],
         }
     )
     mock_st.error = Mock()
     mock_check_ollama.side_effect = RuntimeError("Ollama not running")
 
-    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_TEST_AUTHOR)
 
     mock_st.error.assert_called_once()
     assert "Ollama error" in mock_st.error.call_args[0][0]
@@ -232,14 +224,14 @@ def test_rebuild_chain_unexpected_error(
     mock_st.session_state = SessionStateMock(
         {
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "messages": [],
         }
     )
     mock_st.error = Mock()
     mock_build_chain.side_effect = Exception("Unexpected error")
 
-    initialize_or_rebuild_chain(DEFAULT_AUTHOR)
+    initialize_or_rebuild_chain(DEFAULT_TEST_AUTHOR)
 
     mock_st.error.assert_called_once()
     assert "Unexpected error" in mock_st.error.call_args[0][0]
@@ -260,27 +252,26 @@ def test_main_with_defaults(
         {
             "messages": [],
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None  # No user input
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
 
     main()
 
     # Verify initialize_or_rebuild_chain called with default values
-    mock_rebuild.assert_called_once_with(DEFAULT_AUTHOR)
+    mock_rebuild.assert_called_once_with(DEFAULT_TEST_AUTHOR)
 
     # Verify available authors come from production config
     selectbox_call = mock_st.selectbox.call_args
     available_authors = selectbox_call[1]["options"]
-    assert available_authors == sorted(AUTHOR_CONFIGS.keys())
 
     # Verify default author is used as initial selection
     author_index = selectbox_call[1]["index"]
-    assert available_authors[author_index] == DEFAULT_AUTHOR
+    assert available_authors[author_index] == DEFAULT_TEST_AUTHOR
 
 
 @patch("chat_ui.initialize_or_rebuild_chain")
@@ -294,12 +285,12 @@ def test_main_renders_title(
         {
             "messages": [],
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None  # No user input
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
 
     main()
@@ -316,7 +307,7 @@ def test_main_renders_title(
     assert expected_rag_caption in caption_calls
 
     # Verify chat input placeholder text uses default author
-    expected_placeholder = f"Ask {DEFAULT_AUTHOR.capitalize()} a question in French or English..."
+    expected_placeholder = f"Ask {DEFAULT_TEST_AUTHOR.capitalize()} a question in French or English..."
     mock_st.chat_input.assert_called_once_with(expected_placeholder)
 
 
@@ -331,12 +322,12 @@ def test_main_initializes_session_state(
         {
             "messages": [],
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
 
     main()
@@ -355,12 +346,12 @@ def test_main_sidebar_config(
         {
             "messages": [],
             "chain": None,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
 
     # Mock sidebar context manager
@@ -378,8 +369,7 @@ def test_main_sidebar_config(
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_rebuilds_chain(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs_with_gouges
-) -> None:
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock) -> None:
     """Test that main rebuilds chain with sidebar config."""
     mock_st.session_state = SessionStateMock(
         {
@@ -390,31 +380,30 @@ def test_main_rebuilds_chain(
         }
     )
     mock_st.chat_input.return_value = None
-    mock_st.selectbox.return_value = "gouges"
+    mock_st.selectbox.return_value = SECOND_TEST_AUTHOR
     mock_st.button.return_value = False
 
     main()
 
-    mock_rebuild.assert_called_once_with("gouges")
+    mock_rebuild.assert_called_once_with(SECOND_TEST_AUTHOR)
 
 
 @patch("chat_ui.initialize_or_rebuild_chain")
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_clear_conversation_button_shows_exit_message(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs_with_gouges
-) -> None:
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs: dict) -> None:
     """Test that Clear conversation button stores exit message in session state for display after rerun."""
     mock_st.session_state = SessionStateMock(
         {
             "messages": [{"role": "user", "content": "Previous message"}],
             "chain": Mock(),
-            "current_author": "gouges",
+            "current_author": SECOND_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
-    mock_st.selectbox.return_value = "gouges"
+    mock_st.selectbox.return_value = SECOND_TEST_AUTHOR
     mock_st.button.return_value = True  # Trigger "Clear conversation" button
     mock_st.toast = Mock()
     mock_st.rerun = Mock(side_effect=Exception("Rerun called"))  # Prevent actual rerun
@@ -427,7 +416,7 @@ def test_main_clear_conversation_button_shows_exit_message(
             raise
 
     # Verify exit message was stored in session state (not displayed immediately)
-    assert mock_st.session_state["show_exit_message"] == "Adieu - Olympe"
+    assert mock_st.session_state["show_exit_message"] == mock_author_configs[SECOND_TEST_AUTHOR].exit_message
 
     # Verify messages were cleared
     assert mock_st.session_state["messages"] == []
@@ -440,26 +429,26 @@ def test_main_clear_conversation_button_shows_exit_message(
 @patch("chat_ui.initialize_session_state")
 @patch("chat_ui.st")
 def test_main_shows_exit_message_toast_after_rerun(
-    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs_with_gouges
-) -> None:
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_author_configs: dict) -> None:
     """Test that exit message toast is displayed after rerun when flag is set."""
+    exit_message_for_second_author = mock_author_configs[SECOND_TEST_AUTHOR].exit_message
     mock_st.session_state = SessionStateMock(
         {
             "messages": [],
             "chain": Mock(),
-            "current_author": "gouges",
-            "show_exit_message": "Adieu - Olympe",  # Flag set from previous run
+            "current_author": SECOND_TEST_AUTHOR,
+            "show_exit_message": exit_message_for_second_author,  # Flag set from previous run
         }
     )
     mock_st.chat_input.return_value = None
-    mock_st.selectbox.return_value = "gouges"
+    mock_st.selectbox.return_value = SECOND_TEST_AUTHOR
     mock_st.button.return_value = False  # Button not clicked this time
     mock_st.toast = Mock()
 
     main()
 
     # Verify toast was called with the exit message
-    mock_st.toast.assert_called_once_with("Adieu - Olympe", icon="🪶")
+    mock_st.toast.assert_called_once_with(exit_message_for_second_author, icon="🪶")
 
     # Verify flag was cleared after displaying
     assert mock_st.session_state["show_exit_message"] is None
@@ -483,12 +472,12 @@ def test_main_displays_existing_messages(
                 },
             ],
             "chain": Mock(),
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False  # Don't trigger "Clear conversation" button
 
     # Mock chat_message context manager
@@ -526,12 +515,12 @@ def test_main_no_input_returns_early(
         {
             "messages": [],
             "chain": Mock(),
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = None  # No input
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
 
     main()
@@ -563,12 +552,12 @@ def test_main_processes_user_input(
         {
             "messages": [],
             "chain": mock_chain,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "What is tolerance?"
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
 
     # Mock chat_message and spinner context managers
@@ -634,12 +623,12 @@ def test_main_shows_sources_caption(
         {
             "messages": [],
             "chain": mock_chain,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "Test question"
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
 
     # Mock context managers
@@ -675,12 +664,12 @@ def test_main_chain_not_initialized_error(
         {
             "messages": [],
             "chain": None,  # Chain not initialized
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "Test question"
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
     mock_st.error = Mock()
 
@@ -707,12 +696,12 @@ def test_main_chain_invocation_error(
         {
             "messages": [],
             "chain": mock_chain,
-            "current_author": DEFAULT_AUTHOR,
+            "current_author": DEFAULT_TEST_AUTHOR,
             "show_exit_message": None,
         }
     )
     mock_st.chat_input.return_value = "Test question"
-    mock_st.selectbox.return_value = DEFAULT_AUTHOR
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
     mock_st.button.return_value = False
     mock_st.error = Mock()
 

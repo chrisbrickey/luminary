@@ -6,6 +6,7 @@ from typing import Any, Callable, List
 from unittest.mock import Mock
 
 import pytest
+from langchain_core.prompts import ChatPromptTemplate
 
 # Disable ChromaDB telemetry before import
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
@@ -22,6 +23,57 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+
+# --- Fake author constants for unit tests ---
+#
+# Import from fake_authors module for easy access across all tests
+from fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C  # noqa: F401
+
+
+def _fake_prompt_factory() -> ChatPromptTemplate:
+    """Generic fake prompt factory for test authors."""
+    return ChatPromptTemplate.from_messages([("system", "You are {author}"), ("human", "{question}")])
+
+
+# Lazy import to avoid circular dependencies
+def _get_author_config_class() -> type:
+    """Get AuthorConfig class without circular import."""
+    from src.configs.authors import AuthorConfig
+    return AuthorConfig
+
+
+def _create_fake_author_config(exit_message: str) -> Any:
+    """Create a fake AuthorConfig for testing.
+
+    Args:
+        exit_message: The exit message for this fake author
+
+    Returns:
+        AuthorConfig instance for testing
+    """
+    AuthorConfig = _get_author_config_class()
+    return AuthorConfig(
+        prompt_factory=_fake_prompt_factory,
+        exit_message=exit_message,
+    )
+
+
+# Fake author configs available to all unit tests
+# These are created lazily to avoid import issues
+def get_fake_author_configs() -> dict[str, Any]:
+    """Get fake AUTHOR_CONFIGS dictionary for unit tests.
+
+    Returns:
+        Dictionary mapping fake author names to AuthorConfig instances
+    """
+    return {
+        FAKE_AUTHOR_A: _create_fake_author_config("Au revoir - Condorcet"),
+        FAKE_AUTHOR_B: _create_fake_author_config("Farewell - Mary Wollstonecraft"),
+        FAKE_AUTHOR_C: _create_fake_author_config("Adieu - Diderot"),
+    }
+
+
+# --- Test fixtures ---
 
 
 class FakeEmbeddings(Embeddings):
@@ -72,6 +124,32 @@ def fake_embeddings() -> FakeEmbeddings:
 def fake_chat_model() -> FakeChatModel:
     """Provide FakeChatModel instance."""
     return FakeChatModel()
+
+
+@pytest.fixture
+def mock_author_configs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Mock AUTHOR_CONFIGS with fake authors for isolated unit testing.
+
+    Unit tests should not depend on production author configurations.
+    This fixture ensures tests use generic fake authors instead.
+
+    Not autouse - tests that need mocked authors should use this fixture
+    explicitly or create their own autouse fixture.
+
+    Usage in test files:
+        @pytest.fixture(autouse=True)
+        def _mock_authors(mock_author_configs):
+            '''Apply author mocking to all tests in this file.'''
+            pass
+
+    Returns:
+        Dictionary of fake AUTHOR_CONFIGS
+    """
+    from src.configs import authors
+
+    fake_configs = get_fake_author_configs()
+    monkeypatch.setattr(authors, "AUTHOR_CONFIGS", fake_configs)
+    return fake_configs
 
 
 @pytest.fixture

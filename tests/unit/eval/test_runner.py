@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 from langchain_core.runnables import Runnable
 
+from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import MetricSpec, FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
@@ -22,9 +23,9 @@ QUESTION_001 = "What is tolerance?"
 QUESTION_002 = "Qu'est-ce que la tolérance?"
 QUESTION_003 = "What is reason?"
 
-# authors are mocked, ok if not in AUTHOR_CONFIGS
-TEST_AUTHOR_1 = "test_author1"
-TEST_AUTHOR_2 = "test_author2"
+# Use centralized fake author constants from conftest
+TEST_AUTHOR_1 = FAKE_AUTHOR_A
+TEST_AUTHOR_2 = FAKE_AUTHOR_B
 
 # Chunk and dataset identifiers
 CHUNK_001 = "chunk_001"
@@ -90,7 +91,11 @@ def _metric_result_kwargs(**overrides: Any) -> dict[str, Any]:
     return defaults
 
 
-@patch("src.configs.authors.AUTHOR_CONFIGS", {TEST_AUTHOR_1: Mock(), TEST_AUTHOR_2: Mock()})
+@pytest.fixture(autouse=True)
+def _mock_authors(mock_author_configs):
+    """Apply author mocking to all tests in this file."""
+
+
 class TestRunEval:
     """Tests for run_eval() function."""
 
@@ -127,12 +132,14 @@ class TestRunEval:
 
         # Assert
         assert isinstance(result, EvalRun)
+
         # Dataset identification - verify EvalRun extracts metadata from GoldenDataset
         assert result.dataset_scope == dataset.scope
         assert result.dataset_authors == dataset.authors
         assert result.dataset_identifier == dataset.identifier
         assert result.dataset_version == dataset.version
         assert result.dataset_date == dataset.created_date
+
         # Results structure
         assert len(result.example_results) == 1
         assert "overall" in result.aggregate_scores

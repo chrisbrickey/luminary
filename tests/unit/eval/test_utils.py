@@ -2,20 +2,34 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
-from src.configs.authors import DEFAULT_AUTHOR
+from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE
 from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset
 from src.schemas.eval import GoldenDataset
 
+# --- Pytest fixtures ---
+
+
+@pytest.fixture(autouse=True)
+def _mock_authors(mock_author_configs):
+    """Apply author mocking to all tests in this file."""
+    # Also need to patch the eval.utils module since it imports DEFAULT_AUTHOR directly
+    with patch("src.eval.utils.DEFAULT_AUTHOR", DEFAULT_TEST_AUTHOR):
+        yield mock_author_configs
+
+
 # --- Shared test constants ---
 
-# Generic author identifiers (not actual philosopher names)
-AUTHOR_A = "author_a"
-AUTHOR_B = "author_b"
+# Use centralized fake author constants from conftest
+DEFAULT_TEST_AUTHOR = FAKE_AUTHOR_A
+AUTHOR_A = FAKE_AUTHOR_A
+AUTHOR_B = FAKE_AUTHOR_B
+AUTHOR_C = FAKE_AUTHOR_C
 
 # Golden dataset components
 SCOPE = "persona"
@@ -28,7 +42,7 @@ NONEXISTENT_FILE = "does_not_exist.json"
 # Test data constants
 VALID_DATASET_JSON = {
     "scope": SCOPE,
-    "authors": [DEFAULT_AUTHOR],
+    "authors": [AUTHOR_A],
     "version": VERSION_OLD,
     "created_date": DATE_OLD,
     "description": "Test dataset for unit tests",
@@ -36,7 +50,7 @@ VALID_DATASET_JSON = {
         {
             "id": "test_example_001",
             "question": "Sample question for testing?",
-            "author": DEFAULT_AUTHOR,
+            "author": AUTHOR_A,
             "language": ENGLISH_ISO_CODE,
             "expected_chunk_ids": ["chunk_abc123"],
         }
@@ -176,15 +190,16 @@ def test_discover_no_matches(tmp_path: Path) -> None:
 def test_discover_defaults_to_default_author(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset defaults to authors=[DEFAULT_AUTHOR] when not specified."""
     # Create a file with default author
-    filename = _golden_dataset_filename(SCOPE, [DEFAULT_AUTHOR], VERSION_OLD, DATE_OLD)
+    filename = _golden_dataset_filename(SCOPE, [DEFAULT_TEST_AUTHOR], VERSION_OLD, DATE_OLD)
     file_default_author = tmp_path / filename
     file_default_author.write_text(json.dumps(VALID_DATASET_JSON))
 
     # Call without specifying authors - should find the file with default author
-    result = discover_latest_golden_dataset(tmp_path, scope="persona")
+    result = discover_latest_golden_dataset(tmp_path, scope=SCOPE)
 
     assert result == file_default_author
-    assert "persona" in result.name
+    assert DEFAULT_TEST_AUTHOR in result.name
+
 
 def test_discover_respects_author(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset filters by authors parameter."""
