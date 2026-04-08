@@ -853,6 +853,7 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Addition error handling (and associated tests) for eval utility methods
 
 ---
 
