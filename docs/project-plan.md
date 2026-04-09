@@ -41,22 +41,25 @@ All test development in this plan follows this workflow:
 1. **Write tests first:** Use test-first-developer agent to write tests based on specifications
 2. **Verify red:** Confirm tests fail initially
 3. **Implement:** Write production code to make tests pass (green)
-4. **Refactor for DRY:**
+4. **Test behavior (not implementation):**
+   - Assert on outcome behavior instead of implementation details (e.g. a specific method is called).
+   - Only test public methods. Never test private methods. 
+5. **Refactor for DRY:**
    - Extract repeated literals (strings, numbers, dicts) into module-level constants or pytest fixtures
    - Share common setup via conftest.py fixtures or helper factories (not copy-paste)
    - Review all tests to ensure each value is defined once and referenced elsewhere
-5. **Ensure generic test data:**
+6. **Ensure generic test data:**
    - Use obviously fake values: "test-user", "sample-text", "item_001", 42, "https://example.com"
    - Never use real-world names, brands, URLs, or domain-specific data
    - Use gender-neutral names (Alex, Sam, Jordan) and avoid stereotypes
-6. **Mock appropriately:**
+7. **Mock appropriately:**
    - Unit tests: Use fake authors (condorcet, wollstonecraft, diderot)
    - Exceptions: Config tests: tests/unit/configs/test_config_authors.py correctly tests real production configs
    - Integration tests: Use real authors from production AUTHOR_CONFIGS (voltaire, gouges)
-7. **Flag external tests for exclusion:**
+8. **Flag external tests for exclusion:**
    - Any tests that make rpc calls (real HTTP/gRPC) should be tagged as `external` and excluded from the general test command.
    - Unit tests (fast, no network): `uv run pytest`; External tests (real HTTP/gRPC): `uv run pytest -m external`
-8. **Verify complete:** Ensure entire test suite (including mypy) passes before marking subsection complete
+9. **Verify complete:** Ensure entire test suite (including mypy) passes before marking subsection complete
 
 ---
 

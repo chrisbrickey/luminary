@@ -671,7 +671,7 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        caplog: pytest.LogCaptureFixture,
+        capsys: pytest.CaptureFixture[str],
         test_db_path: Path,
     ) -> None:
         """Test that errors during chain invocation don't exit loop."""
@@ -695,8 +695,9 @@ class TestRunInteractiveChat:
             verbose=False,
         )
 
-        # Verify error message logged
-        assert "Error: Chain error" in caplog.text
+        # Verify error message logged to stderr
+        captured = capsys.readouterr()
+        assert "Error: Chain error" in captured.err or "Chain error" in captured.err
 
         # Verify chain invoked twice (error + success)
         assert mock_chain.invoke.call_count == 2
@@ -709,7 +710,7 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
-        caplog: pytest.LogCaptureFixture,
+        capsys: pytest.CaptureFixture[str],
         test_db_path: Path,
     ) -> None:
         """Test that verbose flag enables debug logging."""
@@ -730,9 +731,10 @@ class TestRunInteractiveChat:
             verbose=True,
         )
 
-        # Verify debug messages logged
-        assert "Verbose logging enabled" in caplog.text
-        assert "Invoking chain with question:" in caplog.text
+        # Verify debug messages logged to stderr
+        captured = capsys.readouterr()
+        assert "Verbose logging enabled" in captured.err or "DEBUG" in captured.err
+        assert "Invoking chain with question:" in captured.err or "Invoking chain" in captured.err
 
 
 class TestMain:

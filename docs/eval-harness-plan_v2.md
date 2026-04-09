@@ -16,22 +16,25 @@ All test development in this plan follows this workflow:
 1. **Write tests first:** Use test-first-developer agent to write tests based on specifications
 2. **Verify red:** Confirm tests fail initially
 3. **Implement:** Write production code to make tests pass (green)
-4. **Refactor for DRY:**
+4. **Test behavior (not implementation):**
+   - Assert on outcome behavior instead of implementation details (e.g. a specific method is called).
+   - Only test public methods. Never test private methods. 
+5. **Refactor for DRY:**
    - Extract repeated literals (strings, numbers, dicts) into module-level constants or pytest fixtures
    - Share common setup via conftest.py fixtures or helper factories (not copy-paste)
    - Review all tests to ensure each value is defined once and referenced elsewhere
-5. **Ensure generic test data:**
+6. **Ensure generic test data:**
    - Use obviously fake values: "test-user", "sample-text", "item_001", 42, "https://example.com"
    - Never use real-world names, brands, URLs, or domain-specific data
    - Use gender-neutral names (Alex, Sam, Jordan) and avoid stereotypes
-6. **Mock appropriately:**
+7. **Mock appropriately:**
    - Unit tests: Use fake authors (condorcet, wollstonecraft, diderot)
    - Exceptions: Config tests: tests/unit/configs/test_config_authors.py correctly tests real production configs
    - Integration tests: Use real authors from production AUTHOR_CONFIGS (voltaire, gouges)
-7. **Flag external tests for exclusion:**
+8. **Flag external tests for exclusion:**
    - Any tests that make rpc calls (real HTTP/gRPC) should be tagged as `external` and excluded from the general test command.
    - Unit tests (fast, no network): `uv run pytest`; External tests (real HTTP/gRPC): `uv run pytest -m external`
-8. **Verify complete:** Ensure entire test suite (including mypy) passes before marking subsection complete
+9. **Verify complete:** Ensure entire test suite (including mypy) passes before marking subsection complete
 
 ---
 
@@ -400,6 +403,7 @@ All test development in this plan follows this workflow:
   - Removed display of DEFAULT_GOLDEN_DATASET_PATH from error handling in the loading utilities because the path is injected and these utilities should be generic so that they can be reused with any path.
   - Added test to document an accepted edge case where a multi-digit decimal verion (e.g. `v1.12`) will not sort correctly. This edge case is accepted because it is not necessary for our use cases and the golden dataset validations will prevent a multi-digit decimal version.
   - Implemented later: 
+    - Added additional error handling on the loading utility method.
     - Added integration testing to verify existence of real golden datasets for each registered author as well as adherence to schema. ; Removed `scripts/validate_golden_dataset.py` which manually validated a hard-coded golden dataset against schema.
     - discover_latest_golden_dataset: Changed the author (str) parameter to authors (list[str]) so that it can find datasets that contain multiple authors.
 
@@ -582,8 +586,8 @@ All test development in this plan follows this workflow:
 
 ---
 
-## E. Evaluation CLI (including the first eval run)
-**Goal:** Enable capability to run evals via CLI. This subsection delivers the first working end-to-end eval run.
+## E. ✅ Evaluation CLI
+**Goal:** Enable capability to run evals via CLI.
 
 ### Implementation
 
@@ -642,11 +646,12 @@ All test development in this plan follows this workflow:
 
 6. **Add tests for the evaluation CLI**
    - **Follow Test Development Workflow (see top of document)**
+   - Look at existing tests and follow the patterns of mocking and variable naming.
    - Unit tests on `tests/unit/test_scripts/test_script_run_eval.py`
    - Test cases (7 tests minimum):
-       - `test_main_auto_discovery()` - no --golden flag → discovers latest dataset
-       - `test_main_explicit_golden_path()` - --golden provided → uses that path
-       - `test_main_custom_output()` - --output provided → saves to custom location
+       - `test_main_auto_discovery()` - no --golden-path flag → discovers latest dataset
+       - `test_main_explicit_golden_path()` - --golden-path provided → uses that path
+       - `test_main_custom_output()` - --output-path provided → saves to custom location
        - `test_main_prints_summary()` - after eval → print_summary_table called
        - `test_main_saves_artifact()` - after eval → save_eval_run called with timestamp
      - Mock all external dependencies: `discover_latest_golden_dataset`, `load_golden_dataset`, `build_chain`, `run_eval`, `save_eval_run`, `check_ollama_available`
@@ -657,16 +662,25 @@ All test development in this plan follows this workflow:
    - Full implementation includes:
      - `print_summary_table(eval_run)` helper - prints human-readable summary with scores, status icons (✅/❌), and pass rate
      - `main()` function with argparse:
-       - `--golden` (optional): Path to golden dataset JSON (auto-discovers if not provided)
-       - `--output` (optional, default=`DEFAULT_EVAL_ARTIFACTS_PATH`): Output directory for artifacts
+       - `--golden-path` (optional): Path to golden dataset JSON (auto-discovers if not provided)
+       - `--output-path` (optional, default=`DEFAULT_EVAL_ARTIFACTS_PATH`): Output directory for artifacts
        - `--verbose` (optional): Enable debug logging
      - Calls `check_ollama_available()` at startup
-     - Auto-discovers latest golden dataset if `--golden` not provided
+     - Auto-discovers latest golden dataset if `--golden-path` not provided
+     - Auto-discovers all metrics using `METRIC_REGISTRY`; Does not contain hard-coded metrics or hard-coded attributes of metrics. The CLI script (including terminal printout) should work for any collection of registered metrics and should not need to change as new metrics are added or updated.
      - Calls `run_eval()` on `runner.py` with the built chains that correspond to each author in the `authors` field of the golden dataset 
      - Loads dataset, populates metadata of GoldenDataset as needed, builds chain, runs eval, saves artifact, prints summary
-     - Clear error messages for common failures (Ollama not running, dataset not found, invalid author)
+     - Error handling and clear error messages for common failures (Ollama not running, dataset not found, etc.)
 
-   **Key implementation details:**
+   **Design notes:**
+   - **Single responsibility:** Auto-discovery of most recent golden dataset and all registered metrics by default. Simply run `python scripts/run_eval.py`.
+   - **Multi-modal output:** In addition to persisting the real machine-readable json output of the eval run, this script prints to terminal a human-readable summary table showing at-a-glance results. The terminal output is intentionally implemented by the CLI script (instead of eval utils) because this is presentation logic specific to terminal output.
+   - **Clear error messages:** Guide users to common fixes
+   - **Actionable next steps:** Tell user what to do with results
+   - **Explicit path supported:** For reproducibility (`--golden-path path/to/old/version.json`)
+   - **No `--language` flag:** The runner processes all languages by default (multilingual system testing)
+   
+   Below is a draft. Adapt to updated instructions and the current state of the app.
    ```python
    def print_summary_table(eval_run: EvalRun) -> None:
        """Print human-readable summary table to stdout."""
@@ -712,20 +726,13 @@ All test development in this plan follows this workflow:
        print("="*70 + "\n")
    ```
 
-   **Design notes:**
-   - **Auto-discovery by default:** Good UX - just run `python scripts/run_eval.py`
-   - **Explicit path supported:** For reproducibility (`--golden path/to/old/version.json`)
-   - **Clear error messages:** Guide users to common fixes
-   - **Human-readable output:** Summary table shows at-a-glance results
-   - **Actionable next steps:** Tell user what to do with results
-   - **No `--language` flag:** The runner processes all languages by default (bilingual system testing)
-
 8. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 9. **Add integration test**
    - Integration test on `tests/integration/test_eval_cli_integration.py`
-   - goal: validate the complete user workflow
+   - goal: validate the complete user workflow including overrides using optional flags from the command line
    - benefits: Catches issues with path handling, file permissions, JSON serialization in realistic context.
+   - Below is a draft. Adapt to the current state of the app.
 
   ```python
   def test_run_eval_cli_end_to_end(tmp_path, mock_llm_chain):
@@ -754,7 +761,7 @@ All test development in this plan follows this workflow:
 
 - **README:** Reorganize "Development" section:
     - Below is a first draft. Adapt to the current state of the app.
-    - Recommend a more prominent position (a new README section) for the content in the section titled "Start chatting with Enlightenment Philosophes". Having it listed at the very bottom of the Development section is way too far down.
+    - Recommend a more prominent position in the README (perhaps a new README section?) for the content in the section titled "Start chatting with Enlightenment Philosophes". These are the instructions to actually start the app (after the lengthy setup) so they should ideally be located in a more prominent position in the README.
 
   ```markdown
   ## Development
@@ -774,25 +781,27 @@ All test development in this plan follows this workflow:
   uv run python scripts/run_eval.py
 
   # Specify dataset explicitly (for reproducibility)
-  uv run python scripts/run_eval.py --golden evals/golden/{SCOPE}_{AUTHOR}_v{VERSION}_{YYYY-MM-DD}.json
+  uv run python scripts/run_eval.py --golden-path evals/golden/{SCOPE}_{AUTHOR}_v{VERSION}_{YYYY-MM-DD}.json
 
+  # Specify output path explicitly
+  uv run python scripts/run_eval.py --output-path path/to/output/directory/
+  
   # Enable debug logging
   uv run python scripts/run_eval.py --verbose
   ```
 
   **Interpreting results:**
   - **Scores:** 0.0 to 1.0, where 1.0 is perfect
-  - **Thresholds:** 0.8 for most metrics, 0.9 for forbidden phrases, 0.7 for translation
+  - **Threshold examples:** 0.8 for most metrics, 0.9 for forbidden phrases, 0.7 for translation
   - **✅ = passing**, **❌ = failing** (below threshold)
   - **Overall pass rate:** Fraction of examples where ALL metrics passed
 
   **Troubleshooting:**
   - **"Ollama is not running":** Start Ollama with `ollama serve`
-  - **"No golden dataset found":** Create golden dataset in `evals/golden/` with correct naming pattern
-  - **"Invalid author":** Check author is registered in `src/chains/chat_chain.py::_AUTHOR_CONFIGS`
+  - **"No golden dataset found":** Create golden dataset in `evals/golden/` with correct filename nomenclature
 
   **After running:**
-  1. Review artifact in `evals/runs/{author}_{timestamp}.json`
+  1. Review artifact in `evals/runs/{timestamp}.json`
   2. Identify failing metrics (score < threshold)
   3. Read example outputs in artifact to understand failure modes
   4. Iterate on prompts, config, or golden dataset
@@ -807,19 +816,24 @@ All test development in this plan follows this workflow:
   ```markdown
   evals/
   └── runs/                # Timestamped JSON artifacts from eval runs (gitignored)
-
-  scripts/
-  ├── run_eval.py          # CLI for running evaluation harness
-  ...
   ```
 
-### User instructions for first eval run
+### Plan updates
 
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Added additional error handling on the utility method that persists the json file.
+  - Implement integration tests by extending the existing `integration/test_eval_runner_integration` to cover the CLI functionality.
+  - Break up Development section of README into Setup (prerequisites only), Usage (launch chat interfaces), and Development (test suite and eval harness)
+
+---
+
+## F. Perform first eval run
 **🎯 MILESTONE: First Eval Run**
 
-**Stop and instruct the user to manually generate the first artifact and to manually inspect it. Make it clear that we should not update any part of the app at this time based on the results. Subsequent sections will set up reporting to track improvements.**
+- Instruct the user to manually generate the first artifact by running the CLI script and to manually inspect the output. Detailed instructions below.
+- Make it clear that we should not update any part of the app at this time based on the results. Subsequent sections will set up reporting to track improvements.
 
-**Instructions for the user:**
+### User instructions for first eval run
 
 1. **Generate first eval artifact:**
    ```bash
@@ -835,12 +849,12 @@ All test development in this plan follows this workflow:
 
 2. **Manually analyze the initial artifact:**
    - Open the artifact file: `evals/runs/voltaire_{timestamp}.json`
-   - Look at `aggregate_scores.overall` - identify metrics with scores < 0.8
+   - Look at `aggregate_scores.overall` - identify metrics with scores < thresholds
    - Look at `example_results` - find examples where `passed: false`
    - Read the `response.text` for failed examples to understand what went wrong
 
 3. **Common issues to look for (DO NOT FIX YET - just observe):**
-   - **Low retrieval_relevance (< 0.8):** Wrong chunks retrieved
+   - **Low retrieval_relevance (< thresholds):** Wrong chunks retrieved
      - Possible causes: retrieval `k` too low, poor chunk metadata, query-document mismatch
 
 4. **Document your observations:**
@@ -850,14 +864,34 @@ All test development in this plan follows this workflow:
 
 **Do NOT make any changes to the application yet.** Subsequent subsections will walk through the improvement cycle. This first run establishes a baseline.
 
+### Documentation
+
+- **README:** Add instructions to 'Run the evaluation harness' section:
+    - Below is a first draft. Adapt to the current state of the app. Improve the instructions.
+  
+    ```markdown
+    **Interpreting results:**
+    - **Scores:** 0.0 to 1.0, where 1.0 is perfect
+    - **Threshold examples:** 0.8 for most metrics
+    - **✅ = passing**, **❌ = failing** (below threshold)
+    - **Overall pass rate:** Fraction of examples where ALL metrics passed
+    
+    **After running:**
+    1. Review artifact in `evals/runs/{timestamp}.json`
+    2. Identify failing metrics (score < threshold)
+    3. Read example outputs in artifact to understand failure modes
+    4. Iterate on prompts, config, or golden dataset
+    5. Re-run eval to measure improvements
+    6. TODO: add instructions for documentation into narrative reports, which may be in subsequent sections.
+    ```
+  
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
-  - Addition error handling (and associated tests) for eval utility methods
 
----
 
-## F. Core citation metrics (including an eval run)
+
+## G. Core citation metrics (including an eval run)
 
 **Goal:** Implement fundamental metrics that directly validate citation functionality of the RAG pipeline. After implementation, run eval again to see citation metrics in action.
 
@@ -944,7 +978,7 @@ Compare the new artifact with the first run:
 
 ---
 
-## G. Eval reports to document improvements
+## H. Eval reports to document improvements
 
 **Goal:** Establish process and expediting tooling to create narrative reports that document eval runs, analysis, and resulting improvements.
 
@@ -1111,7 +1145,7 @@ Compare the new artifact with the first run:
 
 ---
 
-## H. Voltaire improvement cycle (First eval-driven iteration)
+## I. Voltaire improvement cycle (First eval-driven iteration)
 
 **Goal:** Close the feedback loop. Use eval artifact to improve quality. Establish an iterative improvement workflow for future features.
 
@@ -1337,7 +1371,7 @@ This process should be repeated throughout development of subsequent sections.
 
 ---
 
-## I. Language and faithfulness metrics (including another eval run + eval report)
+## J. Language and faithfulness metrics (including another eval run + eval report)
 
 **Goal:** Building on the fundamental metrics, implement content quality metrics to validate language detection and semantic grounding. Run eval and create a report documenting findings.
 
@@ -1472,7 +1506,7 @@ This is the first full report documenting metric additions and system improvemen
 
 ---
 
-## J. Advanced quality metrics (including another eval run + eval report)
+## K. Advanced quality metrics (including another eval run + eval report)
 
 **Goal:** Implement specialized validation metrics. Iterate on regex patterns and scoring approaches based on feedback from previous subsections. Run eval and document findings in a report.
 
@@ -1598,7 +1632,7 @@ After implementing advanced quality metrics:
 
 ---
 
-## K. Safety guardrails (including another eval run + eval report)
+## L. Safety guardrails (including another eval run + eval report)
 
 **Goal:** Implement binary safety checks to catch persona breaks and anachronisms. These are pass/fail guardrails, distinct from gradual quality metrics. Run eval and document in final report.
 

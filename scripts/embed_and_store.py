@@ -5,6 +5,7 @@ and stores them in ChromaDB for retrieval.
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -17,15 +18,14 @@ from src.utils.io import load_documents_from_disk
 from src.utils.logging import setup_cli_logging
 from src.vectorstores.chroma import embed_and_store
 
-logger = setup_cli_logging()
 
-
-def embed_author(author: str, input_base_path: str) -> int:
+def embed_author(author: str, input_base_path: str, logger: logging.Logger) -> int:
     """Embed and store documents for a single author.
 
     Args:
         author: Author key to process
         input_base_path: Base directory containing scraped documents
+        logger: Logger instance for output
 
     Returns:
         Number of chunks stored
@@ -82,8 +82,19 @@ def main() -> None:
         default=str(RAW_DATA_PATH),
         help=f"Base directory containing scraped documents (default: {RAW_DATA_PATH})"
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging"
+    )
 
     args = parser.parse_args()
+
+    # Setup logging
+    logger = setup_cli_logging(verbose=args.verbose)
+
+    if args.verbose:
+        logger.debug("Verbose logging enabled")
 
     # Determine which authors to process
     logger.info(f"\n{'='*70}")
@@ -96,7 +107,7 @@ def main() -> None:
     try:
         total_chunks = 0
         for author in authors_to_process:
-            num_chunks = embed_author(author, args.input_path)
+            num_chunks = embed_author(author, args.input_path, logger)
             total_chunks += num_chunks
 
         logger.info(f"\n{'='*70}")

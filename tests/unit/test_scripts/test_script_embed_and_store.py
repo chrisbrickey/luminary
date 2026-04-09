@@ -286,7 +286,8 @@ class TestEmbedAuthor:
         mock_chunk.return_value = sample_chunks
 
         from scripts.embed_and_store import embed_author
-        num_chunks = embed_author(TEST_AUTHOR, TEST_INPUT_PATH)
+        mock_logger = MagicMock()
+        num_chunks = embed_author(TEST_AUTHOR, TEST_INPUT_PATH, mock_logger)
 
         assert num_chunks == len(sample_chunks)
 
@@ -298,8 +299,9 @@ class TestEmbedAuthor:
         """Test that invalid author raises ValueError."""
         from scripts.embed_and_store import embed_author
 
+        mock_logger = MagicMock()
         with pytest.raises(ValueError, match="Unknown author"):
-            embed_author(INVALID_AUTHOR, TEST_INPUT_PATH)
+            embed_author(INVALID_AUTHOR, TEST_INPUT_PATH, mock_logger)
 
         # Load should not be called for invalid author
         mock_load.assert_not_called()
@@ -322,7 +324,8 @@ class TestEmbedAuthor:
         custom_input = "custom/input"
 
         from scripts.embed_and_store import embed_author
-        embed_author(TEST_AUTHOR, custom_input)
+        mock_logger = MagicMock()
+        embed_author(TEST_AUTHOR, custom_input, mock_logger)
 
         # Verify correct input path
         expected_input = Path(custom_input) / TEST_DOCUMENT_ID

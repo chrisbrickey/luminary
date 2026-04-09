@@ -56,7 +56,7 @@ def load_golden_dataset(path: Path) -> GoldenDataset:
 
 def discover_latest_golden_dataset(
     directory: Path,
-    scope: str = "persona",
+    scope: str | None = "persona",
     authors: list[str] | None = None, # avoids mutable default argument
 ) -> Path:
     """Find most recent golden dataset for author(s).
@@ -73,10 +73,9 @@ def discover_latest_golden_dataset(
 
     Args:
         directory: Directory to search
-        scope: Dataset scope (default: "persona") - matches GoldenDataset.scope
-        authors: List of author names (e.g., ["condorcet"]) - will be sorted and joined
-                 with underscores to match the authors portion of the filename.
-                 Defaults to [DEFAULT_AUTHOR] if not provided.
+        scope: Dataset scope (default: "persona")
+        authors: List of author names default [DEFAULT_AUTHOR] : e.g., ["condorcet", "gouges"]
+                 The list will be sorted and joined with underscores to match the authors portion of the filename.
 
     Returns:
         Path to newest matching file (sorted by filename, newest first)
@@ -84,8 +83,9 @@ def discover_latest_golden_dataset(
     Raises:
         FileNotFoundError: If no matching files found (include pattern and directory)
     """
-    if authors is None:
-        authors = [DEFAULT_AUTHOR]
+    # Fallback to default attributes of golden dataset if not provided
+    scope = "persona" if scope is None else scope
+    authors = [DEFAULT_AUTHOR] if authors is None else authors
 
     # Sort and join authors to match golden dataset filename convention
     authors_str = "_".join(sorted(authors))

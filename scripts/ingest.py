@@ -6,6 +6,7 @@ with --skip-scrape or --skip-embed.
 """
 
 import argparse
+import logging
 import subprocess
 import sys
 
@@ -14,18 +15,17 @@ from src.configs.loader_configs import INGEST_CONFIGS
 from src.utils.cli_helpers import check_ollama_or_exit, exit_on_error, validate_author
 from src.utils.logging import setup_cli_logging
 
-logger = setup_cli_logging()
-
 # Constants
 _SECTION_WIDTH = 70
 _SECTION_CHAR = '='
 _PHASE_CHAR = '─'
 
 
-def _log_section_header(title: str, subtitle: str = "") -> None:
+def _log_section_header(logger: logging.Logger, title: str, subtitle: str = "") -> None:
     """Log a section header with equal signs separator.
 
     Args:
+        logger: Logger instance for output
         title: Main title to display
         subtitle: Optional subtitle to display below title
     """
@@ -36,10 +36,11 @@ def _log_section_header(title: str, subtitle: str = "") -> None:
     logger.info(_SECTION_CHAR * _SECTION_WIDTH)
 
 
-def _log_phase_header(phase_name: str) -> None:
+def _log_phase_header(logger: logging.Logger, phase_name: str) -> None:
     """Log a phase header with dash separator.
 
     Args:
+        logger: Logger instance for output
         phase_name: Name of the phase to display
     """
     logger.info(f"\n{_PHASE_CHAR * _SECTION_WIDTH}")
@@ -47,17 +48,18 @@ def _log_phase_header(phase_name: str) -> None:
     logger.info(_PHASE_CHAR * _SECTION_WIDTH)
 
 
-def _run_scrape_phase(author: str, raw_data_path: str) -> None:
+def _run_scrape_phase(logger: logging.Logger, author: str, raw_data_path: str) -> None:
     """Run the scraping phase for a single author.
 
     Args:
+        logger: Logger instance for output
         author: Author key to process
         raw_data_path: Base directory for saving scraped documents
 
     Raises:
         subprocess.CalledProcessError: If scraping script fails
     """
-    _log_phase_header("PHASE 1: SCRAPING")
+    _log_phase_header(logger, "PHASE 1: SCRAPING")
 
     scrape_cmd = [
         "uv", "run", "python", "scripts/scrape_wikisource.py",
@@ -67,17 +69,18 @@ def _run_scrape_phase(author: str, raw_data_path: str) -> None:
     subprocess.run(scrape_cmd, check=True)
 
 
-def _run_embed_phase(author: str, raw_data_path: str) -> None:
+def _run_embed_phase(logger: logging.Logger, author: str, raw_data_path: str) -> None:
     """Run the embedding phase for a single author.
 
     Args:
+        logger: Logger instance for output
         author: Author key to process
         raw_data_path: Base directory containing scraped documents
 
     Raises:
         subprocess.CalledProcessError: If embedding script fails
     """
-    _log_phase_header("PHASE 2: EMBEDDING")
+    _log_phase_header(logger, "PHASE 2: EMBEDDING")
 
     embed_cmd = [
         "uv", "run", "python", "scripts/embed_and_store.py",
@@ -88,6 +91,7 @@ def _run_embed_phase(author: str, raw_data_path: str) -> None:
 
 
 def ingest_author(
+    logger: logging.Logger,
     author: str,
     raw_data_path: str,
     skip_scrape: bool,
@@ -96,6 +100,7 @@ def ingest_author(
     """Ingest documents for a single author (scrape + embed).
 
     Args:
+        logger: Logger instance for output
         author: Author key to process
         raw_data_path: Base directory for saving scraped documents
         skip_scrape: If True, skip scraping step
@@ -109,13 +114,13 @@ def ingest_author(
 
     # Scraping phase
     if not skip_scrape:
-        _run_scrape_phase(author, raw_data_path)
+        _run_scrape_phase(logger, author, raw_data_path)
     else:
         logger.info(f"\n⏭  Skipping scrape phase for {author}")
 
     # Embedding phase
     if not skip_embed:
-        _run_embed_phase(author, raw_data_path)
+        _run_embed_phase(logger, author, raw_data_path)
     else:
         logger.info(f"\n⏭  Skipping embed phase for {author}")
 
@@ -151,6 +156,11 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip embedding phase (only scrape documents)"
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging"
+    )
     return parser
 
 
@@ -158,6 +168,12 @@ def main() -> None:
     """Main entry point for combined ingestion script."""
     parser = _build_argument_parser()
     args = parser.parse_args()
+
+    # Setup logging
+    logger = setup_cli_logging(verbose=args.verbose)
+
+    if args.verbose:
+        logger.debug("Verbose logging enabled")
 
     # Validate flags
     if args.skip_scrape and args.skip_embed:
@@ -167,12 +183,13 @@ def main() -> None:
     if args.author is None:
         authors_to_process = list(INGEST_CONFIGS.keys())
         _log_section_header(
+            logger,
             "COMBINED INGESTION - All Authors",
             f"Authors: {', '.join(authors_to_process)}"
         )
     else:
         authors_to_process = [args.author]
-        _log_section_header("COMBINED INGESTION", f"Author: {args.author}")
+        _log_section_header(logger, "COMBINED INGESTION", f"Author: {args.author}")
 
     # Check Ollama availability (only needed for embedding)
     if not args.skip_embed:
@@ -181,6 +198,7 @@ def main() -> None:
     try:
         for author in authors_to_process:
             ingest_author(
+                logger=logger,
                 author=author,
                 raw_data_path=args.raw_data_path,
                 skip_scrape=args.skip_scrape,
@@ -188,7 +206,7 @@ def main() -> None:
             )
 
         # Final summary
-        _log_section_header("✓ INGESTION COMPLETE")
+        _log_section_header(logger, "✓ INGESTION COMPLETE")
         logger.info("")  # Add trailing newline
 
     except ValueError as e:

@@ -1,16 +1,16 @@
 # Luminary
 
-A RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts with sources cited. 
+A RAG chatbot where Enlightenment writers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts with sources cited. 
 Available as both a web UI and interactive CLI.
 
 ## Interfaces
 
-Luminary provides two interfaces for interacting with the philosophers:
+Luminary provides two interfaces for interacting with the philosophes:
 
 - **Web UI**: Browser-based chat interface with message history, sidebar controls, and visual source citations
 - **CLI**: Command-line interactive chat with optional debug output and chunk inspection
 
-Both interfaces support the same core features and philosopher personas.
+Both interfaces support the same core features and personas.
 
 ## Key Features
 
@@ -123,7 +123,8 @@ luminary/
 │
 ├── docs/
 ├── evals/                   (gitignored)
-│      └── golden/           # versioned golden datasets for the evaluation harness
+│   ├── golden/              # versioned golden datasets for the evaluation harness
+│   └── runs/                # timestamped JSON artifacts from eval runs
 │
 ├── locales/                 # standard user-facing messages that should adapt to detected language
 │
@@ -171,7 +172,7 @@ Luminary uses a bespoke, automated evaluation harness to measure quality and pre
 - Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{YYYY-MM-DD}T{HH-MM-SS}.json`.
 - Contains all example results, aggregate scores, and system version metadata for traceability
 
-## Development
+## Setup
 
 ### 1. Clone the repo
 
@@ -207,74 +208,43 @@ Verify it's running at http://localhost:11434 or with:
 ollama list
 ```
 
-### 4. Run the test suite
-
-```
-# Run all tests except those tagged as 'external'
-# This includes unit tests, integration tests, and linting checks (mypy, autoflake)
-uv run pytest
-
-# Run all tests including those tagged as 'external', which make network calls to confirm API contracts
-uv run pytest -m external
-```
-
-#### Run linting checks independently
-
-Run type checks
-```
-uv run mypy
-```
-
-Run checks on unused variables
-```
-uv run pytest tests/integration/test_autoflake.py
-
-# clean up unused imports automatically
-uv run autoflake --in-place --recursive --remove-all-unused-imports --remove-unused-variables --ignore-init-module-imports src scripts tests
-```
-
-### 5. Run the ingestion pipeline
+### 4. Run the ingestion pipeline
 Ingestion is automated with scripts. Ingestion components are designed to be idempotent so re-running scripts will update existing data rather than creating duplicates.
 
-The unified `ingest.py` script runs the entire pipeline:
-```
-# run everything - all parts of ingestion pipeline (scrape + embed) for all sources and all authors
-uv run python scripts/ingest.py
-```
+The unified `ingest.py` script runs the entire ingestion pipeline:
+- **Scrape phase:** Fetches source data from online sources, parses HTML, and saves documents as JSON files to target (at `data/raw/<document_id>/` in local env)
+- **Embed phase:** Loads documents from storage, splits them into overlapping chunks with added metadata, embeds the chunks, and stores in a vector database (at `data/chroma_db/` in local env)
 _If you only need to run a portion of the pipeline, see the Troubleshooting section for lower-level scripts._
 
-**What it does:**
-1. **Scrape phase:** Fetches source data from online sources, parses HTML, and saves documents as JSON files to target (at `data/raw/<document_id>/` in local env)
-2. **Embed phase:** Loads documents from storage, splits them into overlapping chunks with added metadata, embeds the chunks, and stores in a vector database (at `data/chroma_db/` in local env)
-
-**Options:**
-- `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
-- `--raw-data-path` (optional): Base directory for scraped documents (default: `data/raw`)
-- `--skip-scrape` (optional): Skip scraping phase and use existing scraped documents
-- `--skip-embed` (optional): Skip embedding phase (only scrape documents)
-
-**Examples using options:**
 ```
-# Run all parts of ingestion pipeline for ony one author
+# run everything - all parts of ingestion pipeline for all sources and all authors
+uv run python scripts/ingest.py
+
+# run all parts of ingestion pipeline for only one author
 uv run python scripts/ingest.py --author voltaire
-
-# Run ony the scraping portion (skip embedding)
-uv run python scripts/ingest.py --skip-embed
-
-# Run only the embedding portion (uses existing scraped documents)
-uv run python scripts/ingest.py --skip-scrape
 ```
 
-### 6. Start chatting with Enlightenment Philosophes
+**Optional flags:**
 
-#### Prerequisites
+| Flag                                                                                                           | Description | Default              |
+|-----------------|-------------|----------------------|
+| `--author` | Author key to process. | all authors included |
+| `--raw-data-path` | Base directory for scraped documents | `data/raw`           |
+| `--skip-scrape` | Skip scraping phase and use existing scraped documents | false                |
+| `--skip-embed` | Skip embedding phase (only scrape documents)  | false                |
+| `--verbose` | Debugging with verbose logging | false                |
+
+
+## Usage: Debate with Enlightenment Philosophes
+Luminary provides two interfaces for interacting with enlightenment personas. 
+They both launch interactive chat sessions where you can ask questions and receive grounded responses from the selected writer.
+
+### Prerequisites
 - Ollama must be running.
 - Both models must be pulled: nomic-embed-text (for embedding queries), mistral (for LLM responses).
 - Vector database (chromaDB) must be populated by the ingestion script.
 
-
-#### Chat via CLI
-This script launches an interactive chat session where you can ask questions and receive grounded responses from the selected philosopher.
+### Chat via CLI
 
 ```
 # chat with default author (Voltaire as of 2026)
@@ -282,14 +252,11 @@ uv run python scripts/chat.py
 
 # specify the author
 uv run python scripts/chat.py --author voltaire
-
-# show raw retrieved chunks for debugging
-uv run python scripts/chat.py --show-chunks
 ```
 
 To exit: Type `quit` or press Ctrl+C.
 
-**Available flags:**
+**Optional flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -297,7 +264,7 @@ To exit: Type `quit` or press Ctrl+C.
 | `--show-chunks` | Display retrieved chunks with IDs and contexts | `False` |
 | `--verbose` | Enable verbose logging | `False` |
 
-#### Chat via UI
+### Chat via UI
 
 1. Ensure Streamlit is installed. It is an optional requirement that is not included in `uv sync`.
 
@@ -311,19 +278,61 @@ uv sync --extra ui
 uv run streamlit run chat_ui.py
 ```
 
-Open `http://localhost:8501` in your browser.
-- Chat interface with message history
-- Use the sidebar to change the author persona or clear the conversation.*
-- Each response adheres to the personality and perspective's of the selected author.
-- Responses display deduplicated sources as a caption.
+3. Open `http://localhost:8501` in your browser if it does not automatically open.
+Use the sidebar to change the author persona or clear the conversation. 
+_Changes of author will automatically rebuild the chat chain and clear message history._
 
-_*Changes of author will automatically rebuild the chat chain and clear message history._
+## Development
 
-## Troubleshooting
+### Run the test suite
+```
+# Run all tests except those tagged as 'external'. This includes unit tests, integration tests, and linting checks.
+uv run pytest
 
-### Running ingestion steps separately
+# Run all tests including those tagged as 'external', which make network calls to confirm API contracts.
+uv run pytest -m external
 
-If you need to run scraping and embedding as separate steps (for debugging or development), use the individual scripts:
+# Run only type checking tests
+uv run mypy
+
+# Run only checks on unused variables and imports
+uv run pytest tests/integration/test_autoflake.py
+```
+
+**Automatically clean up unused variables and imports**
+```
+uv run autoflake --in-place --recursive --remove-all-unused-imports --remove-unused-variables --ignore-init-module-imports src scripts tests
+```
+
+### Run the evaluation harness
+
+**Prerequisites:**
+- Ollama running (`ollama serve`)
+- Corpus ingested (`uv run python scripts/ingest.py`)
+- Golden dataset created (in `evals/golden/` with naming pattern `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`)
+
+**Run evaluation:**
+```
+# Auto-discover latest golden dataset for default author
+uv run python scripts/run_eval.py
+
+# Specify dataset explicitly (for reproducibility)
+uv run python scripts/run_eval.py --golden-path path/to/golden/dataset
+```
+
+**Optional flags:**
+  | Flag          | Description                          | Default                                             |
+  |---------------|--------------------------------------|-----------------------------------------------------|
+  | --golden-path | Path to golden dataset JSON file     | Auto-discovery of latest dataset for default author |
+  | --output-path | Output directory for eval artifacts  | `evals/runs`                                        |
+  | --verbose     | Enable debug logging                 | False                                               |
+
+
+## Troubleshooting and additional options
+
+### Run ingestion scripts separately
+
+This section contains information on the individual scripts for scraping and embedding that are both used by the single, unified command in the Setup section.
 
 **Script 1 of 2 — Scrape:** fetches data from designated 3rd party sources, parses the data, formulates LangChain documents, and persists json files
 
@@ -338,6 +347,7 @@ _Output: data/raw/voltaire_lettres_philosophiques-1734/page_01.json, page_02.jso
 **Options:**
 - `--author` (optional): Author key to scrape. Defaults to all configured authors. Currently available: `voltaire`
 - `--output-path` (optional): Base directory for saving scraped documents (default: `data/raw`)
+- `--verbose` (optional): Debugging with verbose logging
 
 **Output location:**
 Documents are saved to `data/raw/<document_id>/` as `page_NN.json` files containing:
@@ -359,6 +369,7 @@ uv run python scripts/embed_and_store.py --author voltaire
 **Options:**
 - `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
 - `--input-path` (optional): Base directory containing scraped documents (default: `data/raw`)
+- `--verbose` (optional): Debugging with verbose logging
 
 **Output location:**
 Embeddings are stored in the ChromaDB vector database (at `data/chroma_db/` in local env) with collection name `philosophes`.
