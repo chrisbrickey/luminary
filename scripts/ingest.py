@@ -6,19 +6,15 @@ with --skip-scrape or --skip-embed.
 """
 
 import argparse
-import logging
 import subprocess
 import sys
 
 from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
+from src.utils.logging import setup_cli_logging
 from src.utils.ollama_health import check_ollama_available
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_cli_logging()
 
 # Constants
 _SECTION_WIDTH = 70

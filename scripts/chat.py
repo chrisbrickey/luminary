@@ -22,14 +22,11 @@ from src.i18n.keys import (
 from src.schemas import ChatResponse
 from src.utils.formatting import format_sources
 from src.utils.language import detect_language
+from src.utils.logging import setup_cli_logging
 from src.utils.ollama_health import check_ollama_available
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-)
-logger = logging.getLogger(__name__)
+# Configure logging (will be set to DEBUG if --verbose is used)
+logger = setup_cli_logging(verbose=False)
 
 # Suppress HTTP request logging from httpx, urllib3, and other noisy libraries
 logging.getLogger("httpx").setLevel(logging.WARNING)

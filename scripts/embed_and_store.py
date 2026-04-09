@@ -5,7 +5,6 @@ and stores them in ChromaDB for retrieval.
 """
 
 import argparse
-import logging
 import sys
 from pathlib import Path
 
@@ -14,14 +13,11 @@ from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 from src.utils.chunker import chunk_documents
 from src.utils.io import load_documents_from_disk
+from src.utils.logging import setup_cli_logging
 from src.utils.ollama_health import check_ollama_available
 from src.vectorstores.chroma import embed_and_store
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_cli_logging()
 
 
 def embed_author(author: str, input_base_path: str) -> int:
