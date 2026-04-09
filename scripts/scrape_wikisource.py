@@ -5,7 +5,6 @@ loader and saves the documents to disk as JSON files.
 """
 
 import argparse
-import logging
 import sys
 from pathlib import Path
 
@@ -13,13 +12,9 @@ from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.document_loaders.wikisource_loader import WikisourceLoader
 from src.utils.io import save_documents_to_disk
+from src.utils.logging import setup_cli_logging
 
-# Configure logging with simpler format for better readability
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(message)s'  # Simple format for user-friendly progress messages
-)
-logger = logging.getLogger(__name__)
+logger = setup_cli_logging()
 
 
 def scrape_author(author: str, output_base_path: str) -> int:
