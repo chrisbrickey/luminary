@@ -71,7 +71,7 @@ def sample_chunks() -> list[Document]:
 class TestEmbedAndStoreMain:
     """Test main() function of embed_and_store script."""
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     @patch("scripts.embed_and_store.embed_author")
     def test_default_arguments(
         self,
@@ -96,7 +96,7 @@ class TestEmbedAndStoreMain:
         call_args = mock_embed.call_args[0]
         assert call_args[1] == str(RAW_DATA_PATH)  # input_base_path
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     @patch("scripts.embed_and_store.embed_and_store")
     @patch("scripts.embed_and_store.chunk_documents")
     @patch("scripts.embed_and_store.load_documents_from_disk")
@@ -134,7 +134,7 @@ class TestEmbedAndStoreMain:
         assert call_kwargs["chunks"] == sample_chunks
         assert call_kwargs["collection_name"] == COLLECTION_NAME
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     @patch("scripts.embed_and_store.embed_and_store")
     @patch("scripts.embed_and_store.chunk_documents")
     @patch("scripts.embed_and_store.load_documents_from_disk")
@@ -164,7 +164,7 @@ class TestEmbedAndStoreMain:
         assert mock_chunk.call_count == len(INGEST_CONFIGS)
         assert mock_embed.call_count == len(INGEST_CONFIGS)
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     @patch("scripts.embed_and_store.embed_and_store")
     @patch("scripts.embed_and_store.chunk_documents")
     @patch("scripts.embed_and_store.load_documents_from_disk")
@@ -195,7 +195,7 @@ class TestEmbedAndStoreMain:
         expected_path = Path(custom_input) / TEST_DOCUMENT_ID
         mock_load.assert_called_once_with(expected_path)
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     def test_invalid_author_exits_with_error(
         self,
         mock_ollama: MagicMock,
@@ -209,7 +209,7 @@ class TestEmbedAndStoreMain:
                 main()
             assert exc_info.value.code == 1
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     @patch("scripts.embed_and_store.load_documents_from_disk")
     def test_file_not_found_exits_with_error(
         self,
@@ -226,13 +226,14 @@ class TestEmbedAndStoreMain:
                 main()
             assert exc_info.value.code == 1
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     def test_ollama_not_available_exits_with_error(
         self,
         mock_ollama: MagicMock,
     ) -> None:
         """Test that Ollama not available exits with error."""
-        mock_ollama.side_effect = RuntimeError("Ollama is not running")
+        # check_ollama_or_exit handles the error internally and calls sys.exit(1)
+        mock_ollama.side_effect = SystemExit(1)
 
         with patch("sys.argv", ["embed_and_store.py", "--author", TEST_AUTHOR]):
             from scripts.embed_and_store import main
@@ -240,7 +241,7 @@ class TestEmbedAndStoreMain:
                 main()
             assert exc_info.value.code == 1
 
-    @patch("scripts.embed_and_store.check_ollama_available")
+    @patch("scripts.embed_and_store.check_ollama_or_exit")
     @patch("scripts.embed_and_store.embed_and_store")
     @patch("scripts.embed_and_store.chunk_documents")
     @patch("scripts.embed_and_store.load_documents_from_disk")

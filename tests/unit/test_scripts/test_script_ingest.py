@@ -21,7 +21,7 @@ TEST_DB_PATH = "test/db"
 class TestIngestMain:
     """Test main() function of ingest script."""
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.ingest_author")
     def test_default_arguments(
         self,
@@ -47,7 +47,7 @@ class TestIngestMain:
         assert call_kwargs["skip_scrape"] is False
         assert call_kwargs["skip_embed"] is False
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.subprocess.run")
     def test_default_scrape_and_embed(
         self,
@@ -86,7 +86,7 @@ class TestIngestMain:
         ]
         assert embed_call[1]["check"] is True
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.subprocess.run")
     def test_skip_scrape(
         self,
@@ -134,7 +134,7 @@ class TestIngestMain:
             "--output-path", str(RAW_DATA_PATH)
         ]
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.subprocess.run")
     def test_all_authors_default(
         self,
@@ -155,7 +155,7 @@ class TestIngestMain:
         # Should call scripts twice per author (scrape + embed)
         assert mock_run.call_count == len(INGEST_CONFIGS) * 2
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.subprocess.run")
     def test_single_author(
         self,
@@ -176,7 +176,7 @@ class TestIngestMain:
         # Should call both scripts once
         assert mock_run.call_count == 2
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     def test_invalid_author_exits_with_error(
         self,
         mock_ollama: MagicMock,
@@ -198,7 +198,7 @@ class TestIngestMain:
                 main()
             assert exc_info.value.code == 1
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.subprocess.run")
     def test_custom_raw_data_path(
         self,
@@ -233,13 +233,14 @@ class TestIngestMain:
             "--input-path", custom_raw
         ]
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     def test_ollama_not_available_exits_with_error(
         self,
         mock_ollama: MagicMock,
     ) -> None:
         """Test that Ollama not available exits with error (when embedding)."""
-        mock_ollama.side_effect = RuntimeError("Ollama is not running")
+        # check_ollama_or_exit handles the error internally and calls sys.exit(1)
+        mock_ollama.side_effect = SystemExit(1)
 
         with patch("sys.argv", ["ingest.py", "--author", TEST_AUTHOR]):
             from scripts.ingest import main
@@ -255,7 +256,7 @@ class TestIngestMain:
         """Test that Ollama is not checked when --skip-embed is used."""
         mock_run.return_value = MagicMock(returncode=0)
 
-        with patch("scripts.ingest.check_ollama_available") as mock_ollama:
+        with patch("scripts.ingest.check_ollama_or_exit") as mock_ollama:
             with patch("sys.argv", ["ingest.py", "--author", TEST_AUTHOR, "--skip-embed"]):
                 from scripts.ingest import main
                 main()
@@ -263,7 +264,7 @@ class TestIngestMain:
             # Ollama check should not be called
             mock_ollama.assert_not_called()
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.subprocess.run")
     def test_subprocess_error_exits_with_error(
         self,
@@ -280,7 +281,7 @@ class TestIngestMain:
                 main()
             assert exc_info.value.code == 1
 
-    @patch("scripts.ingest.check_ollama_available")
+    @patch("scripts.ingest.check_ollama_or_exit")
     @patch("scripts.ingest.subprocess.run")
     def test_general_exception_exits_with_error(
         self,
