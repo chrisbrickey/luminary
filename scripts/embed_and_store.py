@@ -12,9 +12,9 @@ from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.configs.vectorstore_config import COLLECTION_NAME
 from src.utils.chunker import chunk_documents
+from src.utils.cli_helpers import check_ollama_or_exit, exit_on_error, resolve_authors, validate_author
 from src.utils.io import load_documents_from_disk
 from src.utils.logging import setup_cli_logging
-from src.utils.ollama_health import check_ollama_available
 from src.vectorstores.chroma import embed_and_store
 
 logger = setup_cli_logging()
@@ -35,12 +35,7 @@ def embed_author(author: str, input_base_path: str) -> int:
         FileNotFoundError: If author's document directory doesn't exist
         Exception: For any embedding or storage errors
     """
-    if author not in INGEST_CONFIGS:
-        raise ValueError(
-            f"Unknown author: {author}. "
-            f"Available authors: {', '.join(INGEST_CONFIGS.keys())}"
-        )
-
+    validate_author(author)
     config = INGEST_CONFIGS[author]
     document_path = Path(input_base_path) / config.document_id
 
@@ -91,25 +86,12 @@ def main() -> None:
     args = parser.parse_args()
 
     # Determine which authors to process
-    if args.author is None:
-        # Process all configured authors
-        authors_to_process = list(INGEST_CONFIGS.keys())
-        logger.info(f"\n{'='*70}")
-        logger.info(f"No author specified - processing all configured authors: {', '.join(authors_to_process)}")
-        logger.info(f"{'='*70}")
-    else:
-        # Process only the specified author
-        authors_to_process = [args.author]
-        logger.info(f"\n{'='*70}")
-        logger.info(f"Processing author: {args.author}")
-        logger.info(f"{'='*70}")
+    logger.info(f"\n{'='*70}")
+    authors_to_process = resolve_authors(args.author, logger)
+    logger.info(f"{'='*70}")
 
     # Check Ollama availability
-    try:
-        check_ollama_available()
-    except RuntimeError as e:
-        logger.error(str(e))
-        sys.exit(1)
+    check_ollama_or_exit(logger)
 
     try:
         total_chunks = 0
@@ -124,9 +106,7 @@ def main() -> None:
 
     except ValueError as e:
         # Invalid author name
-        logger.error(str(e))
-        sys.exit(1)
-        return  # For testing when sys.exit is mocked
+        exit_on_error(logger, e)
     except FileNotFoundError as e:
         logger.error(f"Error: {e}")
         if args.author:
@@ -140,9 +120,7 @@ def main() -> None:
         sys.exit(1)
         return  # For testing when sys.exit is mocked
     except Exception as e:
-        logger.error(f"Error during embedding: {e}", exc_info=True)
-        sys.exit(1)
-        return  # For testing when sys.exit is mocked
+        exit_on_error(logger, e, context="during embedding")
 
 
 if __name__ == "__main__":

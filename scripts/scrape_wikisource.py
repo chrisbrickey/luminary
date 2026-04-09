@@ -5,12 +5,12 @@ loader and saves the documents to disk as JSON files.
 """
 
 import argparse
-import sys
 from pathlib import Path
 
 from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
 from src.document_loaders.wikisource_loader import WikisourceLoader
+from src.utils.cli_helpers import exit_on_error, resolve_authors, validate_author
 from src.utils.io import save_documents_to_disk
 from src.utils.logging import setup_cli_logging
 
@@ -31,12 +31,7 @@ def scrape_author(author: str, output_base_path: str) -> int:
         ValueError: If author is not found in INGEST_CONFIGS
         Exception: For any scraping or saving errors
     """
-    if author not in INGEST_CONFIGS:
-        raise ValueError(
-            f"Unknown author: {author}. "
-            f"Available authors: {', '.join(INGEST_CONFIGS.keys())}"
-        )
-
+    validate_author(author)
     config = INGEST_CONFIGS[author]
     logger.info(f"\nConfiguration:")
     logger.info(f"  Author: {author}")
@@ -85,18 +80,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # Determine which authors to scrape
-    if args.author is None:
-        # Scrape all configured authors
-        authors_to_scrape = list(INGEST_CONFIGS.keys())
-        logger.info(f"\n{'='*70}")
-        logger.info(f"No author specified - scraping all configured authors: {', '.join(authors_to_scrape)}")
-        logger.info(f"{'='*70}")
-    else:
-        # Scrape only the specified author
-        authors_to_scrape = [args.author]
-        logger.info(f"\n{'='*70}")
-        logger.info(f"Scraping author: {args.author}")
-        logger.info(f"{'='*70}")
+    logger.info(f"\n{'='*70}")
+    authors_to_scrape = resolve_authors(args.author, logger)
+    logger.info(f"{'='*70}")
 
     try:
         total_saved = 0
@@ -111,13 +97,9 @@ def main() -> None:
 
     except ValueError as e:
         # Invalid author name
-        logger.error(str(e))
-        sys.exit(1)
-        return  # For testing when sys.exit is mocked
+        exit_on_error(logger, e)
     except Exception as e:
-        logger.error(f"Error during scraping: {e}", exc_info=True)
-        sys.exit(1)
-        return  # For testing when sys.exit is mocked
+        exit_on_error(logger, e, context="during scraping")
 
 
 if __name__ == "__main__":

@@ -11,8 +11,8 @@ import sys
 
 from src.configs.common import RAW_DATA_PATH
 from src.configs.loader_configs import INGEST_CONFIGS
+from src.utils.cli_helpers import check_ollama_or_exit, exit_on_error, validate_author
 from src.utils.logging import setup_cli_logging
-from src.utils.ollama_health import check_ollama_available
 
 logger = setup_cli_logging()
 
@@ -105,11 +105,7 @@ def ingest_author(
         ValueError: If author is not found in INGEST_CONFIGS
         subprocess.CalledProcessError: If either script fails
     """
-    if author not in INGEST_CONFIGS:
-        raise ValueError(
-            f"Unknown author: {author}. "
-            f"Available authors: {', '.join(INGEST_CONFIGS.keys())}"
-        )
+    validate_author(author)
 
     # Scraping phase
     if not skip_scrape:
@@ -165,9 +161,7 @@ def main() -> None:
 
     # Validate flags
     if args.skip_scrape and args.skip_embed:
-        logger.error("Error: Cannot skip both scrape and embed phases")
-        sys.exit(1)
-        return  # For testing when sys.exit is mocked
+        exit_on_error(logger, ValueError("Cannot skip both scrape and embed phases"))
 
     # Determine which authors to process
     if args.author is None:
@@ -182,12 +176,7 @@ def main() -> None:
 
     # Check Ollama availability (only needed for embedding)
     if not args.skip_embed:
-        try:
-            check_ollama_available()
-        except RuntimeError as e:
-            logger.error(str(e))
-            sys.exit(1)
-            return  # For testing when sys.exit is mocked
+        check_ollama_or_exit(logger)
 
     try:
         for author in authors_to_process:
@@ -204,18 +193,14 @@ def main() -> None:
 
     except ValueError as e:
         # Invalid author name
-        logger.error(str(e))
-        sys.exit(1)
-        return  # For testing when sys.exit is mocked
+        exit_on_error(logger, e)
     except subprocess.CalledProcessError as e:
         # Script execution failed
         logger.error(f"Error: Script execution failed with exit code {e.returncode}")
         sys.exit(1)
         return  # For testing when sys.exit is mocked
     except Exception as e:
-        logger.error(f"Error during ingestion: {e}", exc_info=True)
-        sys.exit(1)
-        return  # For testing when sys.exit is mocked
+        exit_on_error(logger, e, context="during ingestion")
 
 
 if __name__ == "__main__":
