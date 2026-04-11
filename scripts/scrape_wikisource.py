@@ -5,6 +5,7 @@ loader and saves the documents to disk as JSON files.
 """
 
 import argparse
+import logging
 from pathlib import Path
 
 from src.configs.common import RAW_DATA_PATH
@@ -14,15 +15,14 @@ from src.utils.cli_helpers import exit_on_error, resolve_authors, validate_autho
 from src.utils.io import save_documents_to_disk
 from src.utils.logging import setup_cli_logging
 
-logger = setup_cli_logging()
 
-
-def scrape_author(author: str, output_base_path: str) -> int:
+def scrape_author(author: str, output_base_path: str, logger: logging.Logger) -> int:
     """Scrape documents for a single author.
 
     Args:
         author: Author key to scrape
         output_base_path: Base directory for saving documents
+        logger: Logger instance for output
 
     Returns:
         Number of documents saved
@@ -76,8 +76,19 @@ def main() -> None:
         default=str(RAW_DATA_PATH),
         help=f"Base directory for saving scraped documents (default: {RAW_DATA_PATH})"
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging"
+    )
 
     args = parser.parse_args()
+
+    # Setup logging
+    logger = setup_cli_logging(verbose=args.verbose)
+
+    if args.verbose:
+        logger.debug("Verbose logging enabled")
 
     # Determine which authors to scrape
     logger.info(f"\n{'='*70}")
@@ -87,7 +98,7 @@ def main() -> None:
     try:
         total_saved = 0
         for author in authors_to_scrape:
-            num_saved = scrape_author(author, args.output_path)
+            num_saved = scrape_author(author, args.output_path, logger)
             total_saved += num_saved
 
         logger.info(f"\n{'='*70}")

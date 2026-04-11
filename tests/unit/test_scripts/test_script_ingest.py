@@ -311,7 +311,9 @@ class TestIngestAuthor:
         mock_run.return_value = MagicMock(returncode=0)
 
         from scripts.ingest import ingest_author
+        mock_logger = MagicMock()
         ingest_author(
+            logger=mock_logger,
             author=TEST_AUTHOR,
             raw_data_path=TEST_RAW_PATH,
             skip_scrape=False,
@@ -330,7 +332,9 @@ class TestIngestAuthor:
         mock_run.return_value = MagicMock(returncode=0)
 
         from scripts.ingest import ingest_author
+        mock_logger = MagicMock()
         ingest_author(
+            logger=mock_logger,
             author=TEST_AUTHOR,
             raw_data_path=TEST_RAW_PATH,
             skip_scrape=True,
@@ -351,7 +355,9 @@ class TestIngestAuthor:
         mock_run.return_value = MagicMock(returncode=0)
 
         from scripts.ingest import ingest_author
+        mock_logger = MagicMock()
         ingest_author(
+            logger=mock_logger,
             author=TEST_AUTHOR,
             raw_data_path=TEST_RAW_PATH,
             skip_scrape=False,
@@ -367,8 +373,10 @@ class TestIngestAuthor:
         """Test that invalid author raises ValueError."""
         from scripts.ingest import ingest_author
 
+        mock_logger = MagicMock()
         with pytest.raises(ValueError, match="Unknown author"):
             ingest_author(
+                logger=mock_logger,
                 author=INVALID_AUTHOR,
                 raw_data_path=TEST_RAW_PATH,
                 skip_scrape=False,
@@ -385,7 +393,9 @@ class TestIngestAuthor:
         mock_run.return_value = MagicMock(returncode=0)
 
         from scripts.ingest import ingest_author
+        mock_logger = MagicMock()
         ingest_author(
+            logger=mock_logger,
             author=TEST_AUTHOR,
             raw_data_path=custom_raw,
             skip_scrape=False,

@@ -25,14 +25,6 @@ from src.utils.language import detect_language
 from src.utils.logging import setup_cli_logging
 from src.utils.ollama_health import check_ollama_available
 
-# Configure logging (will be set to DEBUG if --verbose is used)
-logger = setup_cli_logging(verbose=False)
-
-# Suppress HTTP request logging from httpx, urllib3, and other noisy libraries
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("openai").setLevel(logging.WARNING)
-logging.getLogger("anthropic").setLevel(logging.WARNING)
 
 def format_chunks_output(response: ChatResponse) -> str:
     """Format retrieved chunks with IDs and contexts when debugging.
@@ -74,10 +66,17 @@ def run_interactive_chat(
         ValueError: If author is not registered
         RuntimeError: If Ollama is not available
     """
-    # Set verbose logging if requested
+    # Setup logging
+    logger = setup_cli_logging(verbose=verbose)
+
     if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Verbose logging enabled")
+
+    # Suppress HTTP request logging from noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
 
     # Check Ollama availability
     logger.debug("Checking Ollama availability...")
@@ -185,7 +184,7 @@ def main() -> None:
             verbose=args.verbose,
         )
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        print(f"Fatal error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
