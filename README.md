@@ -1,16 +1,14 @@
 # Luminary
 
-A RAG chatbot where Enlightenment writers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts with sources cited. 
+A RAG application where Enlightenment writers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts with sources cited. 
 Available as both a web UI and interactive CLI.
 
 ## Interfaces
 
-Luminary provides two interfaces for interacting with the philosophes:
+Luminary provides two interfaces for interacting with the philosophes. Both interfaces support the same core features and personas.
 
 - **Web UI**: Browser-based chat interface with message history, sidebar controls, and visual source citations
 - **CLI**: Command-line interactive chat with optional debug output and chunk inspection
-
-Both interfaces support the same core features and personas.
 
 ## Key Features
 
@@ -21,16 +19,9 @@ Both interfaces support the same core features and personas.
 - **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. _Local LLMs are not deterministic. So adherence to the detected language depends on the training data available to the selected model._ 
 - **Localized interfaces:** Chat interface formatting (labels, buttons, loading messages) available in multiple languages and adapts to the detected language of the user.
 
-### Example Questions
-Ask Voltaire anything grounded in their writings. Here are some questions to get you started:
+## Architecture
 
-| English | Français |
-| --- | --- |
-| In your view, what is the nature of tolerance, and why is it essential for human society? | Selon vous, quelle est la nature de la tolérance, et pourquoi est‑elle essentielle à la vie en société ? |
-| How do you reconcile the pursuit of personal happiness with the moral duty to others? | Comment conciliez‑vous la recherche du bonheur personnel avec le devoir moral que nous avons envers autrui ? |
-| What is the proper role of the philosopher in challenging injustice? | Quel est, selon vous, le rôle propre du philosophe lorsqu'il s'agit de dénoncer et de combattre l'injustice ? |
-
-## Technology
+### Technology
 
 | Dependency          | Purpose                                |
 |---------------------|----------------------------------------|
@@ -44,8 +35,6 @@ Ask Voltaire anything grounded in their writings. Here are some questions to get
 | pytest + pytest-cov | test runner and coverage               |
 | mypy                | static type checking                   |
 | autoflake           | unused import detection                |
-
-## Architecture
 
 ### Pipelines
 
@@ -66,7 +55,7 @@ III. EVALUATION PIPELINE
 load golden dataset -> invoke chat chain → apply all metrics → aggregate scores → persist eval run artifact
 ```
 
-#### Pipelines in Detail
+##### Pipelines in Detail
 
 ```
 INGESTION (one-time / on-demand via scripts)
@@ -238,6 +227,16 @@ uv run python scripts/ingest.py --author voltaire
 ## Usage: Debate with Enlightenment Philosophes
 Luminary provides two interfaces for interacting with enlightenment personas. 
 They both launch interactive chat sessions where you can ask questions and receive grounded responses from the selected writer.
+
+### Example Questions
+Ask Voltaire anything grounded in their writings. Here are some questions to get you started:
+
+| English | Français |
+| --- | --- |
+| In your view, what is the nature of tolerance, and why is it essential for human society? | Selon vous, quelle est la nature de la tolérance, et pourquoi est‑elle essentielle à la vie en société ? |
+| How do you reconcile the pursuit of personal happiness with the moral duty to others? | Comment conciliez‑vous la recherche du bonheur personnel avec le devoir moral que nous avons envers autrui ? |
+| What is the proper role of the philosopher in challenging injustice? | Quel est, selon vous, le rôle propre du philosophe lorsqu'il s'agit de dénoncer et de combattre l'injustice ? |
+
 
 ### Prerequisites
 - Ollama must be running.
