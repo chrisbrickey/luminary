@@ -319,12 +319,20 @@ uv run python scripts/run_eval.py
 uv run python scripts/run_eval.py --golden-path path/to/golden/dataset
 ```
 
-**Optional flags:**
-  | Flag          | Description                          | Default                                             |
-  |---------------|--------------------------------------|-----------------------------------------------------|
-  | --golden-path | Path to golden dataset JSON file     | Auto-discovery of latest dataset for default author |
-  | --output-path | Output directory for eval artifacts  | `evals/runs`                                        |
-  | --verbose     | Enable debug logging                 | False                                               |
+Optional flags:
+
+| Flag          | Description                          | Default                                             |
+|---------------|--------------------------------------|-----------------------------------------------------|
+| --golden-path | Path to golden dataset JSON file     | Auto-discovery of latest dataset for default author |
+| --output-path | Output directory for eval artifacts  | `evals/runs`                                        |
+| --verbose     | Enable debug logging                 | False                                               |
+
+
+**Interpreting results:**
+- **Scores:** 0.0 to 1.0, where 1.0 is perfect
+- **Threshold examples:** 0.8 for most metrics
+- **✅ = passing**, **❌ = failing** (below threshold)
+- **Overall pass rate:** Fraction of examples where ALL metrics passed
 
 
 ## Troubleshooting and additional options

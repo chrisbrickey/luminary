@@ -827,7 +827,7 @@ All test development in this plan follows this workflow:
 
 ---
 
-## F. Perform first eval run
+## F. ✅ Perform first eval run
 **🎯 MILESTONE: First Eval Run**
 
 - Instruct the user to manually generate the first artifact by running the CLI script and to manually inspect the output. Detailed instructions below.
@@ -848,7 +848,7 @@ All test development in this plan follows this workflow:
    ```
 
 2. **Manually analyze the initial artifact:**
-   - Open the artifact file: `evals/runs/voltaire_{timestamp}.json`
+   - Open the artifact file: `evals/runs/{timestamp}.json`
    - Look at `aggregate_scores.overall` - identify metrics with scores < thresholds
    - Look at `example_results` - find examples where `passed: false`
    - Read the `response.text` for failed examples to understand what went wrong
@@ -875,14 +875,6 @@ All test development in this plan follows this workflow:
     - **Threshold examples:** 0.8 for most metrics
     - **✅ = passing**, **❌ = failing** (below threshold)
     - **Overall pass rate:** Fraction of examples where ALL metrics passed
-    
-    **After running:**
-    1. Review artifact in `evals/runs/{timestamp}.json`
-    2. Identify failing metrics (score < threshold)
-    3. Read example outputs in artifact to understand failure modes
-    4. Iterate on prompts, config, or golden dataset
-    5. Re-run eval to measure improvements
-    6. TODO: add instructions for documentation into narrative reports, which may be in subsequent sections.
     ```
   
 ### Plan updates
@@ -1106,6 +1098,15 @@ Compare the new artifact with the first run:
      - Workflow (run eval → generate stub → fill narrative → commit)
      - Filename convention: `{to be determined}.md`
      - Tips for writing reports (be specific, link commits, read artifacts, track trends)
+     - Below is a high level draft of the process. Update this based on the current state of the app and include something like this.
+        ```markdown
+        **Documentation workflow:**
+        1. (Optional) Generate stub: `format_eval_report_stub(eval_run)` to auto-fill dates/scores
+        2. Initialize report in `docs/eval_reports/{filename}.md`
+        3. Iterate on prompts, config, or golden dataset
+        4. Fill narrative sections of the report: Purpose, Error Analysis, Changes Made, Recommendation
+        5. Commit report to git (preserves institutional memory)
+        ```
 
 7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
@@ -1114,23 +1115,21 @@ Compare the new artifact with the first run:
 - **README:** Update "Evaluation Harness" section:
   ```markdown
   **Evaluation reports:**
-  Narrative reports documenting eval runs, analysis, and improvements live in
-  `docs/eval_reports/` (committed to git, unlike artifacts).
-
-  **Report workflow:**
-  1. Run eval → produces `evals/runs/{timestamp}.json` artifact
-  2. (Optional) Generate stub: `format_eval_report_stub(eval_run)` to auto-fill dates/scores
-  3. Create report: `docs/eval_reports/{filename}.md`
-  4. Fill narrative sections: Purpose, Error Analysis, Changes Made, Recommendation
-  5. Commit report to git (preserves institutional memory)
-
-  **Why reports?** According to industry best practices:
+  Narrative reports documenting eval runs, analysis, and improvements live in `docs/eval_reports/` (committed to git, unlike artifacts).
+  Reports align the development process with industry best standards:
   - Numbers alone don't tell the story - context matters
-  - Reports document "why" (eval artifacts only document "what")
-  - Future you (6 months later) will thank you for the narrative
+  - Narrative reports document "why" (eval artifacts only document "what")
   - Reports align teams on priorities and quality bar
-
-  See `docs/eval_reports/README.md` for detailed workflow and tips.
+  ```
+  
+- **README:** Update evaluation harness instructions:
+  ```markdown
+  **After running:**
+  1. Manually review artifact in `evals/runs/{timestamp}.json`
+  2. Identify failing metrics (score < threshold)
+  3. Read example outputs in artifact to understand failure modes
+  4. See `docs/eval_reports/README.md` for detailed reporting workflow to ensure comprehensive (and committed) documentation of runs and related improvements.
+  5. Re-run eval to measure improvements and repeat documentation process.
   ```
 
 - **README:** Update "Project Structure" section:
