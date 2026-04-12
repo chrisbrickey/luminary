@@ -86,7 +86,6 @@ def main() -> None:
 
     # Setup logging
     logger = setup_cli_logging(verbose=args.verbose)
-
     if args.verbose:
         logger.debug("Verbose logging enabled")
 

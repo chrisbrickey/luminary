@@ -73,7 +73,7 @@ def main() -> None:
     parser.add_argument(
         "--output-path",
         type=str,
-        default=str(RAW_DATA_PATH),
+        default=None,
         help=f"Base directory for saving scraped documents (default: {RAW_DATA_PATH})"
     )
     parser.add_argument(
@@ -84,9 +84,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Evaluate default arguments at runtime, avoiding variable setting at import time
+    if args.output_path is None:
+        args.output_path = str(RAW_DATA_PATH)
+
     # Setup logging
     logger = setup_cli_logging(verbose=args.verbose)
-
     if args.verbose:
         logger.debug("Verbose logging enabled")
 
