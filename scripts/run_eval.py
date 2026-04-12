@@ -208,8 +208,8 @@ def main() -> None:
     parser.add_argument(
         "--output-path",
         type=Path,
-        default=DEFAULT_EVAL_ARTIFACTS_PATH,
-        help=f"Output directory for eval artifacts: If not provided it defaults: {DEFAULT_EVAL_ARTIFACTS_PATH})"
+        default=None,
+        help=f"Output directory for eval artifacts (default: {DEFAULT_EVAL_ARTIFACTS_PATH})"
     )
     parser.add_argument(
         "--verbose",
@@ -218,9 +218,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Evaluate default arguments at runtime, avoiding variable setting at import time
+    if args.output_path is None:
+        args.output_path = DEFAULT_EVAL_ARTIFACTS_PATH
+
     # Setup logging
     logger = setup_cli_logging(verbose=args.verbose)
-
     if args.verbose:
         logger.debug("Verbose logging enabled")
 

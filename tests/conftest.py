@@ -213,7 +213,7 @@ def test_db_path(tmp_path: Path, monkeypatch) -> Path:
     in every test file.
 
     Args:
-        tmp_path: pytest's temporary directory fixture
+        tmp_path: pytest's temporary directory fixture (pytest cleans up after tests)
         monkeypatch: pytest's monkeypatch fixture
 
     Returns:

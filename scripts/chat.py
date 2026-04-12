@@ -161,7 +161,7 @@ def main() -> None:
     parser.add_argument(
         "--author",
         type=str,
-        default=DEFAULT_AUTHOR,
+        default=None,
         help=f"Author to query (default: {DEFAULT_AUTHOR})",
     )
     parser.add_argument(
@@ -176,6 +176,10 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    # Evaluate default arguments at runtime, avoiding variable setting at import time
+    if args.author is None:
+        args.author = DEFAULT_AUTHOR
 
     try:
         run_interactive_chat(
