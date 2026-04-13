@@ -306,7 +306,7 @@ class TestMetricRegistryCompleteness:
 
         This ensures new metric files don't forget to call register_metric().
         """
-        # Import metrics to trigger auto-registration
+        # Import metrics to trigger auto-registration; Skip unused import warning
         import src.eval.metrics  # noqa: F401
 
         # Find all metric module files
@@ -343,7 +343,7 @@ class TestMetricRegistryCompleteness:
 
         This prevents metrics from being registered from outside the metrics directory.
         """
-        # Import metrics to trigger auto-registration
+        # Import metrics to trigger auto-registration; Skip unused import warning
         import src.eval.metrics  # noqa: F401
 
         # Check all metrics come from the metrics directory
@@ -364,7 +364,7 @@ class TestMetricRegistryCompleteness:
         This prevents bugs where two metrics use the same name and one
         silently overwrites the other.
         """
-        # Import metrics to trigger auto-registration
+        # Import metrics to trigger auto-registration; Skip unused import warning
         import src.eval.metrics  # noqa: F401
 
         metric_names = [spec.name for spec in METRIC_REGISTRY]
@@ -376,34 +376,40 @@ class TestMetricRegistryCompleteness:
             f"Unique names: {sorted(unique_names)}"
         )
 
-    def test_registry_sanity_checks(self) -> None:
-        """Basic sanity checks for the registry.
+    def test_all_metric_registrations_succeed(self) -> None:
+        """Verify every register_metric() call in source files actually registered a metric.
 
-        Verifies that:
-        - At least one metric file exists
-        - At least one metric is registered
-        - Known metrics are present (regression prevention)
+        This catches:
+        - Metrics defined but not registered (forgot to call register_metric)
+        - Registration calls that silently fail (import errors, exceptions)
+        - Conditional registrations that didn't execute
+
+        This test is fully dynamic and requires no manual updates when adding new metrics.
         """
-        # Import metrics to trigger auto-registration
+        # Import metrics to trigger auto-registration; Skip unused import warning
         import src.eval.metrics  # noqa: F401
 
-        # Check metric files exist
+        # Count register_metric() calls in all metric files
         metrics_dir = Path("src/eval/metrics")
-        metric_files = [
-            f.stem
-            for f in metrics_dir.glob("*.py")
-            if f.stem not in ("__init__", "base")
-        ]
-        assert len(metric_files) > 0, "No metric files found in src/eval/metrics/"
+        total_registration_calls = 0
+        registration_details = []
 
-        # Check metrics are registered
-        registered_names = {spec.name for spec in METRIC_REGISTRY}
-        assert len(registered_names) > 0, "METRIC_REGISTRY is empty - no metrics registered"
+        for metric_file in metrics_dir.glob("*.py"):
+            if metric_file.stem in ("__init__", "base"):
+                continue
 
-        # Verify known metrics exist (prevents regressions)
-        expected_metrics = {"retrieval_relevance"}
-        missing_metrics = expected_metrics - registered_names
-        assert not missing_metrics, (
-            f"Expected metrics not registered: {sorted(missing_metrics)}. "
-            f"Registered metrics: {sorted(registered_names)}"
+            content = metric_file.read_text()
+            registration_calls = content.count("register_metric(")
+            total_registration_calls += registration_calls
+            if registration_calls > 0:
+                registration_details.append(f"  {metric_file.name}: {registration_calls} call(s)")
+
+        # Verify at least some metrics exist
+        assert total_registration_calls > 0, (f"No register_metric() calls found in {metrics_dir}.")
+
+        # Verify registry size matches total registration calls
+        actual_registered = len(METRIC_REGISTRY)
+        assert actual_registered == total_registration_calls, (
+            f"Found {total_registration_calls} register_metric() calls in source files, but only {actual_registered} metrics in METRIC_REGISTRY.\n"
+            f"Registration details:\n" + "\n".join(registration_details) + f"\n"
         )

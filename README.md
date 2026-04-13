@@ -334,8 +334,22 @@ Optional flags:
 - **✅ = passing**, **❌ = failing** (below threshold)
 - **Overall pass rate:** Fraction of examples where ALL metrics passed
 
+**Troubleshooting missing metrics:**
 
-## Troubleshooting and additional options
+There are multiple levels of protection to ensure that eval runs include all metrics, including an automated metrics registry.
+If one or more metrics are still excluded from an eval run, you will see a warning in the terminal: `registered metric(s) were NOT applied to any examples`.
+
+Potential causes:
+- Field name mismatch: Metric requires fields that don't exist in ChatResponse schema
+- Missing data: Golden dataset examples don't have required fields populated
+- Language mismatch: Metric only applies to languages not in this dataset
+
+Recommendations:
+- Review metric requirements above\n"
+- Check ChatResponse schema for correct field names\n"
+- Ensure golden dataset has appropriate test data\n"
+
+## Additional troubleshooting and options
 
 ### Run ingestion scripts separately
 

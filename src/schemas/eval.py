@@ -44,6 +44,12 @@ class GoldenExample(BaseModel):
         description="Expected chunk IDs to be retrieved"
     )
 
+    # citation metrics
+    expected_source_titles: list[str] = Field(
+        default_factory=list,
+        description="Expected source titles in citations"
+    )
+
     @field_validator('author')
     @classmethod
     def validate_author_in_configs(cls, v: str) -> str:
