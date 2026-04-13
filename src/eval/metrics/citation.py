@@ -156,14 +156,14 @@ def _citation_accuracy_wrapper(example: Any, response: Any) -> MetricResult:
 
     Args:
         example: GoldenExample with expected_source_titles attribute
-        response: ChatResponse with source_titles attribute
+        response: ChatResponse with retrieved_source_titles attribute
 
     Returns:
         MetricResult from citation_accuracy
     """
     return citation_accuracy(
         expected_source_titles=example.expected_source_titles,
-        retrieved_source_titles=response.source_titles,
+        retrieved_source_titles=response.retrieved_source_titles,
     )
 
 
@@ -173,7 +173,7 @@ register_metric(
         name="citation_accuracy",
         compute=_citation_accuracy_wrapper,
         required_example_fields={"expected_source_titles"},
-        required_response_fields={"source_titles"},
+        required_response_fields={"retrieved_source_titles"},
         languages=None,  # Applies to all languages
         # not specifying default_threshold here will fall back to FALLBACK_THRESHOLD
     )
@@ -185,14 +185,14 @@ def _citation_to_retrieval_consistency_wrapper(example: Any, response: Any) -> M
 
     Args:
         example: GoldenExample (not used for this metric)
-        response: ChatResponse with text and source_titles attributes
+        response: ChatResponse with text and retrieved_source_titles attributes
 
     Returns:
         MetricResult from citation_to_retrieval_consistency
     """
     return citation_to_retrieval_consistency(
         response_text=response.text,
-        retrieved_chunk_sources=response.source_titles,
+        retrieved_chunk_sources=response.retrieved_source_titles,
     )
 
 
@@ -202,7 +202,7 @@ register_metric(
         name="citation_to_retrieval_consistency",
         compute=_citation_to_retrieval_consistency_wrapper,
         required_example_fields=set(),  # No example fields needed
-        required_response_fields={"text", "source_titles"},
+        required_response_fields={"text", "retrieved_source_titles"},
         languages=None,  # Applies to all languages
         # not specifying default_threshold here will fall back to FALLBACK_THRESHOLD
     )

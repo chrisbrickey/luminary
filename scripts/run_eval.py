@@ -177,6 +177,43 @@ def _load_golden_dataset_from_args(
 
     return golden_dataset, resolved_path
 
+def _check_metric_coverage(eval_run: EvalRun, logger: logging.Logger) -> None:
+    """Check if all registered metrics were actually used in the evaluation.
+    Warns if any metrics were registered but never applied to any examples.
+
+    Args:
+        eval_run: Completed EvalRun object
+        logger: Logger for warnings
+    """
+    # Import metrics to get METRIC_REGISTRY
+    from src.eval.metrics.base import METRIC_REGISTRY
+
+    # Get all registered metric names
+    registered_metrics = {spec.name for spec in METRIC_REGISTRY}
+
+    # Get all metrics that were actually computed (appear in aggregate_scores)
+    computed_metrics = set(eval_run.aggregate_scores.get("overall", {}).keys())
+
+    # Find metrics that were registered but never computed
+    unused_metrics = registered_metrics - computed_metrics
+
+    if unused_metrics:
+        logger.warning(
+            f"\n{'='*70}\n"
+            f"⚠️  WARNING: {len(unused_metrics)} registered metric(s) were NOT applied to any examples:\n"
+        )
+
+        for metric_name in sorted(unused_metrics):
+            # Get the spec for diagnostics
+            spec = next(s for s in METRIC_REGISTRY if s.name == metric_name)
+            logger.warning(f"  - {metric_name}")
+            logger.warning(f"      Required example fields: {spec.required_example_fields}")
+            logger.warning(f"      Required response fields: {spec.required_response_fields}")
+            logger.warning(f"      Languages: {spec.languages or 'all'}")
+
+        print("\n" + "=" * 70)
+
+
 def main() -> None:
     """Main CLI entry point for running evaluation harness.
 
@@ -269,6 +306,9 @@ def main() -> None:
         )
         logger.info(f"✓ Evaluation complete")
         logger.info(f"  - Overall pass rate: {eval_run.overall_pass_rate:.1%}")
+
+        # Check for metrics that weren't applied
+        _check_metric_coverage(eval_run, logger)
     except Exception as e:
         logger.exception("Error during evaluation")
         print(f"\n❌ ERROR during evaluation: {e}", file=sys.stderr)

@@ -217,6 +217,17 @@ class TestGoldenExample:
         example = GoldenExample(**kwargs)
         assert example.expected_chunk_ids == []
 
+    def test_expected_source_titles_defaults_to_empty_list(self) -> None:
+        """expected_source_titles defaults to empty list when not provided."""
+        example = GoldenExample(**_golden_example_kwargs())
+        assert example.expected_source_titles == []
+
+    def test_expected_source_titles_accepts_list(self) -> None:
+        """expected_source_titles field accepts list of strings."""
+        source_titles = ["Lettres philosophiques", "Candide", "Traité sur la tolérance"]
+        example = GoldenExample(**_golden_example_kwargs(expected_source_titles=source_titles))
+        assert example.expected_source_titles == source_titles
+
 
 class TestGoldenDataset:
     def test_construction_with_required_fields(self) -> None:

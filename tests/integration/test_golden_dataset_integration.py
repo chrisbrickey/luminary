@@ -201,3 +201,60 @@ class TestGoldenDatasetIntegration:
             f"Expected {len(AUTHOR_CONFIGS)} golden datasets, "
             f"found {len(discovered_authors)}: {discovered_authors}"
         )
+
+    def test_all_registered_metrics_applicable_to_latest_golden_dataset(self) -> None:
+        """All registered metrics should be applicable to at least one example in latest dataset.
+
+        This test ensures:
+        1. All metrics in METRIC_REGISTRY can actually be used
+        2. Required field names in MetricSpec match actual schema field names
+        3. Golden dataset examples have appropriate test data for all metrics
+        """
+        # Import metrics to trigger auto-registration; Skip unused import warning
+        import src.eval.metrics  # noqa: F401
+
+        from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
+        from src.schemas.chat import ChatResponse
+
+        # Load the actual latest golden dataset
+        try:
+            latest_dataset_path = discover_latest_golden_dataset(
+                directory=DEFAULT_GOLDEN_DATASET_PATH
+            )
+            golden_dataset = load_golden_dataset(latest_dataset_path)
+        except FileNotFoundError as e:
+            pytest.skip(f"No golden dataset found: {e}")
+
+        # Create a mock ChatResponse with ALL schema fields populated (non-empty, truthy values)
+        # This simulates what a real chain would return
+        mock_response = ChatResponse(
+            text="This is a sample response with citations. [source: Test Work]",
+            retrieved_passage_ids=["chunk_001", "chunk_002"],
+            retrieved_contexts=["Context 1", "Context 2"],
+            retrieved_source_titles=["Test Work, Page 1", "Another Work, Page 5"],
+            language="en",
+        )
+
+        # Check each example in the dataset and track which metrics are applied
+        applicable_metrics: set[str] = set()
+        for example in golden_dataset.examples:
+            for spec in METRIC_REGISTRY:
+                if is_metric_applicable(spec, example, mock_response):
+                    applicable_metrics.add(spec.name)
+
+        # Isolate metrics that don't apply to any example
+        registered_metrics = {spec.name for spec in METRIC_REGISTRY}
+        non_applicable_metrics = registered_metrics - applicable_metrics
+
+        # Build detailed error message if there are non-applicable metrics
+        if non_applicable_metrics:
+            pytest.fail(
+                f"\nFound {len(non_applicable_metrics)} non-applicable metric(s) in golden dataset: {golden_dataset.identifier}"
+                f"Metric(s) not applied: {', '.join(sorted(non_applicable_metrics))}"
+            )
+
+        # Sanity check
+        assert len(applicable_metrics) == len(registered_metrics), (
+            f"Expected all {len(registered_metrics)} registered metrics to be applicable to latest golden dataset: {golden_dataset.identifier}."
+            f"But only {len(applicable_metrics)} of the {len(registered_metrics)} were applicable to that dataset."
+        )

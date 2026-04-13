@@ -883,7 +883,7 @@ All test development in this plan follows this workflow:
 
 
 
-## G. Core citation metrics (including an eval run)
+## G. ✅ Core citation metrics (including an eval run)
 
 **Goal:** Implement fundamental metrics that directly validate citation functionality of the RAG pipeline. After implementation, run eval again to see citation metrics in action.
 
