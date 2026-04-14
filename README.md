@@ -18,6 +18,7 @@ Luminary provides two interfaces for interacting with the philosophes. Both inte
 - **Transparent retrieval:** Optional debug mode shows exact text chunks and similarity scores used for each response.
 - **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. _Local LLMs are not deterministic. So adherence to the detected language depends on the training data available to the selected model._ 
 - **Localized interfaces:** Chat interface formatting (labels, buttons, loading messages) available in multiple languages and adapts to the detected language of the user.
+- **Evaluation harness:** Bespoke, automated evaluation harness to measure response quality and prevent regressions.
 
 ## Architecture
 
@@ -97,48 +98,6 @@ EVALUATION (on-demand quality measurement)
  EvalRun                  machine-readable artifact with all results, scores, and system version (saved to evals/runs/)
 ```
 
-### Project Structure
-
-```
-luminary/
-├── chat_ui.py               # web ui for chat
-├── pyproject.toml           # project metadata, dependencies, and configuration
-├── uv.lock                  # locked dependency versions
-│
-├── data/                    (gitignored)
-│   ├── chroma_db/           # ChromaDB vector database
-│   └── raw/
-│       └── <document_id>/   # scraped documents saved as JSON
-│
-├── docs/
-├── evals/                   (gitignored)
-│   ├── golden/              # versioned golden datasets for the evaluation harness
-│   └── runs/                # timestamped JSON artifacts from eval runs
-│
-├── locales/                 # standard user-facing messages that should adapt to detected language
-│
-├── src/
-│   ├── chains/              # RAG chain orchestration with retrieval + LLM
-│   ├── configs/             # configurations shared across modules
-│   ├── document_loaders/    # fetch and parse data, returning standardised LangChain Documents
-│   ├── eval/                # evaluation harness: metrics, runner, and quality measurement
-│   ├── i18n/                # localization keys and message loading
-│   ├── prompts/             # author-specific persona prompts (e.g., Voltaire, Gouges)
-│   ├── schemas/             # shared Pydantic data models to validate data structures
-│   ├── utils/               # shared utility functions
-│   └── vectorstores/        # ingestion-time storage and query-time retrieval operations
-│
-├── scripts/                 # CLI entrypoints for ingestion, chat, eval, etc.
-│
-└── tests/
-    ├── unit/                # fast offline tests; all external boundaries mocked
-    └── integration/         # tests across modules and services*
-```
-_*Tests that make http or grpc calls to confirm API contracts are tagged with 'external' annotation._
-
-### Evaluation Harness
-
-Luminary uses a bespoke, automated evaluation harness to measure response quality and prevent regressions. See `src/eval/README.md` for comprehensive documentation.
 
 ## Setup
 
@@ -295,3 +254,43 @@ Optional flags:
 | --golden-path | Path to golden dataset JSON file     | Auto-discovery of latest dataset for default author |
 | --output-path | Output directory for eval artifacts  | `evals/runs`                                        |
 | --verbose     | Enable debug logging                 | False                                               |
+
+
+### Project Structure
+
+```
+luminary/
+├── chat_ui.py               # web ui for chat
+├── pyproject.toml           # project metadata, dependencies, and configuration
+├── uv.lock                  # locked dependency versions
+│
+├── data/                    (gitignored)
+│   ├── chroma_db/           # ChromaDB vector database
+│   └── raw/
+│       └── <document_id>/   # scraped documents saved as JSON
+│
+├── docs/
+├── evals/                   (gitignored)
+│   ├── golden/              # versioned golden datasets for the evaluation harness
+│   └── runs/                # timestamped JSON artifacts from eval runs
+│
+├── locales/                 # standard user-facing messages that should adapt to detected language
+│
+├── src/
+│   ├── chains/              # RAG chain orchestration with retrieval + LLM
+│   ├── configs/             # configurations shared across modules
+│   ├── document_loaders/    # fetch and parse data, returning standardised LangChain Documents
+│   ├── eval/                # evaluation harness: metrics, runner, and quality measurement
+│   ├── i18n/                # localization keys and message loading
+│   ├── prompts/             # author-specific persona prompts (e.g., Voltaire, Gouges)
+│   ├── schemas/             # shared Pydantic data models to validate data structures
+│   ├── utils/               # shared utility functions
+│   └── vectorstores/        # ingestion-time storage and query-time retrieval operations
+│
+├── scripts/                 # CLI entrypoints for ingestion, chat, eval, etc.
+│
+└── tests/
+    ├── unit/                # fast offline tests; all external boundaries mocked
+    └── integration/         # tests across modules and services*
+```
+_*Tests that make http or grpc calls to confirm API contracts are tagged with 'external' annotation._
