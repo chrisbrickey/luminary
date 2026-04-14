@@ -138,28 +138,7 @@ _*Tests that make http or grpc calls to confirm API contracts are tagged with 'e
 
 ### Evaluation Harness
 
-Luminary uses a bespoke, automated evaluation harness to measure quality and prevent regressions.
-
-**Design principles:**
-- Traceability: Eval artifacts are linked to versions of golden datasets and system attributes.
-- Multi-language by default: Test the multilingual system as users experience it, starting with English and French.
-- Iterative approach: Deterministic graders first: fast, reproducible, objective. Add more languages and complex metrics as the eval harness stabilizes.
-- Single source of truth: Centralized METRIC_REGISTRY provides the single list of metrics so eval runners and other callers don't need to be updated to detect new metrics.
-- Comprehensive coverage: happy paths and edge cases (anachronisms, persona breaks)
-
-**Metrics Categories:**
-- Deterministic metrics: retrieval relevance, citation accuracy, language compliance
-- Quality metrics: faithfulness to source texts, citation placement, persona maintenance
-- Cross-language metrics: translation consistency (FR/EN retrieval overlap)
-- LLM-as-judge metrics: relevance, groundedness, coherence
-
-**Golden datasets:**
-- Golden datasets are versioned collections of test cases that validate system behavior. Versioning allows comparing results across time and referencing the correct snapshot of data when creating eval reports. 
-- They live in `evals/golden/` (gitignored) with naming convention: `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`
-
-**Eval Artifacts:**
-- Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{YYYY-MM-DD}T{HH-MM-SS}.json`.
-- Contains all example results, aggregate scores, and system version metadata for traceability
+Luminary uses a bespoke, automated evaluation harness to measure response quality and prevent regressions. See `src/eval/README.md` for comprehensive documentation.
 
 ## Setup
 
@@ -290,12 +269,6 @@ uv run pytest
 
 # Run all tests including those tagged as 'external', which make network calls to confirm API contracts.
 uv run pytest -m external
-
-# Run only type checking tests
-uv run mypy
-
-# Run only checks on unused variables and imports
-uv run pytest tests/integration/test_autoflake.py
 ```
 
 **Automatically clean up unused variables and imports**
@@ -305,12 +278,8 @@ uv run autoflake --in-place --recursive --remove-all-unused-imports --remove-unu
 
 ### Run the evaluation harness
 
-**Prerequisites:**
-- Ollama running (`ollama serve`)
-- Corpus ingested (`uv run python scripts/ingest.py`)
-- Golden dataset created (in `evals/golden/` with naming pattern `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`)
+See `src/eval/README.md` for detailed instructions and troubleshooting tips.
 
-**Run evaluation:**
 ```
 # Auto-discover latest golden dataset for default author
 uv run python scripts/run_eval.py
@@ -326,71 +295,3 @@ Optional flags:
 | --golden-path | Path to golden dataset JSON file     | Auto-discovery of latest dataset for default author |
 | --output-path | Output directory for eval artifacts  | `evals/runs`                                        |
 | --verbose     | Enable debug logging                 | False                                               |
-
-
-**Interpreting results:**
-- **Scores:** 0.0 to 1.0, where 1.0 is perfect
-- **Threshold examples:** 0.8 for most metrics
-- **✅ = passing**, **❌ = failing** (below threshold)
-- **Overall pass rate:** Fraction of examples where ALL metrics passed
-
-**Troubleshooting missing metrics:**
-
-There are multiple levels of protection to ensure that eval runs include all metrics, including an automated metrics registry.
-If one or more metrics are still excluded from an eval run, you will see a warning in the terminal: `registered metric(s) were NOT applied to any examples`.
-
-Potential causes:
-- Field name mismatch: Metric requires fields that don't exist in ChatResponse schema
-- Missing data: Golden dataset examples don't have required fields populated
-- Language mismatch: Metric only applies to languages not in this dataset
-
-Recommendations:
-- Review metric requirements above\n"
-- Check ChatResponse schema for correct field names\n"
-- Ensure golden dataset has appropriate test data\n"
-
-## Additional troubleshooting and options
-
-### Run ingestion scripts separately
-
-This section contains information on the individual scripts for scraping and embedding that are both used by the single, unified command in the Setup section.
-
-**Script 1 of 2 — Scrape:** fetches data from designated 3rd party sources, parses the data, formulates LangChain documents, and persists json files
-
-```
-uv run python scripts/scrape_wikisource.py
-
-# scrape only documents tagged with author: Voltaire
-uv run python scripts/scrape_wikisource.py --author voltaire
-```
-_Output: data/raw/voltaire_lettres_philosophiques-1734/page_01.json, page_02.json, ..._
-
-**Options:**
-- `--author` (optional): Author key to scrape. Defaults to all configured authors. Currently available: `voltaire`
-- `--output-path` (optional): Base directory for saving scraped documents (default: `data/raw`)
-- `--verbose` (optional): Debugging with verbose logging
-
-**Output location:**
-Documents are saved to `data/raw/<document_id>/` as `page_NN.json` files containing:
-- `page_content`: The extracted text content
-- `metadata`: Document metadata including `document_id`, `document_title`, `author`, `source` URL, and `page_number`
-
-**Script 2 of 2 — Embed and Store:** loads JSON files from disk that were persisted in Step 1,
-splits each letter into overlapping chunks,
-converts each chunk into a vector using Ollama nomic-embed-text (a small neural network that captures the meaning of text as a list of numbers),
-and stores both the vectors and the original text in the vector database (at `data/chroma_db/` in local env).
-Once stored, chunks can be retrieved by semantic similarity — the basis for RAG.
-
-```
-uv run python scripts/embed_and_store.py
-
-# embed and store only documentes tagged with author: Voltaire
-uv run python scripts/embed_and_store.py --author voltaire
-```
-**Options:**
-- `--author` (optional): Author key to process. Defaults to all configured authors. Currently available: `voltaire`
-- `--input-path` (optional): Base directory containing scraped documents (default: `data/raw`)
-- `--verbose` (optional): Debugging with verbose logging
-
-**Output location:**
-Embeddings are stored in the ChromaDB vector database (at `data/chroma_db/` in local env) with collection name `philosophes`.

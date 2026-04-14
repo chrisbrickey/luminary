@@ -970,7 +970,178 @@ Compare the new artifact with the first run:
 
 ---
 
-## H. Eval reports to document improvements
+## H. Independent Golden Dataset Generation
+
+**Goal:** Replace method for generating golden dataset examples in order to validate actual response quality. Move away from circular evaluation (generating examples using the system's own functionality) to evaluation against independently developed examples.
+**Notes:** See `golden-dataset-generation-guide.md` for explanation and details.
+**Autodiscovery:** When you add a new metric, the prompt template automatically discovers required fields from `GoldenExample` (schema introspection) and `METRIC_REGISTRY` (required_example_fields).
+
+### Implementation
+
+1. **Test infrastructure**
+   - **Follow Test Development Workflow (see top of document)**
+   - Create `tests/unit/eval/golden/test_dataset_generation.py`
+   - Test cases (8 tests minimum):
+     - `test_discover_required_fields_includes_schema_fields()` - auto-discovery from GoldenExample
+     - `test_discover_required_fields_includes_metric_fields()` - auto-discovery from METRIC_REGISTRY
+     - `test_discover_required_fields_excludes_core_fields()` - id, question, author, language excluded
+     - `test_build_field_guidance_includes_known_fields()` - guidance for standard fields
+     - `test_build_field_guidance_handles_unknown_fields()` - generic guidance for new fields
+     - `test_build_prompt_includes_all_required_fields()` - prompt contains all discovered fields
+     - `test_generate_golden_example_returns_valid_schema()` - LLM output validates against schema
+     - `test_retrieve_candidate_chunks_returns_metadata()` - chunks include chunk_id, source, text
+   - Mock LLM responses to return valid JSON for deterministic tests
+
+2. **Implement core generation infrastructure**
+   - Create `src/eval/golden/dataset_generation.py` with:
+     - `discover_required_fields()` - auto-discovers fields from schema + METRIC_REGISTRY
+     - `build_field_guidance()` - generates LLM guidance for each field type
+       - **IMPORTANT**: Start with minimal guidance_map containing only fields for currently-implemented metrics (expected_chunk_ids, expected_source_titles)
+       - **DO NOT** pre-populate guidance for future metrics (keywords, translation_pair_id, forbidden_phrases, etc.)
+       - Include generic fallback for fields without specific guidance
+     - `build_prompt()` - assembles standard prompt with auto-discovered requirements
+     - `retrieve_candidate_chunks()` - fetches k=15 chunks for LLM to judge
+     - `generate_golden_example_with_llm()` - core function returning validated GoldenExample
+     - `generate_golden_dataset()` - batch generates complete datasets
+     
+   - Document the new files and methods above with docstrings. Incorporate pieces of the below information only where they are most relevant:
+     ```markdown
+     Why Deterministic LLM (temperature=0)?
+     - Ensures reproducible judgments across runs
+     - Makes generated datasets stable and traceable
+     - Reduces variance in quality assessments
+
+     Why Retrieve More Chunks Than Production (k=15 vs k=5)?
+     - Gives LLM broader context to judge relevance
+     - Prevents missing relevant chunks due to retrieval ranking
+     - LLM selects best 3-7 from larger candidate set (quality over quantity)
+
+     Why Separate Guidance for Each Field?
+     - Makes LLM output more accurate for complex fields
+     - Provides examples to guide LLM toward correct format
+     - Easy to extend as new field types are added
+
+     Why Auto-Discovery Instead of Hardcoded Fields?
+     - Eliminates maintenance burden when adding metrics
+     - Ensures prompt always includes all required fields
+     - Prevents schema drift between prompt and validation
+     ```
+
+3. **Check In:** Stop and ask the user to confirm that the implementation is satisfactory before continuing.
+
+4. **Create example configurations**
+   - Create `src/eval/golden/configs/` directory
+   - Create `src/eval/golden/configs/voltaire_examples.json` with structure:
+     ```json
+     [
+       {
+         "question": "Que pensez-vous de la tolérance religieuse?",
+         "author": "voltaire",
+         "language": "fr",
+         "topics": ["tolerance"]
+       },
+       ...
+     ]
+     ```
+   - Only include configs that are relevant for the current state of the app and the current metrics in `src/eval/metrics`. 
+
+5. **Create CLI script**
+   - Create `src/eval/golden/scripts/generate_golden_dataset.py`
+   - The CLI should prompt the user whether they want to increment the decimal (e.g. 2.3 -> 2.4) or the whole number (e.g. 2.3 -> 3.0) of the version based on the most recent dataset. 
+   - Flags:
+     - `--config` (required): Path to examples config JSON
+     - `--output`: Output path for golden dataset (default: `evals/golden/`)
+     - `--model`: LLM model to use (default: "mistral")
+     - `--verbose`: Enable debug logging
+   - Documentation: Add doc string at top of file to explain how this script is different from `query_for_golden_dataset.py` and to provide a justification for lack of test coverage.  
+
+6. **Check In:** Stop and ask the user to confirm that the implementation is satisfactory before continuing.
+
+### Documentation
+
+- **eval/README:** Add section explaining golden dataset generation to `src/eval/README.md`:
+  ```markdown
+  ## Generate Golden Datasets
+
+  Golden datasets are evaluation test cases. I use LLM-based generation to create high-quality datasets that validate actual quality (not just system regression).
+  This process evolved as I developed the evaluation harness and learned more about the domain.
+  See `docs/golden-dataset-generation-guide.md` for comprehensive documentation including architecture and migration strategy.
+  
+  ### Usage Workflow
+  1. Create examples config (questions and topics). See src/eval/golden/configs/voltaire_examples.json for format
+  
+  2. Generate golden dataset
+   ```bash
+   uv run python scripts/generate_golden_dataset.py --verbose
+   ```
+   [TODO]: Add table of argument options for the CLI script. Use the existing argument table on the README file as a template.
+
+  #### Incorporate new metrics
+  [TODO]: Copy information from the "Evolution with New Metrics" on golden-dataset-generation-guide.md to this README file. Summarize the content and improve the formatting here in this README so that it's easy for a user to follow. 
+
+  #### Troubleshooting golden dataset generation
+
+  LLM Returns Invalid JSON
+  - **Cause**: LLM adds markdown formatting (```json blocks) or explanations
+  - **Fix**: Update prompt to emphasize "Return ONLY the JSON object"
+  - **Workaround**: Parse with regex to extract JSON from markdown blocks
+    
+  LLM Selects Too Many/Few Chunks
+  - **Cause**: Guidance unclear about quantity expectations
+  - **Fix**: Strengthen guidance with specific ranges (3-7 chunks)
+  - **Alternative**: Post-process to filter out marginal chunks
+    
+  Fields Missing from Generated Examples
+  - **Cause**: Field not in guidance_map or schema introspection failed
+  - **Fix**: Add field to guidance_map with clear examples
+  - **Debug**: Print `discover_required_fields()` output to verify detection
+    
+  Generated Dataset Fails Validation
+  - **Cause**: LLM output doesn't match GoldenExample schema constraints
+  - **Fix**: Review validation errors, update prompt guidance for that field
+  - **Debug**: Print raw LLM output to see what it's generating
+
+  #### Potential future enhancements of dataset generation
+
+  1. **Iterative Refinement**: If LLM output fails validation, automatically retry with error messages as additional context
+  2. **Multi-Model Consensus**: Generate examples with multiple LLMs (mistral, llama3, etc.) and merge judgments
+  3. **Human-in-the-Loop**: Allow manual review/editing of generated examples before finalizing dataset
+  4. **Automated Expansion**: Given a base set of questions, automatically generate variations (different phrasings, languages, difficulty levels)
+  5. **Quality Metrics for Generators**: Track LLM agreement rates, validation success rates, and human approval rates to optimize prompt templates
+  ```
+
+### Plan Updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+---
+
+## I. Generate Independent Golden Dataset 
+**Goal:** Use the new functionality to create a new golden dataset. Validate it manually and by processing it with the eval runner.
+
+Instruct the user to complete these steps manually:
+
+1. Follow the instructions you added in the previous step for generating a golden dataset on `src/eval/README.md`. Bump to version 2.0.
+
+2. Manually inspect the new dataset. Note any issues or questions.
+
+3. Run the eval harness:
+    ```bash
+    uv run python scripts/run_eval.py
+    ```
+
+4. Compare the new eval artifact with those of previous runs:
+- Check how citation metrics perform
+- Note any changes in overall pass rate
+- Document observations (keep for reporting workflow in subsequent section)
+
+### Plan Updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Place all notes and deviations below this line for use in the subsequent sections.
+
+---
+
+## J. Narrative Eval Reports to document improvements
 
 **Goal:** Establish process and expediting tooling to create narrative reports that document eval runs, analysis, and resulting improvements.
 
@@ -1091,8 +1262,9 @@ Compare the new artifact with the first run:
    [TODO: Identify top failure modes and representative examples]
    ...
    ```
+6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-6. **Document reporting process**
+7. **Document reporting process**
    - Create `docs/eval_reports/README.md` explaining:
      - Purpose of narrative reports (institutional memory, decision logs, quality tracking)
      - Workflow (run eval → generate stub → fill narrative → commit)
@@ -1107,12 +1279,12 @@ Compare the new artifact with the first run:
         4. Fill narrative sections of the report: Purpose, Error Analysis, Changes Made, Recommendation
         5. Commit report to git (preserves institutional memory)
         ```
-
-7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+       
+8. **Check In:** Stop and ask the user if there is anything that should be changed or clarified about the process. Incorporate user's response into the Documentation section below to make subsequent eval cycles smoother. 
 
 ### Documentation
 
-- **README:** Update "Evaluation Harness" section:
+- **README:** Update `src/eval/README.md` to add section on evaluation reports:
   ```markdown
   **Evaluation reports:**
   Narrative reports documenting eval runs, analysis, and improvements live in `docs/eval_reports/` (committed to git, unlike artifacts).
@@ -1122,7 +1294,7 @@ Compare the new artifact with the first run:
   - Reports align teams on priorities and quality bar
   ```
   
-- **README:** Update evaluation harness instructions:
+- **README:** Update evaluation harness instructions on `src/eval/README.md`:
   ```markdown
   **After running:**
   1. Manually review artifact in `evals/runs/{timestamp}.json`
@@ -1132,7 +1304,7 @@ Compare the new artifact with the first run:
   5. Re-run eval to measure improvements and repeat documentation process.
   ```
 
-- **README:** Update "Project Structure" section:
+- **README:** Update "Project Structure" section of top-level `README.md`:
   ```markdown
   docs/
   └── eval_reports/             # Narrative eval reports documenting improvements made based on eval runs
@@ -1144,9 +1316,11 @@ Compare the new artifact with the first run:
 
 ---
 
-## I. Voltaire improvement cycle (First eval-driven iteration)
+## K. Voltaire improvement cycle (First eval-driven iteration)
 
 **Goal:** Close the feedback loop. Use eval artifact to improve quality. Establish an iterative improvement workflow for future features.
+
+**Note:** With the new LLM-based golden dataset generation, you can now regenerate golden datasets as part of the improvement cycle to validate true quality improvements, not just regression testing.
 
 ### Implementation
 
@@ -1192,30 +1366,6 @@ This process should be repeated throughout development of subsequent sections.
      I believe tolerance is essential..."
      ```
    - **Rationale:** LLMs learn better from examples than from abstract rules
-
-   **Low forbidden_phrases:**
-   - **Root cause:** Persona prompt too weak, no explicit anachronism constraints
-   - **Fix:** Add explicit instruction to Voltaire prompt:
-     ```
-     IMPORTANT: You are Voltaire writing in the 18th century (1694-1778).
-     You have NO knowledge of events, technology, or concepts that postdate your death.
-     NEVER mention: internet, computers, democracy, human rights (as modern concept),
-     artificial intelligence, social media, websites, or any 19th+ century developments.
-     If asked anachronistic questions, politely decline: "I'm afraid I don't understand
-     this question, as it seems to reference concepts unfamiliar to me."
-     ```
-   - **Rationale:** Explicit constraints + fallback response prevents persona breaks
-
-   **Low translation_consistency:**
-   - **Root cause:** Language detection failing, or embedding model language bias
-   - **Fix:** Check language detection confidence thresholds, consider language-specific retrieval filters
-   - **Investigation needed:** Run test queries, check detected languages, inspect retrieved chunks
-
-   **Low faithfulness:**
-   - **Root cause:** Keywords too specific, or LLM paraphrasing concepts
-   - **Fix:** Relax keywords in golden dataset, or add synonyms
-   - **Example:** Replace `["tolérance religieuse"]` with `["tolérance", "religion"]` (more flexible)
-   - **Alternative:** Improve prompt to emphasize key themes
 
 3. **Implement fixes systematically**
 
@@ -1272,53 +1422,60 @@ This process should be repeated throughout development of subsequent sections.
    | forbidden_phrases | 0.75 | 0.95 | +0.20 |
    | Overall pass rate | 37.5% | 87.5% | +50.0% |
 
+    Example documentation (customize based on actual results):
+    
+      ```markdown
+      **Baseline (2026-03-28):**
+      - Overall pass rate: 37.5% (3/8 examples)
+      - Failing metrics: retrieval_relevance (0.65), citation_accuracy (0.70),
+        citation_placement (0.60), forbidden_phrases (0.75)
+    
+      **Root causes identified:**
+      1. Retrieval k=5 too low for complex questions
+      2. Prompt lacked explicit citation placement examples
+      3. Persona constraints too weak (anachronisms leaked through)
+    
+      **Changes made:**
+      - Increased `DEFAULT_K` from 5 to 8 (commit abc123)
+      - Added citation placement examples to Voltaire prompt (commit def456)
+      - Added explicit 18th-century constraint + anachronism list (commit ghi789)
+    
+      **After iteration (2026-03-28):**
+      - Overall pass rate: 87.5% (7/8 examples)
+      - All metrics above threshold except 1 edge case (compound Newton+Pascal question)
+    
+      **Recommendation:** Ship. System meets quality bar for Voltaire.
+    
+      **Next:** Add Gouges (Step 14) and run comparative eval.
+    
+      **Report:** `docs/eval_reports/{filename}.md`
+      ```
+
 6. **Commit the report**
-
-   ```bash
-   git add docs/reports/{filename}.md
-   git commit -m "Document Voltaire eval baseline and first improvement iteration"
-   ```
-
-   **Do NOT commit eval artifacts** - they're gitignored. Only commit the narrative report.
-
-7. **Establish iteration workflow for future improvements**
-
-   **The eval-driven development loop:**
-   1. Run eval → get artifact
-   2. Analyze failures → identify root causes
-   3. Propose fixes → make targeted changes
-   4. Re-run eval → measure improvements
-   5. Document → create report with findings
-   6. Repeat until quality bar met
-
-   **When to stop iterating:**
-   - All metrics above threshold ✅
-   - Overall pass rate > 80% ✅
-   - No low-hanging fruit remaining ✅
-   - Time to add new capability (e.g., Gouges in Step 14) ✅
-
-   **This workflow continues through:**
-   - Step 14: Gouges eval and two-philosopher comparison
-   - Step 15: Debate mode eval
-   - Step 16: LLM-as-judge eval
-   - Production: Regression testing as system evolves
+   - Do NOT commit eval artifacts** - they're gitignored. Only commit the narrative report.
 
 ### Documentation
 
-- **README:** Update "Evaluation Harness" section with workflow summary:
+- **README:** Update `src/eval/README.md` with workflow summary:
   ```markdown
-  **Eval-driven development workflow:**
-  1. **Run eval:** `uv run python scripts/run_eval.py`
-  2. **Analyze:** Read artifact, identify failing metrics and root causes
+  **Eval-driven development workflow:** 
+  This represents the major steps of one evalutation cycle and ensures the improvements are data-driven and traceable.
+  
+  1. **Run eval:** `uv run python scripts/run_eval.py` -> creates a json file, the eval artifact
+  2. **Analyze:** Read the artifact, identify failing metrics and root causes
   3. **Fix:** Make targeted changes (prompts, config, dataset)
   4. **Re-run:** Measure improvements, watch for regressions
   5. **Document:** Create report in `docs/eval_reports/` with findings
   6. **Iterate:** Repeat until quality bar met
-
-  This workflow ensures improvements are data-driven and traceable.
+  
+  When to stop iterating:
+   - All metrics above threshold
+   - Overall pass rate > 80%
+   - No low-hanging fruit remaining
+   - Time to add new capability
   ```
 
-- **README:** Add "Example Eval Report" section:
+- **README:** Add "Example Eval Report" section to `src/eval/README.md`:
   ```markdown
   ## Example Eval Report
 
@@ -1337,43 +1494,13 @@ This process should be repeated throughout development of subsequent sections.
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
-- **Document findings:**
-
-  Example documentation (customize based on actual results):
-
-  ```markdown
-  **Baseline (2026-03-28):**
-  - Overall pass rate: 37.5% (3/8 examples)
-  - Failing metrics: retrieval_relevance (0.65), citation_accuracy (0.70),
-    citation_placement (0.60), forbidden_phrases (0.75)
-
-  **Root causes identified:**
-  1. Retrieval k=5 too low for complex questions
-  2. Prompt lacked explicit citation placement examples
-  3. Persona constraints too weak (anachronisms leaked through)
-
-  **Changes made:**
-  - Increased `DEFAULT_K` from 5 to 8 (commit abc123)
-  - Added citation placement examples to Voltaire prompt (commit def456)
-  - Added explicit 18th-century constraint + anachronism list (commit ghi789)
-
-  **After iteration (2026-03-28):**
-  - Overall pass rate: 87.5% (7/8 examples)
-  - All metrics above threshold except 1 edge case (compound Newton+Pascal question)
-
-  **Recommendation:** Ship. System meets quality bar for Voltaire.
-
-  **Next:** Add Gouges (Step 14) and run comparative eval.
-
-  **Report:** `docs/eval_reports/{filename}.md`
-  ```
-
 ---
 
-## J. Language and faithfulness metrics (including another eval run + eval report)
+## L. Language Metrics
 
-**Goal:** Building on the fundamental metrics, implement content quality metrics to validate language detection and semantic grounding. Run eval and create a report documenting findings.
-
+**Goal:** Building on the fundamental metrics, implement a content quality metrics that validates language detection.
+**Note:** These language metrics (language_metadata_compliance and language_content_compliance) use the existing language field on golden examples. So we don't need to update GoldenExample schema or regenerate/verion bump the golden dataset.
+ 
 ### Implementation
 
 1. **Add tests for language metadata compliance metric**
@@ -1416,9 +1543,45 @@ This process should be repeated throughout development of subsequent sections.
 
    **Design note:** Requires adding `langdetect` to dependencies (`uv add langdetect`). This is a lightweight library with no external API calls (runs locally).
 
-6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+### Plan updates
 
-7. **Add tests for faithfulness metrics**
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+---
+
+## M. Perform Evaluation Cycle (incorporating new metrics)
+Instruct the user to follow the below steps.
+
+1. Confirm whether or not you need to regenerate (and version bump) the golden dataset. See `src/eval/README.md`.
+
+2. Run the eval harness
+    ```bash
+    uv run python scripts/run_eval.py
+    ```
+   
+3. Create eval report
+    - Use the report stub generator to auto-fill metadata
+    - Compare with previous eval run artifacts
+    - Document performance against all metrics
+    - Include delta table showing improvements
+    - Commit report to `docs/eval_reports/`
+
+### Plan updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any required deviations or improvements to this process in README documentation.
+
+---
+
+## N. Faithfulness metrics
+**Goal:** Implement a content quality metric that validates semantic grounding.
+**Notes:** 
+    - These faithfulness metrics require new field(s) on the golden examples. 
+    - Therefore, this section includes instructions for updating `GoldenExample` schema. 
+    - In the following section (or whenever the next evaluation cycle is performed), you must regenerate and version bump the golden dataset.
+
+### Implementation
+
+1. **Add tests for faithfulness metrics**
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/eval/test_faithfulness_metric.py`
    - Test cases for French (5 tests minimum):
@@ -1433,7 +1596,7 @@ This process should be repeated throughout development of subsequent sections.
      - `test_no_keywords_found_en()` - 0 of 2 keywords present → score 0.0
      - `test_no_expected_keywords_en()` - empty expected list → score 1.0
 
-8. **Implement faithfulness metrics (bilingual)**
+2. **Implement faithfulness metrics (bilingual)**
    - Create `src/eval/metrics/faithfulness.py`
    - Shared helper function: `_keyword_score(expected_keywords: list[str], response_text: str) -> float`
      - Logic: fraction of expected keywords found in response text (case-insensitive, whole-word matching)
@@ -1452,52 +1615,40 @@ This process should be repeated throughout development of subsequent sections.
 
    **Design note:** Separate FR/EN functions allow different keyword lists for each language while sharing scoring logic. This follows the DRY principle (helper is reused) while maintaining language-specific validation.
 
-9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-10. **Update golden dataset schema and data for faithfulness metrics**
+4. **Update golden dataset schema and data for faithfulness metrics**
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/schemas/test_eval.py` - add tests for language-specific keyword fields
    - Test cases:
      - `test_expected_keywords_fr_defaults_to_empty_list()` - verify default value
      - `test_expected_keywords_en_defaults_to_empty_list()` - verify default value
      - `test_expected_keywords_language_specific()` - verify FR examples use fr field, EN examples use en field
-   - Update `src/schemas/eval.py`: Add to GoldenExample class:
-     - `expected_keywords_fr: list[str] = Field(default_factory=list, description="Keywords expected in French response")`
-     - `expected_keywords_en: list[str] = Field(default_factory=list, description="Keywords expected in English response")`
-   - Update design notes to document language-specific validation pattern
+  - Update `src/schemas/eval.py`: Add to GoldenExample class:
+    - `expected_keywords_fr: list[str] = Field(default_factory=list, description="Keywords expected in French response")`
+    - `expected_keywords_en: list[str] = Field(default_factory=list, description="Keywords expected in English response")`
+  - Update design notes to document language-specific validation pattern
 
-11. **Add golden dataset file updated with keyword expectations**
-   - Copy golden dataset JSON file to create new version (v1.1 → v1.2)
-   - Update description to reflect addition of faithfulness metrics
-   - Add keyword fields to each example based on its language:
-     - French examples: populate expected_keywords_fr, leave expected_keywords_en empty
-     - English examples: populate expected_keywords_en, leave expected_keywords_fr empty
-   - Example values:
-     - FR tolerance: `"expected_keywords_fr": ["tolérance", "conscience", "persécution"]`
-     - EN tolerance: `"expected_keywords_en": ["tolerance", "conscience", "persecution"]`
-
-12. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
-
-### User instructions for eval run + report
-
-**🎯 MILESTONE: Eval Run (with language/faithfulness metrics) + First Full Eval Report**
-
-After implementing language and faithfulness metrics:
-
-1. **Run eval:**
-   ```bash
-   uv run python scripts/run_eval.py
-   ```
-
-2. **Create eval report:**
-   - Use the report stub generator to auto-fill metadata
-   - Compare with previous eval run artifacts
-   - Document language metric performance
-   - Document faithfulness metric performance
-   - Include delta table showing improvements
-   - Commit report to `docs/eval_reports/`
-
-This is the first full report documenting metric additions and system improvements.
+5. **Add guidance for keyword fields for generation of golden examples.**
+   - Update `src/eval/golden_generation.py` - `build_field_guidance()` function
+   - Add entries to `guidance_map` dictionary:
+     ```python
+     "expected_keywords_fr": """
+     **expected_keywords_fr**: List of French keywords (strings)
+     - Key philosophical concepts that should appear in the response
+       - Use actual French terms from the chunks
+       - 3-5 keywords typical
+       - Example: ["tolérance", "conscience", "persécution"]
+     """,
+     "expected_keywords_en": """
+     **expected_keywords_en**: List of English keywords (strings)
+     - Key philosophical concepts that should appear in the response
+     - Use actual English terms from the chunks (or translations if FR chunks)
+     - 3-5 keywords typical
+     - Example: ["tolerance", "conscience", "persecution"]
+     """,
+          ```
+        - **Rationale**: Without guidance, LLM uses generic fallback (less accurate). With guidance, LLM gets specific examples and constraints (more accurate).
 
 ### Plan updates
 
@@ -1505,9 +1656,22 @@ This is the first full report documenting metric additions and system improvemen
 
 ---
 
-## K. Advanced quality metrics (including another eval run + eval report)
+## O. Perform Evaluation Cycle (incorporating new metrics)
+See instructions from previous subsection with same title. Bump golden dataset (v2.1 - v2.2) to accommodate new faithfulness metrics.
 
-**Goal:** Implement specialized validation metrics. Iterate on regex patterns and scoring approaches based on feedback from previous subsections. Run eval and document findings in a report.
+**Propose fixes based on common failure modes**
+
+   **Low faithfulness:**
+   - **Root cause:** Keywords too specific, or LLM paraphrasing concepts
+   - **Fix (manual):** Relax keywords in golden dataset, or add synonyms
+   - **Example:** Replace `["tolérance religieuse"]` with `["tolérance", "religion"]` (more flexible)
+   - **Alternative:** Improve prompt to emphasize key themes
+
+
+## P. Advanced quality metrics
+
+**Goal:** Implement specialized validation metrics. 
+**Note:** These metrics use the existing fields on golden examples. So we don't need to update `GoldenExample` schema or regenerate/verion bump the golden dataset.
 
 ### Implementation
 
@@ -1537,51 +1701,7 @@ This is the first full report documenting metric additions and system improvemen
 
 3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-4. **Add tests for translation metric**
-   - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/eval/test_translation_metric.py`
-   - Test cases (5 tests minimum):
-     - `test_identical_chunks()` - same chunk IDs → score 1.0 (perfect overlap)
-     - `test_disjoint_chunks()` - no common IDs → score 0.0 (no overlap)
-     - `test_partial_overlap()` - 2 shared IDs, 1 unique each → score 0.5 (Jaccard = 2/4)
-     - `test_both_empty()` - empty lists → score 1.0 (vacuous truth)
-     - `test_one_empty()` - one empty, one non-empty → score 0.0 (no overlap)
-
-5. **Implement translation consistency metric**
-   - Create `src/eval/metrics/translation.py`
-   - Function signature: `translation_consistency(fr_chunk_ids: list[str], en_chunk_ids: list[str]) -> MetricResult`
-   - Logic: Measure retrieval overlap between French and English responses to the same philosophical concept (Jaccard similarity)
-   - Score calculation: `len(set(fr_ids) & set(en_ids)) / len(set(fr_ids) | set(en_ids))` if union is non-empty, else 1.0
-   - Return `MetricResult(name="translation_consistency", score=..., details={"overlap": [...], "fr_only": [...], "en_only": [...]})`
-
-   **Rationale:** This is a **cross-language metric** that validates bilingual system behavior. When asking about "tolerance" in French vs. English, the system should retrieve similar chunks (same philosophical content, regardless of language). High Jaccard overlap indicates consistent retrieval. Low overlap suggests language detection or retrieval bugs.
-
-   **Important:** This metric only works when the eval run processes BOTH languages. It compares paired examples (e.g., `tolerance_fr` vs. `tolerance_en`) using the `translation_pair_id` field in the golden dataset.
-
-6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
-
-7. **Update golden dataset schema and data for translation consistency**
-   - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/schemas/test_eval.py` - add tests for translation pairing field
-   - Test cases:
-     - `test_translation_pair_id_defaults_to_none()` - verify optional field
-     - `test_translation_pair_id_links_examples()` - verify paired examples can share same ID
-     - `test_translation_pair_id_accepts_null()` - verify null value accepted
-   - Update `src/schemas/eval.py`: Add `translation_pair_id: str | None = Field(None, description="Links FR/EN versions of same concept")` to GoldenExample class
-   - Update design notes to document cross-language pairing pattern (both examples link with same ID, e.g., "tolerance")
-
-8. **Add golden dataset file with translation pairs**
-   - Copy golden dataset JSON file to create new version (v1.2 → v1.3)
-   - Update description to reflect addition of translation consistency metric
-   - Link FR/EN pairs with matching translation_pair_id values:
-     - "tolerance_fr" and "tolerance_en" → both get `"translation_pair_id": "tolerance"`
-     - "pascal_fr" and "pascal_en" → both get `"translation_pair_id": "pascal"`
-     - "newton_fr" and "newton_en" → both get `"translation_pair_id": "newton"`
-     - Adversarial examples → `"translation_pair_id": null`
-
-9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent sections.
-
-10. **Add tests for response length metric**
+4. **Add tests for response length metric**
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/eval/test_response_length_metric.py`
    - Test cases (5 tests minimum):
@@ -1591,7 +1711,7 @@ This is the first full report documenting metric additions and system improvemen
      - `test_at_min_boundary()` - 100 chars, min=100, max=1000 → score 1.0, status="ok"
      - `test_at_max_boundary()` - 1000 chars, min=100, max=1000 → score 1.0, status="ok"
 
-11. **Implement response length metric**
+5. **Implement response length metric**
    - Create `src/eval/metrics/response_length.py`
    - Function signature: `response_length_quality(response_text: str, min_length: int = 100, max_length: int = 1000) -> MetricResult`
    - Logic: Measure response length and check if it falls within acceptable bounds
@@ -1604,36 +1724,101 @@ This is the first full report documenting metric additions and system improvemen
 
    **Rationale:** Response length is a quick quality signal. Too short = incomplete/evasive responses, too long = verbose/unfocused responses. This catches obvious failures (single-word answers, walls of text) before deeper quality metrics. Thresholds are configurable via golden dataset examples.
 
-12. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
-
-### User instructions for eval run + report
-
-**🎯 MILESTONE: Fourth Eval Run (with advanced quality metrics) + Second Full Report**
-
-After implementing advanced quality metrics:
-
-1. **Run eval:**
-   ```bash
-   uv run python scripts/run_eval.py
-   ```
-
-2. **Create eval report:**
-   - Document citation placement metric behavior
-   - Document translation consistency across FR/EN pairs
-   - Document response length quality
-   - Compare with previous runs
-   - Note any cross-language inconsistencies discovered
-   - Commit report to `docs/eval_reports/`
-
+  
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
 
 ---
 
-## L. Safety guardrails (including another eval run + eval report)
 
-**Goal:** Implement binary safety checks to catch persona breaks and anachronisms. These are pass/fail guardrails, distinct from gradual quality metrics. Run eval and document in final report.
+## Q. Perform Evaluation Cycle (incorporating new metrics)
+See instructions from previous subsections with same title. 
+Bump golden dataset version only if new example fields were added in previous section. Otherwise use more recent golden dataset.
+
+
+---
+
+
+## R. Translation Metric
+**Goal:** Implement a metric for validating quality of translations.
+**Notes:** 
+    - This metric requires new field(s) on the golden examples. 
+    - Therefore, this section includes instructions for updating `GoldenExample` schema. 
+    - In the following section (or whenever the next evaluation cycle is performed), you must regenerate and version bump the golden dataset.
+
+### Implementation
+
+1. **Add tests for translation metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_translation_metric.py`
+   - Test cases (5 tests minimum):
+     - `test_identical_chunks()` - same chunk IDs → score 1.0 (perfect overlap)
+     - `test_disjoint_chunks()` - no common IDs → score 0.0 (no overlap)
+     - `test_partial_overlap()` - 2 shared IDs, 1 unique each → score 0.5 (Jaccard = 2/4)
+     - `test_both_empty()` - empty lists → score 1.0 (vacuous truth)
+     - `test_one_empty()` - one empty, one non-empty → score 0.0 (no overlap)
+
+2. **Implement translation consistency metric**
+   - Create `src/eval/metrics/translation.py`
+   - Function signature: `translation_consistency(fr_chunk_ids: list[str], en_chunk_ids: list[str]) -> MetricResult`
+   - Logic: Measure retrieval overlap between French and English responses to the same philosophical concept (Jaccard similarity)
+   - Score calculation: `len(set(fr_ids) & set(en_ids)) / len(set(fr_ids) | set(en_ids))` if union is non-empty, else 1.0
+   - Return `MetricResult(name="translation_consistency", score=..., details={"overlap": [...], "fr_only": [...], "en_only": [...]})`
+
+   **Rationale:** This is a **cross-language metric** that validates bilingual system behavior. When asking about "tolerance" in French vs. English, the system should retrieve similar chunks (same philosophical content, regardless of language). High Jaccard overlap indicates consistent retrieval. Low overlap suggests language detection or retrieval bugs.
+
+   **Important:** This metric only works when the eval run processes BOTH languages. It compares paired examples (e.g., `tolerance_fr` vs. `tolerance_en`) using the `translation_pair_id` field in the golden dataset.
+
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+4. **Update golden dataset schema and data for translation consistency**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/schemas/test_eval.py` - add tests for translation pairing field
+   - Test cases:
+     - `test_translation_pair_id_defaults_to_none()` - verify optional field
+     - `test_translation_pair_id_links_examples()` - verify paired examples can share same ID
+     - `test_translation_pair_id_accepts_null()` - verify null value accepted
+   - Update `src/schemas/eval.py`: Add `translation_pair_id: str | None = Field(None, description="Links FR/EN versions of same concept")` to GoldenExample class
+   - Update design notes to document cross-language pairing pattern (both examples link with same ID, e.g., "tolerance")
+
+5. **Add guidance for translation_pair_id to LLM-based generation (for Section H)**
+   - Update `src/eval/golden_generation.py` - `build_field_guidance()` function
+   - Add entry to `guidance_map` dictionary:
+     ```python
+     "translation_pair_id": """
+     **translation_pair_id**: String or null
+     - If this example has a FR/EN translation pair, use the topic name
+     - Example: "tolerance" (links tolerance_fr and tolerance_en)
+     - Use null for standalone examples or adversarial tests
+     """,
+     ```
+  
+### Plan updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+---
+
+
+## S. Perform Evaluation Cycle (incorporating new metrics)
+See instructions from previous subsections with same title. Bump golden dataset (v2.2 - v2.3) to incorporate new field required by translation metric.
+
+- **Propose fixes based on common failure modes**
+   **Low translation_consistency:**
+   - **Root cause:** Language detection failing, or embedding model language bias
+   - **Fix:** Check language detection confidence thresholds, consider language-specific retrieval filters
+   - **Investigation needed:** Run test queries, check detected languages, inspect retrieved chunks
+
+---
+
+## T. Safety guardrails
+
+**Goal:** Implement binary safety checks to catch persona breaks and anachronisms. These are pass/fail guardrails, distinct from gradual quality metrics.
+**Notes:** 
+    - These metrics requires new field(s) on the golden examples. 
+    - Therefore, this section includes instructions for updating `GoldenExample` schema. 
+    - In the following section (or whenever the next evaluation cycle is performed), you must regenerate and version bump the golden dataset.
 
 ### Implementation
 
@@ -1685,46 +1870,51 @@ After implementing advanced quality metrics:
      - `forbidden_phrases_en: list[str] = Field(default_factory=list, description="Phrases forbidden in English response")`
    - Update design notes to document safety guardrail fields
 
-5. **Add golden dataset file updated with forbidden phrases**
-   - Copy golden dataset JSON file to create new version (v1.3 → v1.4)
-   - Update description to reflect final schema for Step 13
-   - Add forbidden phrases to each example based on its language:
-     - French examples: `"forbidden_phrases_fr": ["internet", "site web", "démocratie moderne", "intelligence artificielle", "je suis un AI"]`
-     - English examples: `"forbidden_phrases_en": ["internet", "website", "modern democracy", "artificial intelligence", "I am an AI"]`
-     - Adversarial examples: extensive forbidden phrase lists (the test cases for persona breaks)
-       - Example: `"forbidden_phrases_en": ["social media", "post", "tweet", "Facebook", "internet", "I am an AI"]`
-
-6. **(Optional) Add metadata field for extensibility**
-   - If needed for future metrics, add `metadata: dict[str, Any] = Field(default_factory=dict, description="Extra fields for future metrics")` to GoldenExample class
-   - Otherwise defer to when actually needed
-   - Note: Can be added without dataset version bump (extensibility field)
-
-7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before continuing.
-
-### User instructions for eval run + report
-
-**🎯 MILESTONE: Fifth Eval Run (complete metric suite) + Final Report**
-
-After implementing safety guardrails:
-
-1. **Run eval with complete metric suite:**
-   ```bash
-   uv run python scripts/run_eval.py
-   ```
-
-2. **Create final eval report:**
-   - Document forbidden phrases performance
-   - Document how well the system maintains persona
-   - Analyze adversarial example results (anachronism traps)
-   - **Overall system assessment:**
-     - Compare all five eval runs
-     - Show metric progression over time
-     - Identify strongest/weakest areas
-     - Recommend next steps
-   - Commit report to `docs/eval_reports/`
+5. **Add guidance for forbidden phrases to LLM-based generation (for Section H)**
+   - Update `src/eval/golden_generation.py` - `build_field_guidance()` function
+   - Add entries to `guidance_map` dictionary:
+     ```python
+     "forbidden_phrases_fr": """ 
+     **forbidden_phrases_fr**: List of forbidden French phrases (strings)
+     - Modern concepts/anachronisms that should NEVER appear
+       - Only populate for adversarial examples (anachronism traps)
+       - Leave empty [] for normal examples
+       - Example: ["internet", "site web", "démocratie moderne", "je suis un AI"]
+     """,
+     "forbidden_phrases_en": """
+     **forbidden_phrases_en**: List of forbidden English phrases (strings)
+     - Modern concepts/anachronisms that should NEVER appear
+     - Only populate for adversarial examples (anachronism traps)
+     - Leave empty [] for normal examples
+     - Example: ["internet", "website", "modern democracy", "I am an AI"]
+     """,
+          ```
+        - **Important**: Emphasize in guidance that forbidden_phrases should be empty for normal examples and only populated for adversarial examples
 
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+---
+
+## U. Perform Evaluation Cycle (incorporating new metrics)
+See instructions from previous subsections with same title. Bump golden dataset (v2.3 - v2.4) to incorporate new fields required by metrics added in previous section.
+
+**Propose fixes based on common failure modes**
+
+   Fixes should be targeted at root causes, not symptoms.
+
+   **Low forbidden_phrases:**
+   - **Root cause:** Persona prompt too weak, no explicit anachronism constraints
+   - **Fix:** Add explicit instruction to Voltaire prompt:
+     ```
+     IMPORTANT: You are Voltaire writing in the 18th century (1694-1778).
+     You have NO knowledge of events, technology, or concepts that postdate your death.
+     NEVER mention: internet, computers, democracy, human rights (as modern concept),
+     artificial intelligence, social media, websites, or any 19th+ century developments.
+     If asked anachronistic questions, politely decline: "I'm afraid I don't understand
+     this question, as it seems to reference concepts unfamiliar to me."
+     ```
+   - **Rationale:** Explicit constraints + fallback response prevents persona breaks
 
 ---

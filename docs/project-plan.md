@@ -400,7 +400,7 @@ All test development in this plan follows this workflow:
   - Created `tests/external/` directory for external-only test files (separate from integration tests which don't make real network calls)
 
 ## Step 13: Evaluation harness
-- Follow detail on eval-harness-plan_v2.md.
+- Follow detail on eval-harness-plan_v3.md.
 
 ## Step 14: Gouges corpus + persona + eval expansion
 - **Goal:** Add second philosopher with her own texts, prompt, and registry entry; expand eval dataset to include Gouges examples; verify quality with eval harness
@@ -479,9 +479,12 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 - **README:** Add debate CLI section: command with `--authors`, flags table, example question; add debate row to Example Usage table; update project structure to include `src/agents/`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
-## Step 16: Add LLM-as-judge to evaluation harness
+## Step 16: Add LLM-as-judge to evaluation harness (to augment deterministic metrics)
 - **Goal:** Extend eval harness with LLM-based quality metrics (relevance, groundedness, coherence)
-- **Note:** Basic eval runner and golden datasets exists from previous steps; this step adds LLM-as-judge capability for subjective quality assessment
+- **Notes:** 
+  - Basic eval runner and golden datasets exist from previous steps (potentially including use of LLM in creation of the datasets)
+  - This step augments the existing eval harness with an LLM-as-judge capability for subjective quality assessment.
+  
 - Create `src/eval/judge.py`: `run_llm_judge(question, response_text, contexts, llm) -> list[MetricResult]` — scores relevance, groundedness, coherence on 0-1 scale; parses structured LLM output; clamps to [0,1]; handles unparseable output gracefully
 - Modify `src/eval/runner.py`:
   - Add `use_llm_judge: bool = False` parameter to `run_eval()`
