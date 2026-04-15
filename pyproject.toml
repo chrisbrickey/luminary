@@ -7,12 +7,14 @@ requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.5.2",
     "langchain>=1.2.10",
+    "langchain-anthropic>=1.4.0",
     "langchain-chroma>=1.1.0",
     "langchain-community>=0.4.1",
     "langchain-core>=1.2.16",
     "langchain-ollama>=1.0.1",
     "langdetect>=1.0.9",
     "pydantic>=2.12.5",
+    "python-dotenv>=1.2.2",
     "pyyaml>=6.0.2",
 ]
 
@@ -37,6 +39,8 @@ markers = [
     "external: marks tests that make real network/service calls (deselect with -m 'not external')",
     "integration: marks integration tests that wire multiple internal modules",
 ]
+testpaths = ["tests"]
+norecursedirs = ["scripts", "*.egg", ".git", ".venv", "__pycache__"]
 
 [tool.mypy]
 python_version = "3.13"

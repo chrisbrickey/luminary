@@ -970,7 +970,7 @@ Compare the new artifact with the first run:
 
 ---
 
-## H. Independent Golden Dataset Generation
+## H. ✅ Independent Golden Dataset Generation
 
 **Goal:** Replace method for generating golden dataset examples in order to validate actual response quality. Move away from circular evaluation (generating examples using the system's own functionality) to evaluation against independently developed examples.
 **Notes:** See `golden-dataset-generation-guide.md` for explanation and details.
@@ -1113,10 +1113,12 @@ Compare the new artifact with the first run:
 ### Plan Updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+    - Added capability to use anthropic models via API key (stored in `.env` file) because the local models proved incapable of completing the task (e.g. did not reliably return json).
+    - Added script to verify anthropic key and appropriate model. These are prerequisites for running the dataset generation script using anthropic as the provider.
 
 ---
 
-## I. Generate Independent Golden Dataset 
+## I. ✅ Generate Independent Golden Dataset 
 **Goal:** Use the new functionality to create a new golden dataset. Validate it manually and by processing it with the eval runner.
 
 Instruct the user to complete these steps manually:
@@ -1141,7 +1143,78 @@ Instruct the user to complete these steps manually:
 
 ---
 
-## J. Narrative Eval Reports to document improvements
+## J. Language Metrics
+
+**Goal:** Building on the fundamental metrics, implement a content quality metrics that validates language detection.
+**Note:** These language metrics (language_metadata_compliance and language_content_compliance) use the existing language field on golden examples. So we don't need to update GoldenExample schema or regenerate/verion bump the golden dataset.
+ 
+### Implementation
+
+1. **Add tests for language metadata compliance metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - `tests/unit/eval/test_language_metric.py`
+   - Test cases (2 tests minimum):
+     - `test_matching_language_metadata()` - FRENCH_ISO_CODE == FRENCH_ISO_CODE → score 1.0
+     - `test_mismatching_language_metadata()` - ENGLISH_ISO_CODE != FRENCH_ISO_CODE → score 0.0
+     - 
+2. **Implement language metadata compliance metric**
+   - Create `src/eval/metrics/language.py`
+   - Function signature: `language_metadata_compliance(expected_language: str, response_language: str) -> MetricResult`
+   - Logic: exact match between expected and actual language metadata (ISO 639-1 codes: ENGLISH_ISO_CODE, FRENCH_ISO_CODE)
+   - Score calculation: `1.0` if match, `0.0` if mismatch
+   - Return `MetricResult(name="language_metadata_compliance", score=..., details={"expected": expected, "actual": response_language})`
+
+   **Rationale:** The system auto-detects user language and sets the `ChatResponse.language` field accordingly. This metric validates that language detection works correctly and the chain sets the metadata property as expected.
+
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+4. **Add tests for language content compliance metric**
+   - **Follow Test Development Workflow (see top of document)**
+   - Update `tests/unit/eval/test_language_metric.py`
+   - Test cases (4 tests minimum):
+     - `test_french_content_detected()` - French text with expected=FRENCH_ISO_CODE → score 1.0
+     - `test_english_content_detected()` - English text with expected=ENGLISH_ISO_CODE → score 1.0
+     - `test_french_content_mismatch()` - French text with expected=ENGLISH_ISO_CODE → score 0.0
+     - `test_english_content_mismatch()` - English text with expected=FRENCH_ISO_CODE → score 0.0
+   - Use realistic sample text in both languages (not single words - langdetect needs ~20+ chars)
+
+5. **Implement language content compliance metric**
+   - Update `src/eval/metrics/language.py`
+   - Function signature: `language_content_compliance(expected_language: str, response_text: str) -> MetricResult`
+   - Logic: Detect actual language from response text content and compare to expected language
+   - Use `langdetect` library: `detect(response_text)` returns ISO 639-1 code
+   - Score calculation: `1.0` if detected == expected, `0.0` if mismatch
+   - Return `MetricResult(name="language_content_compliance", score=..., details={"expected": expected, "detected": detected_language})`
+
+   **Rationale:** This metric validates that the LLM actually responds in the correct language, not just that the metadata is set correctly. It catches cases where `ChatResponse.language=FRENCH_ISO_CODE` but the LLM responds in English anyway (LLM non-compliance with system prompts).
+
+   **Design note:** Requires adding `langdetect` to dependencies (`uv add langdetect`). This is a lightweight library with no external API calls (runs locally).
+
+### Plan updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+---
+
+## K. Re-run Eval Harness
+
+Instruct the user to complete these steps manually:
+
+1. Run the eval harness:
+    ```bash
+    uv run python scripts/run_eval.py
+    ```
+   
+    NB: There is no need to generate a new golden dataset because no new fields are required for the language metrics.
+
+2. Compare the new eval artifact with those of previous runs:
+- Check how citation metrics perform
+- Note any changes in overall pass rate
+- Document observations (keep for reporting workflow in subsequent section)
+
+---
+
+## L. Narrative Eval Reports to document improvements
 
 **Goal:** Establish process and expediting tooling to create narrative reports that document eval runs, analysis, and resulting improvements.
 
@@ -1316,7 +1389,7 @@ Instruct the user to complete these steps manually:
 
 ---
 
-## K. Voltaire improvement cycle (First eval-driven iteration)
+## M. Voltaire improvement cycle (First eval-driven iteration)
 
 **Goal:** Close the feedback loop. Use eval artifact to improve quality. Establish an iterative improvement workflow for future features.
 
@@ -1496,82 +1569,6 @@ This process should be repeated throughout development of subsequent sections.
 
 ---
 
-## L. Language Metrics
-
-**Goal:** Building on the fundamental metrics, implement a content quality metrics that validates language detection.
-**Note:** These language metrics (language_metadata_compliance and language_content_compliance) use the existing language field on golden examples. So we don't need to update GoldenExample schema or regenerate/verion bump the golden dataset.
- 
-### Implementation
-
-1. **Add tests for language metadata compliance metric**
-   - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/eval/test_language_metric.py`
-   - Test cases (2 tests minimum):
-     - `test_matching_language_metadata()` - FRENCH_ISO_CODE == FRENCH_ISO_CODE → score 1.0
-     - `test_mismatching_language_metadata()` - ENGLISH_ISO_CODE != FRENCH_ISO_CODE → score 0.0
-     - 
-2. **Implement language metadata compliance metric**
-   - Create `src/eval/metrics/language.py`
-   - Function signature: `language_metadata_compliance(expected_language: str, response_language: str) -> MetricResult`
-   - Logic: exact match between expected and actual language metadata (ISO 639-1 codes: ENGLISH_ISO_CODE, FRENCH_ISO_CODE)
-   - Score calculation: `1.0` if match, `0.0` if mismatch
-   - Return `MetricResult(name="language_metadata_compliance", score=..., details={"expected": expected, "actual": response_language})`
-
-   **Rationale:** The system auto-detects user language and sets the `ChatResponse.language` field accordingly. This metric validates that language detection works correctly and the chain sets the metadata property as expected.
-
-3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
-
-4. **Add tests for language content compliance metric**
-   - **Follow Test Development Workflow (see top of document)**
-   - Update `tests/unit/eval/test_language_metric.py`
-   - Test cases (4 tests minimum):
-     - `test_french_content_detected()` - French text with expected=FRENCH_ISO_CODE → score 1.0
-     - `test_english_content_detected()` - English text with expected=ENGLISH_ISO_CODE → score 1.0
-     - `test_french_content_mismatch()` - French text with expected=ENGLISH_ISO_CODE → score 0.0
-     - `test_english_content_mismatch()` - English text with expected=FRENCH_ISO_CODE → score 0.0
-   - Use realistic sample text in both languages (not single words - langdetect needs ~20+ chars)
-
-5. **Implement language content compliance metric**
-   - Update `src/eval/metrics/language.py`
-   - Function signature: `language_content_compliance(expected_language: str, response_text: str) -> MetricResult`
-   - Logic: Detect actual language from response text content and compare to expected language
-   - Use `langdetect` library: `detect(response_text)` returns ISO 639-1 code
-   - Score calculation: `1.0` if detected == expected, `0.0` if mismatch
-   - Return `MetricResult(name="language_content_compliance", score=..., details={"expected": expected, "detected": detected_language})`
-
-   **Rationale:** This metric validates that the LLM actually responds in the correct language, not just that the metadata is set correctly. It catches cases where `ChatResponse.language=FRENCH_ISO_CODE` but the LLM responds in English anyway (LLM non-compliance with system prompts).
-
-   **Design note:** Requires adding `langdetect` to dependencies (`uv add langdetect`). This is a lightweight library with no external API calls (runs locally).
-
-### Plan updates
-
-- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
-
----
-
-## M. Perform Evaluation Cycle (incorporating new metrics)
-Instruct the user to follow the below steps.
-
-1. Confirm whether or not you need to regenerate (and version bump) the golden dataset. See `src/eval/README.md`.
-
-2. Run the eval harness
-    ```bash
-    uv run python scripts/run_eval.py
-    ```
-   
-3. Create eval report
-    - Use the report stub generator to auto-fill metadata
-    - Compare with previous eval run artifacts
-    - Document performance against all metrics
-    - Include delta table showing improvements
-    - Commit report to `docs/eval_reports/`
-
-### Plan updates
-
-- **Update this plan:** Mark this subsection `✅` on the title line. Note any required deviations or improvements to this process in README documentation.
-
----
-
 ## N. Faithfulness metrics
 **Goal:** Implement a content quality metric that validates semantic grounding.
 **Notes:** 
@@ -1657,7 +1654,22 @@ Instruct the user to follow the below steps.
 ---
 
 ## O. Perform Evaluation Cycle (incorporating new metrics)
-See instructions from previous subsection with same title. Bump golden dataset (v2.1 - v2.2) to accommodate new faithfulness metrics.
+
+Instruct the user to follow the below steps.
+
+1. Confirm whether or not you need to regenerate (and version bump) the golden dataset. See `src/eval/README.md`.
+
+2. Run the eval harness
+    ```bash
+    uv run python scripts/run_eval.py
+    ```
+   
+3. Create eval report
+    - Use the report stub generator to auto-fill metadata
+    - Compare with previous eval run artifacts
+    - Document performance against all metrics
+    - Include delta table showing improvements
+    - Commit report to `docs/eval_reports/`
 
 **Propose fixes based on common failure modes**
 
@@ -1802,7 +1814,7 @@ Bump golden dataset version only if new example fields were added in previous se
 
 
 ## S. Perform Evaluation Cycle (incorporating new metrics)
-See instructions from previous subsections with same title. Bump golden dataset (v2.2 - v2.3) to incorporate new field required by translation metric.
+See instructions from previous subsections with same title. Bump version of golden dataset if new fields were required by new metrics.
 
 - **Propose fixes based on common failure modes**
    **Low translation_consistency:**
@@ -1898,7 +1910,7 @@ See instructions from previous subsections with same title. Bump golden dataset 
 ---
 
 ## U. Perform Evaluation Cycle (incorporating new metrics)
-See instructions from previous subsections with same title. Bump golden dataset (v2.3 - v2.4) to incorporate new fields required by metrics added in previous section.
+See instructions from previous subsections with same title. Bump version of golden dataset if new fields were required by new metrics.
 
 **Propose fixes based on common failure modes**
 
