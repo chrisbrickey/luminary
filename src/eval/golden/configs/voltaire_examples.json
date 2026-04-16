@@ -1,0 +1,38 @@
+[
+  {
+    "question": "What do you think about religious tolerance?",
+    "author": "voltaire",
+    "language": "en",
+    "topics": ["tolerance"]
+  },
+  {
+    "question": "Que pensez-vous de la tolérance religieuse ?",
+    "author": "voltaire",
+    "language": "fr",
+    "topics": ["tolerance"]
+  },
+  {
+    "question": "Do you believe progress in science will eventually lead to moral progress?",
+    "author": "voltaire",
+    "language": "en",
+    "topics": ["science", "morality"]
+  },
+  {
+    "question": "Croyez-vous que le progrès scientifique conduira, un jour, au progrès moral ?",
+    "author": "voltaire",
+    "language": "fr",
+    "topics": ["science", "morality"]
+  },
+  {
+    "question": "What do you think about Newton?",
+    "author": "voltaire",
+    "language": "en",
+    "topics": ["newton", "science"]
+  },
+  {
+    "question": "Que pensez-vous de Newton?",
+    "author": "voltaire",
+    "language": "fr",
+    "topics": ["newton", "science"]
+  }
+]

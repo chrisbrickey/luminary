@@ -6,6 +6,9 @@ evals/
 __pycache__/
 .venv/
 
+# environment variables
+.env
+
 # ide
 .idea/
 
