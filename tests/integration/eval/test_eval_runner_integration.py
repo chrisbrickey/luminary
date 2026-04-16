@@ -1266,3 +1266,152 @@ class TestCLIIntegration:
         captured = capsys.readouterr()
         assert "ERROR" in captured.err or "not found" in captured.err.lower()
 
+    def test_cli_threshold_override_applies_to_all_metrics(
+        self,
+        tmp_path: Path,
+        fake_chat_model: FakeChatModel,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test --threshold flag overrides threshold for all metrics.
+
+        Verifies:
+        - --threshold flag is parsed correctly
+        - Override applies to all registered metrics
+        - effective_thresholds in EvalRun reflects the override
+        """
+        # Arrange: Create golden dataset
+        golden_dir = tmp_path / "golden"
+        golden_dir.mkdir(parents=True)
+        _create_golden_dataset_file(directory=golden_dir, num_examples=1)
+
+        # Arrange: Mock chain
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(
+            **_chat_response_kwargs(retrieved_passage_ids=[CHUNK_001, CHUNK_002])
+        )
+
+        # Arrange: Output directory
+        output_dir = tmp_path / "runs"
+
+        # Act: Run with --threshold 0.95
+        custom_threshold = 0.95
+        with patch("sys.argv", ["run_eval.py", "--threshold", str(custom_threshold)]), \
+             patch("scripts.run_eval.DEFAULT_GOLDEN_DATASET_PATH", golden_dir), \
+             patch("scripts.run_eval.DEFAULT_EVAL_ARTIFACTS_PATH", output_dir), \
+             patch("scripts.run_eval.build_chain", return_value=mock_chain), \
+             patch("scripts.run_eval.check_ollama_or_exit"):
+            from scripts.run_eval import main
+            main()
+
+        # Assert: Artifact created
+        artifact_files = list(output_dir.glob("*.json"))
+        assert len(artifact_files) == 1
+
+        # Assert: All metrics in effective_thresholds use the override value
+        saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+        for metric_name, threshold in saved_run.effective_thresholds.items():
+            assert threshold == custom_threshold, (
+                f"Expected threshold {custom_threshold} for metric '{metric_name}', "
+                f"got {threshold}"
+            )
+
+        # Assert: Log message confirms override
+        captured = capsys.readouterr()
+        assert f"Overriding all metric thresholds to: {custom_threshold}" in captured.err
+
+    def test_cli_threshold_validation_rejects_out_of_range_values(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test --threshold flag rejects values outside [0.0, 1.0] range.
+
+        Verifies:
+        - Values < 0.0 are rejected
+        - Values > 1.0 are rejected
+        - Helpful error message is shown
+        - Exit code is 1
+        """
+        # Test threshold > 1.0
+        with patch("sys.argv", ["run_eval.py", "--threshold", "1.5"]), \
+             pytest.raises(SystemExit) as exc_info:
+            from scripts.run_eval import main
+            main()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "must be between 0.0 and 1.0" in captured.err
+        assert "1.5" in captured.err
+
+        # Test threshold < 0.0
+        with patch("sys.argv", ["run_eval.py", "--threshold", "-0.1"]), \
+             pytest.raises(SystemExit) as exc_info:
+            from scripts.run_eval import main
+            main()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "must be between 0.0 and 1.0" in captured.err
+        assert "-0.1" in captured.err
+
+    def test_cli_threshold_boundary_values_are_accepted(
+        self,
+        tmp_path: Path,
+        fake_chat_model: FakeChatModel,
+    ) -> None:
+        """Test --threshold accepts boundary values 0.0 and 1.0.
+
+        Verifies:
+        - --threshold 0.0 is valid
+        - --threshold 1.0 is valid
+        """
+        # Arrange: Create golden dataset
+        golden_dir = tmp_path / "golden"
+        golden_dir.mkdir(parents=True)
+        _create_golden_dataset_file(directory=golden_dir, num_examples=1)
+
+        # Arrange: Mock chain
+        mock_chain = Mock(spec=Runnable)
+        mock_chain.invoke.return_value = ChatResponse(
+            **_chat_response_kwargs(retrieved_passage_ids=[CHUNK_001])
+        )
+
+        # Arrange: Output directory
+        output_dir = tmp_path / "runs"
+
+        # Test threshold = 0.0
+        with patch("sys.argv", ["run_eval.py", "--threshold", "0.0"]), \
+             patch("scripts.run_eval.DEFAULT_GOLDEN_DATASET_PATH", golden_dir), \
+             patch("scripts.run_eval.DEFAULT_EVAL_ARTIFACTS_PATH", output_dir), \
+             patch("scripts.run_eval.build_chain", return_value=mock_chain), \
+             patch("scripts.run_eval.check_ollama_or_exit"):
+            from scripts.run_eval import main
+            main()
+
+        # Assert: Artifact created with 0.0 thresholds
+        artifact_files = list(output_dir.glob("*.json"))
+        assert len(artifact_files) == 1
+        saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+        for threshold in saved_run.effective_thresholds.values():
+            assert threshold == 0.0
+
+        # Clear output for next test
+        for f in artifact_files:
+            f.unlink()
+
+        # Test threshold = 1.0
+        with patch("sys.argv", ["run_eval.py", "--threshold", "1.0"]), \
+             patch("scripts.run_eval.DEFAULT_GOLDEN_DATASET_PATH", golden_dir), \
+             patch("scripts.run_eval.DEFAULT_EVAL_ARTIFACTS_PATH", output_dir), \
+             patch("scripts.run_eval.build_chain", return_value=mock_chain), \
+             patch("scripts.run_eval.check_ollama_or_exit"):
+            from scripts.run_eval import main
+            main()
+
+        # Assert: Artifact created with 1.0 thresholds
+        artifact_files = list(output_dir.glob("*.json"))
+        assert len(artifact_files) == 1
+        saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+        for threshold in saved_run.effective_thresholds.values():
+            assert threshold == 1.0
+

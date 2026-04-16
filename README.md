@@ -253,6 +253,7 @@ Optional flags:
 |---------------|--------------------------------------|-----------------------------------------------------|
 | --golden-path | Path to golden dataset JSON file     | Auto-discovery of latest dataset for default author |
 | --output-path | Output directory for eval artifacts  | `evals/runs`                                        |
+| --threshold   | Override threshold for ALL metrics (0.0-1.0) | Uses default_threshold from each metric |
 | --verbose     | Enable debug logging                 | False                                               |
 
 
