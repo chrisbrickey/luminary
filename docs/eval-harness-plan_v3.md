@@ -821,6 +821,7 @@ All test development in this plan follows this workflow:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Added optional argument to override threshold for all metrics.
   - Added additional error handling on the utility method that persists the json file.
   - Implement integration tests by extending the existing `integration/test_eval_runner_integration` to cover the CLI functionality.
   - Break up Development section of README into Setup (prerequisites only), Usage (launch chat interfaces), and Development (test suite and eval harness)

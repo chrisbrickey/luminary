@@ -43,13 +43,16 @@ def _parser_epilogue() -> str:
     Examples:
       # Auto-discover latest dataset and run eval
       %(prog)s
-    
+
       # Use specific golden dataset
       %(prog)s --golden-path evals/golden/persona_voltaire_v1.0_2026-04-01.json
-    
+
       # Save to custom output directory
       %(prog)s --output-path custom/output
-    
+
+      # Override threshold for all metrics
+      %(prog)s --threshold 0.9
+
       # Enable debug logging
       %(prog)s --verbose
       """
@@ -253,11 +256,23 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging"
     )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        metavar="VALUE",
+        help="Override default threshold for ALL metrics (e.g., --threshold 0.9). Must be between 0.0 and 1.0."
+    )
     args = parser.parse_args()
 
     # Evaluate default arguments at runtime, avoiding variable setting at import time
     if args.output_path is None:
         args.output_path = DEFAULT_EVAL_ARTIFACTS_PATH
+
+    # Validate threshold if provided
+    if args.threshold is not None:
+        if not (0.0 <= args.threshold <= 1.0):
+            print(f"\n❌ ERROR: --threshold must be between 0.0 and 1.0, got {args.threshold}", file=sys.stderr)
+            sys.exit(1)
 
     # Setup logging
     logger = setup_cli_logging(verbose=args.verbose)
@@ -296,6 +311,15 @@ def main() -> None:
         print(f"\n❌ ERROR building chains: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Build threshold overrides if CLI argument provided
+    override_thresholds = None
+    if args.threshold is not None:
+        # Import metrics to get METRIC_REGISTRY
+        from src.eval.metrics.base import METRIC_REGISTRY
+        # Apply the same threshold to all registered metrics
+        override_thresholds = {spec.name: args.threshold for spec in METRIC_REGISTRY}
+        logger.info(f"Overriding all metric thresholds to: {args.threshold}")
+
     # Run evaluation
     try:
         logger.info("Running evaluation harness...")
@@ -303,6 +327,7 @@ def main() -> None:
         eval_run = run_eval(
             golden_dataset=golden_dataset,
             author_chains=chains,
+            override_thresholds=override_thresholds,
         )
         logger.info(f"✓ Evaluation complete")
         logger.info(f"  - Overall pass rate: {eval_run.overall_pass_rate:.1%}")
