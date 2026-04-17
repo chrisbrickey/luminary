@@ -1144,7 +1144,7 @@ Instruct the user to complete these steps manually:
 
 ---
 
-## J. Language Metrics
+## J. ✅ Language Metrics
 
 **Goal:** Building on the fundamental metrics, implement a content quality metrics that validates language detection.
 **Note:** These language metrics (language_metadata_compliance and language_content_compliance) use the existing language field on golden examples. So we don't need to update GoldenExample schema or regenerate/verion bump the golden dataset.
@@ -1194,10 +1194,11 @@ Instruct the user to complete these steps manually:
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Add error handling for inability of library to detect language in the response.
 
 ---
 
-## K. Re-run Eval Harness
+## K. ✅ Re-run Eval Harness
 
 Instruct the user to complete these steps manually:
 
@@ -1358,7 +1359,7 @@ Instruct the user to complete these steps manually:
 
 ### Documentation
 
-- **README:** Update `src/eval/README.md` to add section on evaluation reports:
+- **README:** Update `src/eval/README.md` to add section on evaluation reports. Below is a draft. Adapt to current state of the app.
   ```markdown
   **Evaluation reports:**
   Narrative reports documenting eval runs, analysis, and improvements live in `docs/eval_reports/` (committed to git, unlike artifacts).
@@ -1368,7 +1369,7 @@ Instruct the user to complete these steps manually:
   - Reports align teams on priorities and quality bar
   ```
   
-- **README:** Update evaluation harness instructions on `src/eval/README.md`:
+- **README:** Update evaluation harness instructions on `src/eval/README.md`. Below is a draft. Adapt to current state of the app.
   ```markdown
   **After running:**
   1. Manually review artifact in `evals/runs/{timestamp}.json`
