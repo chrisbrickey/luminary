@@ -1300,94 +1300,90 @@ Instruct the user to complete these steps manually:
 4. **Add tests for the report stub generator**
    - **Follow Test Development Workflow (see top of document)**
    - `tests/unit/eval/test_utils.py` - add tests for `format_eval_report_stub()`
-   - Test cases (3 tests minimum):
-     - `test_format_stub_includes_metadata()` - stub contains date, author, commit
+   - Test cases (4 tests minimum):
+     - `test_format_stub_includes_all_sections()` - stub contains all sections when parsing `docs/eval_reports/TEMPLATE.md` for section headers (# Eval Report, ## Source Data, ## System Version, ## Eval Run Summary)
+     - `test_format_stub_includes_metadata()` - stub contains current date (YYYY-MM-DD), eval run and golden dataset paths, all elements in System Version section  (chat model, embedding model, retrieval config)
      - `test_format_stub_includes_metrics_table()` - stub contains all metrics with scores
-     - `test_format_stub_includes_todo_prompts()` - stub contains [TODO] markers for manual sections
+     - `test_format_stub_includes_todo_prompts()` - stub contains descriptions from `docs/eval_reports/TEMPLATE.md` and [TODO] markers for manual sections
    
 5. **Create report stub generator utility to expedite creation of narrative reports**
    - Modify `src/eval/utils.py`: add `format_eval_report_stub(eval_run: EvalRun) -> str`
-   - Auto-fills: date, author, artifact path, commit, system version, metrics table
-   - Leaves narrative sections as `[TODO]` prompts for manual completion
+   - Copies the descriptions in each section of `docs/eval_reports/TEMPLATE.md` narrative sections as `[TODO]` prompts for manual completion.
+   - Auto-fills: 
+     - line 1: the date as YYYY-MM-DDTXX-XX-XX
+     - Source Data: eval run filename and golden dataset identifier 
+     - System Version: all elements in this section (chat model, embedding model, retrieval config)
+     - Eval Run Summary: the metrics table and overall pass rate
    - Returns markdown string ready to save as `.md` file
 
-   **Example stub output:**
-   ```markdown
-   # Eval Report: [TODO: Short Title]
-
-   **Date:** 2026-03-28
-   **Author:** voltaire
-   **Languages Tested:** [TODO: FR, EN|FR only|EN only]
-   **Artifact:** `evals/runs/{filename}.json`
-   **Git Commit:** a1b2c3d
-
-   ## Purpose
-   [TODO: What question did this eval answer?]
-
-   ## Metrics
-   | Metric | Threshold | Score | Status |
-   |--------|-----------|-------|--------|
-   | retrieval_relevance | 0.8 | 0.65 | ❌ |
-   | citation_accuracy | 0.8 | 0.70 | ❌ |
-   ...
-
-   **Overall pass rate:** 37.5% (3/8 examples passed)
-
-   ## Error Analysis
-   [TODO: Identify top failure modes and representative examples]
-   ...
-   ```
 6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-7. **Document reporting process**
-   - Create `docs/eval_reports/README.md` explaining:
-     - Purpose of narrative reports (institutional memory, decision logs, quality tracking)
-     - Workflow (run eval → generate stub → fill narrative → commit)
-     - Filename convention: `{to be determined}.md`
-     - Tips for writing reports (be specific, link commits, read artifacts, track trends)
-     - Below is a high level draft of the process. Update this based on the current state of the app and include something like this.
-        ```markdown
-        **Documentation workflow:**
-        1. (Optional) Generate stub: `format_eval_report_stub(eval_run)` to auto-fill dates/scores
-        2. Initialize report in `docs/eval_reports/{filename}.md`
-        3. Iterate on prompts, config, or golden dataset
-        4. Fill narrative sections of the report: Purpose, Error Analysis, Changes Made, Recommendation
-        5. Commit report to git (preserves institutional memory)
-        ```
-       
-8. **Check In:** Stop and ask the user if there is anything that should be changed or clarified about the process. Incorporate user's response into the Documentation section below to make subsequent eval cycles smoother. 
+7. **Add tests for script that pre-populates a narrative eval report by calling the new stub generation utility.**
+  - **Follow Test Development Workflow (see top of document)**
+  - Update unit and/or integration tests as appropriate to confirm that the script calls the stub utility with the correct parameters and results in a markdown file persisted with correct path and filename (`docs/eval_reports/eval_report_{YYYY-MM-DD}.md`).
+
+8. **Add a new script `scripts/create_eval_report_stub.py`**
+  - Calls `format_eval_report_stub` with required CLI argument that is the path to the target eval artifact (e.g., `evals/runs/2026-04-17T12-25-34.json`) 
+  - Informs the user if the target eval artifact does not exist and if there is any issue loading it.
+  - Persists a pre-populated narrative eval report markdown file as `docs/eval_reports/eval_report_YYYY-MM-DDTXX-XX-XX.md`.
+
+9. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
 ### Documentation
 
-- **README:** Update `src/eval/README.md` to add section on evaluation reports. Below is a draft. Adapt to current state of the app.
-  ```markdown
-  **Evaluation reports:**
-  Narrative reports documenting eval runs, analysis, and improvements live in `docs/eval_reports/` (committed to git, unlike artifacts).
-  Reports align the development process with industry best standards:
-  - Numbers alone don't tell the story - context matters
-  - Narrative reports document "why" (eval artifacts only document "what")
-  - Reports align teams on priorities and quality bar
-  ```
-  
-- **README:** Update evaluation harness instructions on `src/eval/README.md`. Below is a draft. Adapt to current state of the app.
-  ```markdown
-  **After running:**
-  1. Manually review artifact in `evals/runs/{timestamp}.json`
-  2. Identify failing metrics (score < threshold)
-  3. Read example outputs in artifact to understand failure modes
-  4. See `docs/eval_reports/README.md` for detailed reporting workflow to ensure comprehensive (and committed) documentation of runs and related improvements.
-  5. Re-run eval to measure improvements and repeat documentation process.
-  ```
+- **Update top-level `README.md`:**
+  - Add section on narrative, evaluation reports. Below is a draft. Adapt to current state of the app.
+      ```markdown
+      **Evaluation reports:**
+      Narrative reports documenting eval runs, analysis, and improvements live in `docs/eval_reports/` (committed to git, unlike artifacts).
+      Reports align the development process with industry best standards:
+      - Numbers alone don't tell the story - context matters
+      - Narrative reports document "why" (eval artifacts only document "what")
+      - Reports align teams on priorities and quality bar
+      ```
+  - Add new directory to project structure.
+      ```markdown
+      docs/
+      └── eval_reports/             # narrative reports that document improvements per eval run
+      ```
+    
+- **Update eval harness documentation at `src/eval/README.md`:**
+  - Update evaluation harness instructions. Below is a draft. Adapt it to the current state of the app.
+      ```markdown
+      **After running:**
+      1. Manually review artifact in `evals/runs/{timestamp}.json`
+      2. Identify failing metrics (score < threshold)
+      3. Read example outputs in artifact to understand failure modes
+      4. Run `xxx` to generate a pre-populated eval report stub (`docs/eval_reports/eval_report_{YYYY-MM-DD}.md`)
+      5. Iterate and manually document failure modes and respective changes in the eval report
+      6. Commit the completed eval report
+      ```
+    
+  - Add new section to this README that explains the narrative, evaluation reports and process for constructing them in greater detail. 
+    - This section should be more detailed than the one added to the top-level `README.md`.
+    - Below is a draft. Adapt it to the current state of the app.
+      ```markdown
+      ### Narrative eval reports
+      Purpose of narrative reports (institutional memory, decision logs, quality tracking)
+       - Workflow (run eval → generate stub → fill narrative → commit)
+       - Filename convention: `eval_report_{YYYY-MM-DDTXX-XX-XX}.md`
+       - Tips for writing reports (be specific, link commits, read artifacts, track trends)
+       - Below is a high level draft of the process. Update this based on the current state of the app and include something like this.
 
-- **README:** Update "Project Structure" section of top-level `README.md`:
-  ```markdown
-  docs/
-  └── eval_reports/             # Narrative eval reports documenting improvements made based on eval runs
-  ```
-
+       **Documentation workflow:**
+       1. Run `xxx` which triggers a script which generates the eval report stub and pre-populates metadata and score summary. 
+       2. Review the pre-populated eval report stub, which is persisted at `docs/eval_reports/{filename}.md`.
+       3. Determine root cause of issues highlighted by the respective eval report (e.g., scores that fall below threshold).
+       4. Iterate (e.g., code, prompts, config, datasets) in an effort to improve eval scores.
+       5. Manually complete the narrative sections of the eval report (see [TODO] notations).
+       6. Commit report to git to preserve institutional memory.
+       ```
+   
 ### Plan updates
 
-- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+**Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - Streamlined and improved report template (`docs/eval_reports/TEMPLATE.md`).
+  - Removed [TODO] notations in autopopulation of markdown.
 
 ---
 
@@ -1477,34 +1473,9 @@ This process should be repeated throughout development of subsequent sections.
    - If regressions occurred, consider rolling back and trying different approach
 
 5. **Document findings in eval report**
-
-   **Create first report:** `docs/eval_reports/{filename}.md`
-
-   **Use template from previous subsection:**
-   - **Purpose:** "Establish baseline quality for Voltaire, then improve failing metrics"
-   - **Results:** Show before/after scores in delta table
-   - **Error Analysis:** Document top failure modes from baseline
-   - **Changes Made:** List all edits (prompts, config) with commit hashes
-   - **Recommendation:** Ship if all metrics pass, iterate if still failing
-   - **Limitations:** Note small sample size (6-8 examples), need more adversarial cases
-
-   **Example delta table:**
-   | Metric | Before | After | Δ |
-   |--------|--------|-------|---|
-   | retrieval_relevance | 0.65 | 0.88 | +0.23 |
-   | citation_accuracy | 0.70 | 0.85 | +0.15 |
-   | citation_placement | 0.60 | 0.90 | +0.30 |
-   | forbidden_phrases | 0.75 | 0.95 | +0.20 |
-   | Overall pass rate | 37.5% | 87.5% | +50.0% |
-
-    Example documentation (customize based on actual results):
-    
+   - Follow instructions added in previous section to READMEs.
+   - Example documentation (customize based on actual results and current state of `docs/eval_reports/TEMPLATE.md`): 
       ```markdown
-      **Baseline (2026-03-28):**
-      - Overall pass rate: 37.5% (3/8 examples)
-      - Failing metrics: retrieval_relevance (0.65), citation_accuracy (0.70),
-        citation_placement (0.60), forbidden_phrases (0.75)
-    
       **Root causes identified:**
       1. Retrieval k=5 too low for complex questions
       2. Prompt lacked explicit citation placement examples
@@ -1514,56 +1485,12 @@ This process should be repeated throughout development of subsequent sections.
       - Increased `DEFAULT_K` from 5 to 8 (commit abc123)
       - Added citation placement examples to Voltaire prompt (commit def456)
       - Added explicit 18th-century constraint + anachronism list (commit ghi789)
-    
-      **After iteration (2026-03-28):**
-      - Overall pass rate: 87.5% (7/8 examples)
-      - All metrics above threshold except 1 edge case (compound Newton+Pascal question)
-    
-      **Recommendation:** Ship. System meets quality bar for Voltaire.
-    
-      **Next:** Add Gouges (Step 14) and run comparative eval.
-    
-      **Report:** `docs/eval_reports/{filename}.md`
       ```
 
 6. **Commit the report**
    - Do NOT commit eval artifacts** - they're gitignored. Only commit the narrative report.
 
 ### Documentation
-
-- **README:** Update `src/eval/README.md` with workflow summary:
-  ```markdown
-  **Eval-driven development workflow:** 
-  This represents the major steps of one evalutation cycle and ensures the improvements are data-driven and traceable.
-  
-  1. **Run eval:** `uv run python scripts/run_eval.py` -> creates a json file, the eval artifact
-  2. **Analyze:** Read the artifact, identify failing metrics and root causes
-  3. **Fix:** Make targeted changes (prompts, config, dataset)
-  4. **Re-run:** Measure improvements, watch for regressions
-  5. **Document:** Create report in `docs/eval_reports/` with findings
-  6. **Iterate:** Repeat until quality bar met
-  
-  When to stop iterating:
-   - All metrics above threshold
-   - Overall pass rate > 80%
-   - No low-hanging fruit remaining
-   - Time to add new capability
-  ```
-
-- **README:** Add "Example Eval Report" section to `src/eval/README.md`:
-  ```markdown
-  ## Example Eval Report
-
-  After establishing the Voltaire baseline and first improvement iteration,
-  see `docs/eval_reports/{filename}.md` for
-  an example of how to document eval findings, changes, and results.
-
-  Key sections:
-  - **Error Analysis:** What failed and why
-  - **Changes Made:** Specific fixes with commit hashes
-  - **Results Delta:** Before/after scores
-  - **Recommendation:** Ship, iterate, or roll back
-  ```
 
 ### Plan updates
 

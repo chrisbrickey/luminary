@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE
-from src.eval.utils import discover_latest_golden_dataset, load_golden_dataset, save_eval_run
+from src.eval.utils import discover_latest_golden_dataset, load_eval_run, load_golden_dataset, save_eval_run, format_eval_report_stub
 from src.schemas.eval import EvalRun, GoldenDataset
 
 # --- Pytest fixtures ---
@@ -67,6 +67,11 @@ INVALID_SCHEMA_JSON = {
     "examples": [],
 }
 
+INVALID_EVAL_RUN_SCHEMA_JSON = {
+    "dataset_scope": SCOPE,
+    # Missing all other required EvalRun fields
+}
+
 MALFORMED_JSON_CONTENT = '{"version": "1.0", "created_date": "2024-05-15"'  # Missing closing brace
 
 # Test data for save_eval_run
@@ -79,10 +84,15 @@ VALID_EVAL_RUN_DICT = {
     "run_timestamp": "2025-06-15T14:30:45+00:00",
     "system_version": {
         "chat_model": "test-model",
-        "commit": "abc123def456"
+        "embedding_model": "test-embedding",
+        "commit": "abc123def456",
+        "k": "5",
+        "chunk_size": "1000"
     },
     "effective_thresholds": {
-        "test_metric": 0.7
+        "test_metric": 0.7,
+        "citation_quality": 0.80,
+        "language_match": 0.95
     },
     "example_results": [
         {
@@ -107,10 +117,17 @@ VALID_EVAL_RUN_DICT = {
         }
     ],
     "aggregate_scores": {
-        "overall": {"test_metric": 0.85}
+        "overall": {
+            "test_metric": 0.85,
+            "citation_quality": 0.92,
+            "language_match": 0.88
+        }
     },
-    "overall_pass_rate": 1.0
+    "overall_pass_rate": 0.75
 }
+
+
+# --- Tests for load_golden_dataset() ---
 
 
 def _golden_dataset_filename(scope: str, authors: list[str], version: str, date: str) -> str:
@@ -128,10 +145,7 @@ def _golden_dataset_filename(scope: str, authors: list[str], version: str, date:
     return f"{scope}_{authors_str}_v{version}_{date}.json"
 
 
-# --- Tests for load_golden_dataset() ---
-
-
-def test_load_valid_dataset(tmp_path: Path) -> None:
+def test_load_golden_dataset_valid(tmp_path: Path) -> None:
     """Test loading a valid golden dataset JSON file."""
     dataset_file = tmp_path / "valid_dataset.json"
     dataset_file.write_text(json.dumps(VALID_DATASET_JSON))
@@ -146,7 +160,7 @@ def test_load_valid_dataset(tmp_path: Path) -> None:
     assert result.examples[0].id == "test_example_001"
 
 
-def test_load_missing_file(tmp_path: Path) -> None:
+def test_load_golden_dataset_missing_file(tmp_path: Path) -> None:
     """Test that loading a nonexistent file raises FileNotFoundError with helpful message."""
     nonexistent_file = tmp_path / NONEXISTENT_FILE
 
@@ -158,7 +172,7 @@ def test_load_missing_file(tmp_path: Path) -> None:
     assert "Golden dataset not found" in error_message
 
 
-def test_load_invalid_json(tmp_path: Path) -> None:
+def test_load_golden_dataset_invalid_json(tmp_path: Path) -> None:
     """Test that loading malformed JSON raises JSONDecodeError."""
     malformed_file = tmp_path / "malformed.json"
     malformed_file.write_text(MALFORMED_JSON_CONTENT)
@@ -167,7 +181,7 @@ def test_load_invalid_json(tmp_path: Path) -> None:
         load_golden_dataset(malformed_file)
 
 
-def test_load_invalid_schema(tmp_path: Path) -> None:
+def test_load_golden_dataset_invalid_schema(tmp_path: Path) -> None:
     """Test that loading valid JSON with wrong schema raises ValidationError."""
     invalid_schema_file = tmp_path / "invalid_schema.json"
     invalid_schema_file.write_text(json.dumps(INVALID_SCHEMA_JSON))
@@ -176,7 +190,7 @@ def test_load_invalid_schema(tmp_path: Path) -> None:
         load_golden_dataset(invalid_schema_file)
 
 
-def test_load_permission_denied(tmp_path: Path) -> None:
+def test_load_golden_dataset_permission_denied(tmp_path: Path) -> None:
     """Test that load_golden_dataset raises PermissionError with context when file is unreadable."""
     dataset_file = tmp_path / "unreadable.json"
     dataset_file.write_text(json.dumps(VALID_DATASET_JSON))
@@ -196,7 +210,7 @@ def test_load_permission_denied(tmp_path: Path) -> None:
         os.chmod(dataset_file, stat.S_IRUSR | stat.S_IWUSR)
 
 
-def test_load_is_directory_error(tmp_path: Path) -> None:
+def test_load_golden_dataset_is_directory_error(tmp_path: Path) -> None:
     """Test that load_golden_dataset raises IsADirectoryError when path is a directory."""
     # Create a directory instead of a file
     directory_path = tmp_path / "not_a_file"
@@ -213,7 +227,7 @@ def test_load_is_directory_error(tmp_path: Path) -> None:
 # --- Tests for discover_latest_golden_dataset() ---
 
 
-def test_discover_finds_latest(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_finds_latest(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset returns the newest file by lexicographic sort."""
     # Create two dataset files with different versions and dates
     older_filename = _golden_dataset_filename(SCOPE, [AUTHOR_A], VERSION_OLD, DATE_OLD)
@@ -230,7 +244,7 @@ def test_discover_finds_latest(tmp_path: Path) -> None:
     assert result == newer_file
 
 
-def test_discover_lexicographic_sort_limitation(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_lexicographic_sort_limitation(tmp_path: Path) -> None:
     """Test documenting limitation: multi-digit minor versions don't sort semantically.
 
     Known limitation: Lexicographic sorting means v1.9 > v1.10 (semantically incorrect).
@@ -255,7 +269,7 @@ def test_discover_lexicographic_sort_limitation(tmp_path: Path) -> None:
     assert result != v1_10_file
 
 
-def test_discover_no_matches(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_no_matches(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset raises FileNotFoundError when no files match."""
     expected_pattern = f"{SCOPE}_{AUTHOR_A}_v*.json"
 
@@ -267,7 +281,7 @@ def test_discover_no_matches(tmp_path: Path) -> None:
     assert str(tmp_path) in error_message
 
 
-def test_discover_defaults_to_default_author(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_defaults_to_default_author(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset defaults to authors=[DEFAULT_AUTHOR] when not specified."""
     # Create a file with default author
     filename = _golden_dataset_filename(SCOPE, [DEFAULT_TEST_AUTHOR], VERSION_OLD, DATE_OLD)
@@ -281,7 +295,7 @@ def test_discover_defaults_to_default_author(tmp_path: Path) -> None:
     assert DEFAULT_TEST_AUTHOR in result.name
 
 
-def test_discover_respects_author(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_respects_author(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset filters by authors parameter."""
     # Create dataset files for different authors
     author_a_filename = _golden_dataset_filename(SCOPE, [AUTHOR_A], VERSION_OLD, DATE_OLD)
@@ -300,7 +314,7 @@ def test_discover_respects_author(tmp_path: Path) -> None:
     assert AUTHOR_B not in result.name
 
 
-def test_discover_defaults_to_persona_scope(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_defaults_to_persona_scope(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset defaults to scope='persona' when not specified."""
     # Create a file with scope "persona"
     persona_filename = _golden_dataset_filename("persona", [AUTHOR_A], VERSION_OLD, DATE_OLD)
@@ -314,7 +328,7 @@ def test_discover_defaults_to_persona_scope(tmp_path: Path) -> None:
     assert "persona" in result.name
 
 
-def test_discover_respects_scope_override(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_respects_scope_override(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset can override the default scope."""
     # Create files with different scopes
     persona_filename = _golden_dataset_filename("persona", [AUTHOR_A], VERSION_OLD, DATE_OLD)
@@ -334,7 +348,7 @@ def test_discover_respects_scope_override(tmp_path: Path) -> None:
     assert "persona" not in result.name
 
 
-def test_discover_multi_author_sorts_authors(tmp_path: Path) -> None:
+def test_discover_latest_golden_dataset_multi_author_sorts_authors(tmp_path: Path) -> None:
     """Test that discover_latest_golden_dataset returns the correct dataset,
     regardless of the order of the authors given.
 
@@ -358,7 +372,7 @@ def test_discover_multi_author_sorts_authors(tmp_path: Path) -> None:
 # --- Tests for save_eval_run() ---
 
 
-def test_save_creates_directory(tmp_path: Path) -> None:
+def test_save_eval_run_creates_directory(tmp_path: Path) -> None:
     """Test that save_eval_run creates the output directory if it doesn't exist."""
     nonexistent_dir = tmp_path / "new_directory" / "nested"
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
@@ -375,7 +389,7 @@ def test_save_creates_directory(tmp_path: Path) -> None:
     assert result_path.parent == nonexistent_dir
 
 
-def test_save_generates_valid_filename(tmp_path: Path) -> None:
+def test_save_eval_run_generates_valid_filename(tmp_path: Path) -> None:
     """Test that save_eval_run generates filename matching pattern {YYYY-MM-DD}T{HH-MM-SS}.json."""
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
 
@@ -395,7 +409,7 @@ def test_save_generates_valid_filename(tmp_path: Path) -> None:
     assert result_path.is_file()
 
 
-def test_save_preserves_all_fields(tmp_path: Path) -> None:
+def test_save_eval_run_preserves_all_fields(tmp_path: Path) -> None:
     """Test that save_eval_run preserves all EvalRun fields in JSON output."""
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
 
@@ -429,7 +443,7 @@ def test_save_preserves_all_fields(tmp_path: Path) -> None:
         assert len(loaded_ex.metrics) == len(orig_ex.metrics)
 
 
-def test_save_permission_error_on_directory_creation(tmp_path: Path) -> None:
+def test_save_eval_run_permission_error_on_directory_creation(tmp_path: Path) -> None:
     """Test that save_eval_run raises PermissionError or OSError when directory creation fails."""
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
 
@@ -448,7 +462,7 @@ def test_save_permission_error_on_directory_creation(tmp_path: Path) -> None:
     assert str(output_dir) in error_message or str(blocking_file) in error_message
 
 
-def test_save_permission_error_on_file_write(tmp_path: Path) -> None:
+def test_save_eval_run_permission_error_on_file_write(tmp_path: Path) -> None:
     """Test that save_eval_run raises PermissionError when file write is denied."""
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
 
@@ -469,4 +483,182 @@ def test_save_permission_error_on_file_write(tmp_path: Path) -> None:
     finally:
         # Restore permissions for cleanup
         os.chmod(read_only_dir, stat.S_IRWXU)
+
+
+# --- Tests for load_eval_run() ---
+
+
+def test_load_eval_run_valid(tmp_path: Path) -> None:
+    """Test loading a valid EvalRun JSON file."""
+    artifact_file = tmp_path / "eval_run.json"
+    artifact_file.write_text(json.dumps(VALID_EVAL_RUN_DICT))
+
+    result = load_eval_run(artifact_file)
+
+    assert isinstance(result, EvalRun)
+    assert result.dataset_scope == SCOPE
+    assert result.dataset_version == VERSION_OLD
+    assert result.overall_pass_rate == VALID_EVAL_RUN_DICT["overall_pass_rate"]
+    assert len(result.example_results) == 1
+    assert result.example_results[0].example_id == "test_example_001"
+
+
+def test_load_eval_run_missing_file(tmp_path: Path) -> None:
+    """Test that loading a nonexistent file raises FileNotFoundError with helpful message."""
+    nonexistent_file = tmp_path / NONEXISTENT_FILE
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        load_eval_run(nonexistent_file)
+
+    error_message = str(exc_info.value)
+    assert NONEXISTENT_FILE in error_message
+    assert "Eval run artifact not found" in error_message
+
+
+def test_load_eval_run_invalid_json(tmp_path: Path) -> None:
+    """Test that loading malformed JSON raises JSONDecodeError."""
+    malformed_file = tmp_path / "malformed_run.json"
+    malformed_file.write_text(MALFORMED_JSON_CONTENT)
+
+    with pytest.raises(json.JSONDecodeError):
+        load_eval_run(malformed_file)
+
+
+def test_load_eval_run_invalid_schema(tmp_path: Path) -> None:
+    """Test that loading valid JSON with wrong schema raises ValidationError."""
+    invalid_schema_file = tmp_path / "invalid_run_schema.json"
+    invalid_schema_file.write_text(json.dumps(INVALID_EVAL_RUN_SCHEMA_JSON))
+
+    with pytest.raises(ValidationError):
+        load_eval_run(invalid_schema_file)
+
+
+def test_load_eval_run_permission_denied(tmp_path: Path) -> None:
+    """Test that load_eval_run raises PermissionError with context when file is unreadable."""
+    artifact_file = tmp_path / "unreadable_run.json"
+    artifact_file.write_text(json.dumps(VALID_EVAL_RUN_DICT))
+
+    os.chmod(artifact_file, 0o000)
+
+    try:
+        with pytest.raises(PermissionError) as exc_info:
+            load_eval_run(artifact_file)
+
+        error_message = str(exc_info.value)
+        assert "Permission denied" in error_message
+        assert str(artifact_file) in error_message
+    finally:
+        os.chmod(artifact_file, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_load_eval_run_is_directory_error(tmp_path: Path) -> None:
+    """Test that load_eval_run raises IsADirectoryError when path is a directory."""
+    directory_path = tmp_path / "not_a_run_file"
+    directory_path.mkdir()
+
+    with pytest.raises(IsADirectoryError) as exc_info:
+        load_eval_run(directory_path)
+
+    error_message = str(exc_info.value)
+    assert "Expected file but found directory" in error_message
+    assert str(directory_path) in error_message
+
+
+# --- Tests for format_eval_report_stub() ---
+
+
+def test_format_eval_report_stub_includes_all_sections(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub produces markdown including section headers.
+
+    This test uses a list of required sections instead of parsing the actual
+    template file because the real file is covered by integration tests."""
+    artifact_path = tmp_path / "artifact.json"
+    artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
+
+    result = format_eval_report_stub(artifact_path)
+
+    assert "# Eval Report" in result
+    assert "## Source Data" in result
+    assert "## System Version" in result
+    assert "## Eval Run Summary" in result
+    assert "## Issue Analysis" in result
+    assert "## Changes Made" in result
+    assert "## Changes Deferred" in result
+
+
+def test_format_eval_report_stub_includes_metadata(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub pre-populates metadata into the output markdown."""
+    artifact_path = tmp_path / "artifact.json"
+    artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
+    eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+
+    result = format_eval_report_stub(artifact_path)
+
+    # Verify title contains timestamp in YYYY-MM-DDTHH-MM-SS format
+    timestamp_pattern = r"# Eval Report \d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}"
+    assert re.search(timestamp_pattern, result), "Title should contain timestamp in YYYY-MM-DDTHH-MM-SS format"
+
+    # Verify Source Data section contains eval run artifact path and dataset identifier
+    assert str(artifact_path) in result, "Should include eval artifact path"
+    assert eval_run.dataset_identifier in result, f"Should include dataset identifier: {eval_run.dataset_identifier}"
+
+    # Verify System Version section contains all required fields
+    assert eval_run.system_version["chat_model"] in result, "Should include chat_model"
+    assert eval_run.system_version["embedding_model"] in result, "Should include embedding_model"
+    assert f"k={eval_run.system_version['k']}" in result, "Should include retrieval config k"
+    assert f"chunk_size={eval_run.system_version['chunk_size']}" in result, "Should include retrieval config chunk_size"
+
+
+def test_format_eval_report_stub_includes_metrics_table(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub includes complete metrics table."""
+    artifact_path = tmp_path / "artifact.json"
+    artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
+    eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+
+    result = format_eval_report_stub(artifact_path)
+
+    # Verify table header exists
+    assert "| Metric Name | Effective Threshold | Score | Status |" in result, "Should include metrics table header"
+
+    # Verify table contains rows for all metrics
+    for metric_name, score in eval_run.aggregate_scores["overall"].items():
+        assert metric_name in result, f"Should include metric: {metric_name}"
+
+        threshold = eval_run.effective_thresholds[metric_name]
+        assert f"{threshold:.2f}" in result or f"{threshold}" in result, f"Should include threshold for {metric_name}"
+        assert f"{score:.2f}" in result or f"{score}" in result, f"Should include score for {metric_name}"
+
+        assert "Pass" in result or "Fail" in result, "Should include Pass/Fail status"
+
+    # Verify overall pass rate is included and formatted as percentage
+    expected_pass_rate = VALID_EVAL_RUN_DICT["overall_pass_rate"] * 100
+    assert f"{expected_pass_rate:.1f}%" in result, "Should include overall pass rate as percentage"
+
+
+def test_format_eval_report_stub_raises_on_missing_artifact(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub raises FileNotFoundError when artifact doesn't exist."""
+    nonexistent_artifact = tmp_path / "nonexistent.json"
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        format_eval_report_stub(nonexistent_artifact)
+
+    error_message = str(exc_info.value)
+    assert "nonexistent.json" in error_message, "Error message should include the missing path"
+
+
+def test_format_eval_report_stub_raises_on_missing_template(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub raises FileNotFoundError when template doesn't exist."""
+    artifact_path = tmp_path / "artifact.json"
+    artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
+
+    with patch("src.eval.utils.Path") as mock_path:
+        mock_path.return_value.exists.return_value = False
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            format_eval_report_stub(artifact_path)
+
+        error_message = str(exc_info.value)
+        assert "template" in error_message.lower(), "Error message should mention template"
+
+
 

@@ -8,6 +8,9 @@ from src.configs.authors import DEFAULT_AUTHOR
 from src.schemas.eval import GoldenDataset, EvalRun
 
 
+#--- golden dataset utilities ---
+
+
 def load_golden_dataset(path: Path) -> GoldenDataset:
     """Load and validate golden dataset from specified JSON file.
 
@@ -106,6 +109,10 @@ def discover_latest_golden_dataset(
 
     return matches[0]
 
+
+#--- eval run utilities ---
+
+
 def save_eval_run(eval_run: EvalRun, output_dir: Path) -> Path:
     """Save EvalRun to timestamped JSON file.
 
@@ -161,3 +168,122 @@ def save_eval_run(eval_run: EvalRun, output_dir: Path) -> Path:
         ) from e
 
     return filepath
+
+
+def load_eval_run(path: Path) -> EvalRun:
+    """Load and validate EvalRun from a JSON artifact file.
+
+    Args:
+        path: Path to one specific eval run JSON file
+
+    Returns:
+        Validated EvalRun object
+
+    Raises:
+        IsADirectoryError: If path points to a directory, not a file
+        FileNotFoundError: If path does not exist
+        PermissionError: If file cannot be read due to permissions
+        json.JSONDecodeError: If file is not valid JSON
+        ValidationError: If JSON doesn't match EvalRun schema (Pydantic)
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"Eval run artifact not found: {path}\n")
+
+    try:
+        with path.open() as f:
+            data = json.load(f)
+    except PermissionError as e:
+        raise PermissionError(
+            f"Permission denied: Cannot read file '{path}'. Check file permissions and retry."
+        ) from e
+    except IsADirectoryError as e:
+        raise IsADirectoryError(
+            f"Expected file but found directory: '{path}'"
+        ) from e
+    except json.JSONDecodeError as e:
+        raise json.JSONDecodeError(
+            f"Invalid JSON in '{path}'; {e.msg}",
+            e.doc,
+            e.pos
+        ) from e
+
+    return EvalRun(**data)
+
+
+#--- narrative eval report utilities ---
+
+
+def format_eval_report_stub(artifact_path: Path) -> str:
+    """Generate pre-populated markdown stub for narrative eval report.
+
+    Reads template from docs/eval_reports/TEMPLATE.md and auto-fills sections with
+    data from the eval run artifact, leaving [TODO] prompts for manual sections.
+
+    Args:
+        artifact_path: Path to the eval run JSON artifact file
+
+    Returns:
+        Markdown string ready to save as .md file
+
+    Raises:
+        FileNotFoundError: If artifact or template file doesn't exist
+        ValueError: If artifact cannot be read from file
+        ValidationError: If artifact doesn't match EvalRun schema (Pydantic)
+    """
+    eval_run = load_eval_run(artifact_path)
+
+    # Load template
+    template_path = Path("docs/eval_reports/TEMPLATE.md")
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template file not found at {template_path}.")
+
+    template = template_path.read_text()
+
+    # Auto-fill title with timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    result = template.replace("# Eval Report [YYYY-MM-DDTHH-MM-SS]", f"# Eval Report {timestamp}")
+
+    # Auto-fill Source Data section
+    result = result.replace(
+        "- **Eval Run Artifact:** `evals/runs/{filename}.json`\n- **Dataset Identifier:** `evals/golden/{filename}.json`",
+        f"- **Eval Run Artifact:** `{artifact_path}`\n- **Dataset Identifier:** `{eval_run.dataset_identifier}`",
+    )
+
+    # Auto-fill System Version section
+    result = result.replace("- **Chat Model:** [mistral|other]", f"- **Chat Model:** {eval_run.system_version['chat_model']}")
+    result = result.replace("- **Embedding Model:** [nomic-embed-text|other]", f"- **Embedding Model:** {eval_run.system_version['embedding_model']}")
+    result = result.replace(
+        "- **Retrieval Config:** k=[value], chunk_size=[value]",
+        f"- **Retrieval Config:** k={eval_run.system_version['k']}, chunk_size={eval_run.system_version['chunk_size']}",
+    )
+
+    # Auto-fill Eval Run Summary section with metrics table
+    result = _populate_metrics_table(result, eval_run)
+    result = _populate_metrics_summary(result, eval_run)
+
+    return result
+
+
+def _populate_metrics_table(interim_text: str, eval_run: EvalRun) -> str:
+    old_table = "| Metric Name | Effective Threshold | Score | Status    |\n|-------------|---------------------|-------|-----------|\n| ...         | ...                 | ... | Pass/Fail |\n| ...         | ...                 | ... | Pass/Fail |\n| ...         | ...                 | ... | Pass/Fail |"
+
+
+    rows = []
+    for metric_name, score in eval_run.aggregate_scores["overall"].items():
+        threshold = eval_run.effective_thresholds[metric_name]
+        status = "Pass" if score >= threshold else "Fail"
+        rows.append(f"| {metric_name} | {threshold:.2f} | {score:.2f} | {status} |")
+
+    new_table="| Metric Name | Effective Threshold | Score | Status |\n|--------|-----------|-------|--------|\n" + "\n".join(rows)
+
+    return interim_text.replace(old_table, new_table)
+
+def _populate_metrics_summary(interim_text: str, eval_run: EvalRun) -> str:
+    pass_rate_percent = eval_run.overall_pass_rate * 100
+    total_examples = len(eval_run.example_results)
+    passed_examples = int(eval_run.overall_pass_rate * total_examples)
+
+    return interim_text.replace(
+        "**Overall pass rate:** [XX%] ([N]/[M] examples)",
+        f"**Overall pass rate:** {pass_rate_percent:.1f}% ({passed_examples}/{total_examples} examples)",
+    )

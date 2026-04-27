@@ -271,6 +271,8 @@ luminary/
 │       └── <document_id>/   # scraped documents saved as JSON
 │
 ├── docs/
+│   └── eval_reports/        # narrative reports that document improvements per eval run
+│ 
 ├── evals/                   (gitignored)
 │   ├── golden/              # versioned golden datasets for the evaluation harness
 │   └── runs/                # timestamped JSON artifacts from eval runs
