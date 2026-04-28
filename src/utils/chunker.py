@@ -8,10 +8,12 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.schemas import ChunkInfo
 
+DEFAULT_CHUNK_SIZE = 1200
+
 
 def chunk_documents(
     documents: Sequence[Document],
-    chunk_size: int = 1200,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = 150,
 ) -> list[Document]:
     """Split documents into smaller chunks with validated metadata.

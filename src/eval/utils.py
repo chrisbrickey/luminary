@@ -1,11 +1,12 @@
-"""Utility functions for evaluation harness."""
+"""Utility I/O functions for evaluation harness."""
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 from src.configs.authors import DEFAULT_AUTHOR
-from src.schemas.eval import GoldenDataset, EvalRun
+from src.schemas.eval import GoldenDataset, EvalRun, SystemVersion
 
 
 #--- golden dataset utilities ---
@@ -249,13 +250,16 @@ def format_eval_report_stub(artifact_path: Path) -> str:
         f"- **Eval Run Artifact:** `{artifact_path}`\n- **Dataset Identifier:** `{eval_run.dataset_identifier}`",
     )
 
-    # Auto-fill System Version section
-    result = result.replace("- **Chat Model:** [mistral|other]", f"- **Chat Model:** {eval_run.system_version['chat_model']}")
-    result = result.replace("- **Embedding Model:** [nomic-embed-text|other]", f"- **Embedding Model:** {eval_run.system_version['embedding_model']}")
-    result = result.replace(
-        "- **Retrieval Config:** k=[value], chunk_size=[value]",
-        f"- **Retrieval Config:** k={eval_run.system_version['k']}, chunk_size={eval_run.system_version['chunk_size']}",
-    )
+    # Auto-fill System Version section — skip any field absent in the artifact for backwards compatibility
+    sv = eval_run.system_version
+    for field_name, field_info in SystemVersion.model_fields.items():
+        value = getattr(sv, field_name)
+        if value is not None and (title := field_info.title) is not None:
+            result = re.sub(
+                rf"- \*\*{re.escape(title)}:\*\* \[[^\]]+\]",
+                f"- **{title}:** {value}",
+                result,
+            )
 
     # Auto-fill Eval Run Summary section with metrics table
     result = _populate_metrics_table(result, eval_run)

@@ -9,7 +9,7 @@ from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
+from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult, SystemVersion
 
 # --- Pytest fixtures ---
 
@@ -110,7 +110,14 @@ def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
         "dataset_version": DATASET_VERSION,
         "dataset_date": DATASET_DATE,
         "run_timestamp": RUN_TIMESTAMP,
-        "system_version": {"chat_model": "test-model", "commit": "abc123"},
+        "system_version": {
+            "commit": "abc123",
+            "timestamp": "2025-06-15T14:30:45+00:00",
+            "chat_model": "test-model",
+            "embedding_model": "test-embedding",
+            "retrieval_chunk_count": "3",
+            "retrieval_chunk_size": "500",
+        },
         "effective_thresholds": {METRIC_NAME: FALLBACK_THRESHOLD},
         "example_results": [],
         "aggregate_scores": {"overall": {}},
@@ -118,6 +125,45 @@ def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
     }
     defaults.update(overrides)
     return defaults
+
+
+class TestSystemVersion:
+    def test_construction_with_all_fields(self) -> None:
+        kwargs = {
+            "chat_model": "test-model",
+            "embedding_model": "test-embedding",
+            "retrieval_chunk_count": "5",
+            "retrieval_chunk_size": "1200",
+            "commit": "abc123",
+            "timestamp": "2025-06-15T14:30:45+00:00",
+        }
+        sv = SystemVersion(**kwargs)
+        assert sv.model_dump() == kwargs
+
+    def test_all_fields_default_to_none(self) -> None:
+        sv = SystemVersion()
+        for field_name in SystemVersion.model_fields:
+            assert getattr(sv, field_name) is None, f"Expected {field_name} to default to None"
+
+    def test_partial_fields(self) -> None:
+        sv = SystemVersion(chat_model="test-model", commit="abc123")
+        assert sv.chat_model == "test-model"
+        assert sv.commit == "abc123"
+        for field_name in SystemVersion.model_fields:
+            if field_name not in ("chat_model", "commit"):
+                assert getattr(sv, field_name) is None, f"Expected {field_name} to be None"
+
+    def test_constructed_from_dict_with_missing_keys(self) -> None:
+        sv = SystemVersion(**{"chat_model": "test-model", "commit": "abc123"})
+        assert sv.chat_model == "test-model"
+        for field_name in SystemVersion.model_fields:
+            if field_name not in ("chat_model", "commit"):
+                assert getattr(sv, field_name) is None
+
+    def test_constructed_from_empty_dict(self) -> None:
+        sv = SystemVersion(**{})
+        for field_name in SystemVersion.model_fields:
+            assert getattr(sv, field_name) is None
 
 
 class TestMetricResult:
@@ -487,7 +533,7 @@ class TestEvalRun:
 
         # Run metadata
         assert run.run_timestamp == RUN_TIMESTAMP
-        assert run.system_version == {"chat_model": "test-model", "commit": "abc123"}
+        assert run.system_version == SystemVersion(**_eval_run_kwargs()["system_version"])
         assert run.effective_thresholds == {METRIC_NAME: FALLBACK_THRESHOLD}
 
         # Results

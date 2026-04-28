@@ -328,7 +328,7 @@ class TestRunEval:
         assert result.example_results[1].passed is False # 0.5 < 0.8 -> fail
         assert result.example_results[2].passed is True # 0.85 >= 0.8 -> pass
 
-    @patch("src.eval.runner._get_system_version")
+    @patch("src.eval.runner.get_system_version")
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_captures_system_version(
         self, mock_registry: Mock, mock_get_system_version: Mock
@@ -349,10 +349,16 @@ class TestRunEval:
         )
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
 
-        mock_get_system_version.return_value = {
-            "chat_model": chat_model,
-            "commit": commit,
-        }
+        from src.schemas.eval import SystemVersion
+        expected_system_version = SystemVersion(
+            commit=commit,
+            timestamp="2025-06-15T14:30:45+00:00",
+            chat_model=chat_model,
+            embedding_model="test-embedding",
+            retrieval_chunk_count="6",
+            retrieval_chunk_size="800",
+        )
+        mock_get_system_version.return_value = expected_system_version
 
         example = GoldenExample(**_golden_example_kwargs())
         dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[TEST_AUTHOR_1], examples=[example]))
@@ -367,14 +373,10 @@ class TestRunEval:
         result = run_eval(dataset, chains)
 
         # Assert
-        #  run_eval() calls _get_system_version(); if it didn't, the mock wouldn't be hit
+        #  run_eval() calls get_system_version(); if it didn't, the mock wouldn't be hit
         #  run_eval() uses the return value instead of ignoring it
         #  run_eval() assigns it to the correct field
-        #  The values are correctly nested; result.system_version["chat_model"], not result["chat_model"]
-        assert "chat_model" in result.system_version
-        assert result.system_version["chat_model"] == chat_model
-        assert "commit" in result.system_version
-        assert result.system_version["commit"] == commit
+        assert result.system_version == expected_system_version
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_uses_custom_metric_thresholds(

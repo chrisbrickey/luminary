@@ -10,9 +10,12 @@ The pair of eval run and golden dataset that were used as the input to this repo
 
 
 ## System Version
+- **Commit:** [git-hash]
+- **Timestamp:** [ISO 8601]
 - **Chat Model:** [mistral|other]
 - **Embedding Model:** [nomic-embed-text|other]
-- **Retrieval Config:** k=[value], chunk_size=[value]
+- **Retrieval Chunk Count (k):** [value]
+- **Retrieval Chunk Size:** [value]
 
 
 ## Eval Run Summary

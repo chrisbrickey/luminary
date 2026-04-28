@@ -12,26 +12,23 @@ from typing import Any
 
 from langchain_core.runnables import Runnable
 
-from src.configs.common import DEFAULT_CHAT_MODEL
+from src.configs.common import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
+from src.configs.vectorstore_config import DEFAULT_K
 from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult
+from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult, SystemVersion
+from src.utils.chunker import DEFAULT_CHUNK_SIZE
 
 # Auto-register all metrics; Skip unused import warning
 import src.eval.metrics  # noqa: F401
 
 
-def _get_system_version() -> dict[str, str]:
+def get_system_version() -> SystemVersion:
     """Capture system version for reproducibility.
 
-    Returns dict with:
-    - chat_model: Name of the chat model used
-    - commit: Git commit hash (short form)
-    - timestamp: ISO 8601 timestamp with timezone
-
     If git is unavailable or not in a repo, commit will be "unknown".
+    This method is intentionally public for testing and extensibility.
     """
-    # Get git commit hash (short form)
     try:
         commit = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -41,11 +38,14 @@ def _get_system_version() -> dict[str, str]:
     except (subprocess.CalledProcessError, FileNotFoundError):
         commit = "unknown"
 
-    return {
-        "chat_model": DEFAULT_CHAT_MODEL,
-        "commit": commit,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    return SystemVersion(
+        commit=commit,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        chat_model=DEFAULT_CHAT_MODEL,
+        embedding_model=DEFAULT_EMBEDDING_MODEL,
+        retrieval_chunk_count=str(DEFAULT_K),
+        retrieval_chunk_size=str(DEFAULT_CHUNK_SIZE),
+    )
 
 
 def _compute_aggregate_scores(
@@ -303,7 +303,7 @@ def run_eval(
     overall_pass_rate = passed_count / len(example_results) if example_results else 0.0
 
     # Capture system version
-    system_version = _get_system_version()
+    system_version = get_system_version()
 
     # Create and return EvalRun
     return EvalRun(
