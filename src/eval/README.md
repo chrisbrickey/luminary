@@ -23,6 +23,10 @@
 - Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{YYYY-MM-DD}T{HH-MM-SS}.json`.
 - Contains all example results, aggregate scores, and system snapshot metadata for traceability
 
+**Narrative Evaluation Reports:**
+- CLI tooling pre-populates markdown files (stored at `docs/eval_reports/`) engineers can use to document analysis of eval runs and related improvements.
+- Aligns the evaluation process with industry best standards: Establishes a quality bar, Documents the "why", Tells the story that numbers alone cannot illuminate 
+
 ## Run the evaluation harness
 
 **Prerequisites:**
@@ -49,11 +53,28 @@ Optional flags:
 | --verbose     | Enable debug logging                 | False                                               |
 
 
-**Interpreting results:**
-- **Scores:** 0.0 to 1.0, where 1.0 is perfect
-- **Threshold examples:** 0.8 for most metrics
-- **✅ = passing**, **❌ = failing** (below threshold)
-- **Overall pass rate:** Fraction of examples where ALL metrics passed
+**Analyze results and document improvements:**
+
+1. Generate markdown evaluation report (in `docs/eval_reports`) with pre-populated summary of results and metadata from the eval artifact.
+    ```
+    uv run python scripts/stub_eval_report.py evals/runs/{eval_artifact_filename}.json
+    ```
+
+2. Identify failing metrics (score < threshold)
+   - Scores: 0.0 to 1.0, where 1.0 is perfect
+   - Threshold examples: 0.8 for most metrics
+   - Pass / Fail for above/ below threshold
+   - Overall pass rate: Fraction of examples where ALL metrics passed
+
+3. Investigate failure modes by manually reviewing outputs for failing metrics in the actual json artifact at `evals/runs/{timestamp}.json`.
+
+4. Update the evaluation report with:
+   - Failure modes
+   - Proposed improvements
+   - Rejected ideas and why they were rejected
+
+5. Commit the completed evaluation report
+
 
 ## Generate Golden Datasets
 
