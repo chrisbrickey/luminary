@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas.chat import ChatResponse
@@ -71,26 +71,29 @@ class GoldenDataset(BaseModel):
 
     Identifies datasets by explicit scope + authors with computed full identifier.
 
+    - identifier property (computed): '{scope}_{sorted_authors}_v{version}_{date}'
     - scope field identifies the dataset category (e.g., 'persona', 'retrieval')
     - authors lists all philosophers covered by this dataset (must match examples)
     - version field enables traceability
     - created_date provides temporal context for eval run comparisons
-    - examples contain language-specific validation data (bilingual by design)
-    - identifier property (computed): '{scope}_{sorted_authors}_v{version}_{date}'
+    - examples (list of GoldenExample): Default value is empty list because it is excluded from json serialization
+      of eval run artifacts. When an eval run is loaded from json, the golden examples field is not present.
     """
 
-    scope: str = Field(..., description="Dataset scope (e.g., 'persona', 'retrieval', 'bilingual')")
+    scope: str = Field(..., title="Scope", description="Dataset scope (e.g., 'persona', 'retrieval', 'bilingual')")
     authors: list[str] = Field(
         ...,
+        title="Authors",
         description="All authors covered by this dataset (must be in AUTHOR_CONFIGS)"
     )
     version: Annotated[str, Field(pattern=r"^\d+\.\d+$")] = Field(
         ...,
+        title="Version",
         description="Semantic version (e.g., '1.0', '2.0')"
     )
-    created_date: str = Field(..., description="ISO 8601 date (YYYY-MM-DD)")
-    description: str = Field(..., description="What this dataset tests")
-    examples: list[GoldenExample] = Field(..., description="List of test examples")
+    created_date: str = Field(..., title="Creation Date", description="ISO 8601 date (YYYY-MM-DD)")
+    description: str = Field(..., title="Description", description="What this dataset tests")
+    examples: list[GoldenExample] = Field(default_factory=list, title="Examples", description="List of test examples")
 
     @field_validator('authors')
     @classmethod
@@ -117,6 +120,13 @@ class GoldenDataset(BaseModel):
     @model_validator(mode='after')
     def validate_authors_match_examples(self) -> 'GoldenDataset':
         """Ensure dataset.authors contains exactly the authors from all examples."""
+
+        # Skip this validation if list of golden examples is empty.
+        #   This applies when eval runs are deserialized from json artifacts because
+        #   deserialization triggers this validation and golden examples are excluded from eval run json artifacts.
+        if not self.examples:
+            return self
+
         example_authors = {ex.author for ex in self.examples}
         metadata_authors = set(self.authors)
 
@@ -132,6 +142,7 @@ class GoldenDataset(BaseModel):
 
         return self
 
+    @computed_field  # type: ignore[misc]
     @property
     def identifier(self) -> str:
         """Unique human-readable identifier composed of dataset properties including version and date.
@@ -189,32 +200,22 @@ class EvalRun(BaseModel):
     - Overall pass rate
 
     Design notes:
+    - golden_dataset embeds all fields of the GoldenDataset object, including the golden examples (unless explicitly excluded)
     - system_snapshot captures reproducibility info (model, commit hash, config)
     - example_results is a list instead of structure with constant access (e.g. dict) because:
         - Order matters in eval runs. We want to see results in the order examples were processed.
         - JSON serialization is simpler with lists.
         - Evaluation harness is not on the hot path. Time complexity is not critical.
         - If we need constant lookup in production, we can build it at the call site.
-    - aggregate_scores has nested structure:
-      {"overall": {...}, "by_language": {"en": {...}, "fr": {...}}, "cross_language": {...}}
-    - This artifact is saved to evals/runs/ and referenced in narrative reports
-    - dataset_scope and dataset_authors are explicit fields for queryability
-    - dataset_identifier stores the full versioned identifier for traceability
     """
 
-    # Metadata - Dataset identification
-    dataset_scope: str = Field(..., description="Scope from GoldenDataset (e.g., 'persona', 'retrieval')")
-    dataset_authors: list[str] = Field(..., description="Authors from GoldenDataset (sorted)")
-    dataset_identifier: str = Field(..., description="Full identifier: '{scope}_{sorted_authors}_v{version}_{date}'")
-    dataset_version: str = Field(..., description="Version of the golden dataset used")
-    dataset_date: str = Field(..., description="ISO 8601 date from GoldenDataset.created_date (YYYY-MM-DD)")
+    # Metadata
     run_timestamp: str = Field(..., description="ISO 8601 timestamp with timezone")
-
-    # System configuration (for reproducibility)
+    golden_dataset: GoldenDataset = Field(..., description="The golden dataset used for this eval run")
     system_snapshot: SystemSnapshot = Field(..., description="System config: chat model, commit, etc.")
     effective_thresholds: dict[str, float] = Field(..., description="Thresholds used for pass/fail (metric_name -> threshold)")
 
     # Results
-    example_results: list[ExampleResult] = Field(..., description="Results for each example")
-    aggregate_scores: dict[str, Any] = Field(..., description="Overall + Breakdown by language")
     overall_pass_rate: float = Field(..., ge=0.0, le=1.0, description="Fraction of examples passing all metrics")
+    aggregate_scores: dict[str, Any] = Field(..., description="Overall + Breakdown by language")
+    example_results: list[ExampleResult] = Field(..., description="Results for each example")

@@ -106,6 +106,64 @@ def _chat_response_kwargs(**overrides: Any) -> dict[str, Any]:
     return defaults
 
 
+def _assert_pass_fail_consistent(result: EvalRun) -> None:
+    """Assert pass/fail flags are consistent with metric scores and thresholds."""
+    for example_result in result.example_results:
+        for metric in example_result.metrics:
+            threshold = result.effective_thresholds[metric.name]
+            if example_result.passed:
+                assert metric.score >= threshold, (
+                    f"Example {example_result.id} marked as passed but "
+                    f"metric '{metric.name}' scored {metric.score} < threshold {threshold}"
+                )
+
+        if not example_result.passed:
+            failing_metrics = [
+                m for m in example_result.metrics
+                if m.score < result.effective_thresholds[m.name]
+            ]
+            assert len(failing_metrics) > 0, (
+                f"Example {example_result.id} marked as failed but "
+                f"all metrics meet thresholds"
+            )
+
+
+def _assert_valid_eval_run(saved_run: EvalRun) -> None:
+    """Assert all EvalRun fields are populated and structurally valid.
+
+    Iterates model_fields so new fields are automatically covered without
+    manual test updates.
+    """
+
+    # Verify top-level EvalRun fields
+    assert isinstance(saved_run, EvalRun)
+    for field_name in EvalRun.model_fields:
+        assert getattr(saved_run, field_name) is not None, (
+            f"Expected EvalRun.{field_name} to be set"
+        )
+
+    # Verify nested GoldenDataset fields
+    for field_name in GoldenDataset.model_fields:
+        assert getattr(saved_run.golden_dataset, field_name) is not None, (
+            f"Expected golden_dataset.{field_name} to be set"
+        )
+    assert saved_run.golden_dataset.identifier, "Expected golden_dataset.identifier to be set"
+    assert saved_run.golden_dataset.authors == sorted(saved_run.golden_dataset.authors), (
+        "Expected golden_dataset.authors to be sorted"
+    )
+
+    # Verify nested SystemSnapshot fields
+    assert isinstance(saved_run.system_snapshot, SystemSnapshot)
+    for field_name in SystemSnapshot.model_fields:
+        assert getattr(saved_run.system_snapshot, field_name), (
+            f"Expected system_snapshot.{field_name} to be set"
+        )
+
+    assert saved_run.effective_thresholds, "Expected at least one metric threshold"
+    assert "overall" in saved_run.aggregate_scores
+    assert 0.0 <= saved_run.overall_pass_rate <= 1.0
+
+
 def _create_golden_dataset_file(
     directory: Path,
     scope: str = DATASET_SCOPE,
@@ -255,13 +313,22 @@ def test_eval_runner_end_to_end() -> None:
     # Act: Run eval with real runner + real metrics + mock chain
     result = run_eval(dataset, chains)
 
-    # Assert: Verify EvalRun correctly extracts metadata from GoldenDataset
-    assert result.dataset_scope == dataset.scope
-    assert result.dataset_authors == dataset.authors
-    assert result.dataset_identifier == dataset.identifier
-    assert result.dataset_version == dataset.version
-    assert result.dataset_date == dataset.created_date
+    # Assert: Verify EvalRun embeds GoldenDataset
+
+    _assert_valid_eval_run(result)
+    assert result.golden_dataset.model_dump() == dataset.model_dump()
     assert len(result.example_results) == 3
+
+    # Assert: example_results are in input order with correct IDs, questions, and languages
+    expected_example_meta = [
+        (EXAMPLE_ID_EN_001, QUESTION_EN_001, ENGLISH_ISO_CODE),
+        (EXAMPLE_ID_EN_002, QUESTION_EN_002, ENGLISH_ISO_CODE),
+        (EXAMPLE_ID_FR_001, QUESTION_FR_001, FRENCH_ISO_CODE),
+    ]
+    for er, (eid, eq, elang) in zip(result.example_results, expected_example_meta):
+        assert er.example_id == eid
+        assert er.question == eq
+        assert er.language == elang
 
     # Assert: Verify chain was invoked for each example
     assert mock_chain.invoke.call_count == 3
@@ -309,27 +376,7 @@ def test_eval_runner_end_to_end() -> None:
         assert result.effective_thresholds[spec.name] == spec.default_threshold
 
     # Assert: Verify pass/fail logic is consistent with scores and thresholds
-    # An example passes if ALL its metrics meet their thresholds
-    for example_result in result.example_results:
-        for metric in example_result.metrics:
-            threshold = result.effective_thresholds[metric.name]
-            if example_result.passed:
-                # If example passed, all metrics must be >= threshold
-                assert metric.score >= threshold, (
-                    f"Example {example_result.id} marked as passed but "
-                    f"metric '{metric.name}' scored {metric.score} < threshold {threshold}"
-                )
-
-        # If example failed, verify at least one metric was below threshold
-        if not example_result.passed:
-            failing_metrics = [
-                m for m in example_result.metrics
-                if m.score < result.effective_thresholds[m.name]
-            ]
-            assert len(failing_metrics) > 0, (
-                f"Example {example_result.id} marked as failed but "
-                f"all metrics meet thresholds"
-            )
+    _assert_pass_fail_consistent(result)
 
     # Assert: Verify overall pass rate matches count of passed examples
     passed_count = sum(1 for ex in result.example_results if ex.passed)
@@ -337,7 +384,6 @@ def test_eval_runner_end_to_end() -> None:
     assert result.overall_pass_rate == pytest.approx(expected_pass_rate, abs=0.001)
 
     # Assert: Verify aggregate scores structure
-    assert "overall" in result.aggregate_scores
     assert "by_language" in result.aggregate_scores
 
     # Assert: Verify all applicable metrics appear in aggregate scores
@@ -346,14 +392,6 @@ def test_eval_runner_end_to_end() -> None:
             f"Expected metric '{metric_name}' in overall aggregate scores"
         )
 
-    # Assert: Verify system snapshot captured
-    system_snapshot = result.system_snapshot
-    assert isinstance(system_snapshot, SystemSnapshot)
-
-    for field_name in SystemSnapshot.model_fields:
-        assert getattr(system_snapshot, field_name), (
-            f"Expected system_snapshot.{field_name} to be set"
-        )
 
 
 def test_get_system_snapshot_returns_all_fields() -> None:
@@ -479,6 +517,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
     result = run_eval(dataset, chains)
 
     # Assert: Verify all examples processed
+    _assert_valid_eval_run(result)
     assert len(result.example_results) == 4
     assert mock_chain.invoke.call_count == 4
 
@@ -489,26 +528,7 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
     assert result.example_results[3].language == FRENCH_ISO_CODE
 
     # Assert: Verify pass/fail logic is consistent with scores and thresholds
-    for example_result in result.example_results:
-        for metric in example_result.metrics:
-            threshold = result.effective_thresholds[metric.name]
-            if example_result.passed:
-                # If example passed, all metrics must be >= threshold
-                assert metric.score >= threshold, (
-                    f"Example {example_result.id} marked as passed but "
-                    f"metric '{metric.name}' scored {metric.score} < threshold {threshold}"
-                )
-
-        # If example failed, verify at least one metric was below threshold
-        if not example_result.passed:
-            failing_metrics = [
-                m for m in example_result.metrics
-                if m.score < result.effective_thresholds[m.name]
-            ]
-            assert len(failing_metrics) > 0, (
-                f"Example {example_result.id} marked as failed but "
-                f"all metrics meet thresholds"
-            )
+    _assert_pass_fail_consistent(result)
 
     # Assert: Verify overall pass rate matches count of passed examples
     passed_count = sum(1 for ex in result.example_results if ex.passed)
@@ -620,8 +640,10 @@ class TestCLIIntegration:
 
         # Assert: Artifact contains valid EvalRun
         saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
-        assert saved_run.dataset_scope == DATASET_SCOPE
-        assert saved_run.dataset_authors == [DEFAULT_AUTHOR]
+
+        _assert_valid_eval_run(saved_run)
+        assert saved_run.golden_dataset.scope == DATASET_SCOPE
+        assert saved_run.golden_dataset.authors == [DEFAULT_AUTHOR]
         assert len(saved_run.example_results) == 2
 
         # Assert: Summary printed to stdout
@@ -647,10 +669,12 @@ class TestCLIIntegration:
         # Arrange: Create golden dataset at custom location
         custom_golden_dir = tmp_path / "custom" / "golden"
         custom_golden_dir.mkdir(parents=True)
+
+        version, example_count = "9.5", 1
         golden_path = _create_golden_dataset_file(
             directory=custom_golden_dir,
-            version="9.5",
-            num_examples=1,
+            version=version,
+            num_examples=example_count,
         )
 
         # Arrange: Custom output directory
@@ -677,11 +701,12 @@ class TestCLIIntegration:
 
         # Assert: Artifact created in custom output directory
         artifact_files = list(custom_output.glob("*.json"))
-        assert len(artifact_files) == 1
+        assert len(artifact_files) == example_count
 
         # Assert: Artifact reflects custom dataset version
         saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
-        assert saved_run.dataset_version == "9.5"
+        _assert_valid_eval_run(saved_run)
+        assert saved_run.golden_dataset.version == version
 
     def test_cli_verbose_logging(
         self,
@@ -885,7 +910,12 @@ class TestCLIIntegration:
 
         # Assert: Artifact is valid
         saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
-        assert saved_run.dataset_scope == DATASET_SCOPE
+
+        _assert_valid_eval_run(saved_run)
+        assert saved_run.golden_dataset.scope == DATASET_SCOPE
+        assert saved_run.golden_dataset.version == DATASET_VERSION
+        assert saved_run.golden_dataset.authors == [DEFAULT_AUTHOR]
+        assert len(saved_run.example_results) == 1
 
     def test_cli_all_flags_combined(
         self,
@@ -902,16 +932,18 @@ class TestCLIIntegration:
         - Verbose logging is enabled
         """
         # Arrange: Create golden dataset at custom location
-        custom_golden_dir = tmp_path / "my_custom_golden"
+        custom_golden_dir = tmp_path / "my_custom_golden_dataset"
         custom_golden_dir.mkdir(parents=True)
+
+        version, example_count = "10.0", 1
         golden_path = _create_golden_dataset_file(
             directory=custom_golden_dir,
-            version="10.0",
-            num_examples=1,
+            version=version,
+            num_examples=example_count,
         )
 
-        # Arrange: Custom output location
-        custom_output = tmp_path / "my_custom_output"
+        # Arrange: Custom output location (distinct from golden dir to avoid glob collision)
+        custom_output = tmp_path / "custom_output"
 
         # Arrange: Mock chain
         mock_chain = Mock(spec=Runnable)
@@ -933,11 +965,13 @@ class TestCLIIntegration:
 
         # Assert: Artifact in custom output
         artifact_files = list(custom_output.glob("*.json"))
-        assert len(artifact_files) == 1
+        assert len(artifact_files) == example_count
 
         # Assert: Artifact reflects custom dataset
         saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
-        assert saved_run.dataset_version == "10.0"
+        _assert_valid_eval_run(saved_run)
+        expected_identifier = f"{DATASET_SCOPE}_{DEFAULT_AUTHOR}_v{version}_{DATASET_DATE}"
+        assert saved_run.golden_dataset.identifier == expected_identifier
 
         # Assert: Verbose logging enabled
         captured = capsys.readouterr()
@@ -1042,8 +1076,11 @@ class TestCLIIntegration:
         assert len(artifact_files) == 1
 
         # Assert: Artifact reflects multi-author dataset
-        saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
-        assert set(saved_run.dataset_authors) == {FAKE_AUTHOR_A, FAKE_AUTHOR_B}
+        # Patch AUTHOR_CONFIGS so re-validation of embedded GoldenDataset passes
+        with patch("src.configs.authors.AUTHOR_CONFIGS", fake_author_configs):
+            saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+        _assert_valid_eval_run(saved_run)
+        assert set(saved_run.golden_dataset.authors) == {FAKE_AUTHOR_A, FAKE_AUTHOR_B}
 
         # Assert: Summary displays both authors
         captured = capsys.readouterr()
@@ -1329,6 +1366,7 @@ class TestCLIIntegration:
 
         # Assert: All metrics in effective_thresholds use the override value
         saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+        _assert_valid_eval_run(saved_run)
         for metric_name, threshold in saved_run.effective_thresholds.items():
             assert threshold == custom_threshold, (
                 f"Expected threshold {custom_threshold} for metric '{metric_name}', "
@@ -1353,7 +1391,8 @@ class TestCLIIntegration:
         - Exit code is 1
         """
         # Test threshold > 1.0
-        with patch("sys.argv", ["run_eval.py", "--threshold", "1.5"]), \
+        high_threshold = "1.5"
+        with patch("sys.argv", ["run_eval.py", "--threshold", f"{high_threshold}"]), \
              pytest.raises(SystemExit) as exc_info:
             from scripts.run_eval import main
             main()
@@ -1361,10 +1400,11 @@ class TestCLIIntegration:
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "must be between 0.0 and 1.0" in captured.err
-        assert "1.5" in captured.err
+        assert high_threshold in captured.err
 
         # Test threshold < 0.0
-        with patch("sys.argv", ["run_eval.py", "--threshold", "-0.1"]), \
+        low_threshold = "-0.1"
+        with patch("sys.argv", ["run_eval.py", "--threshold", f"{low_threshold}"]), \
              pytest.raises(SystemExit) as exc_info:
             from scripts.run_eval import main
             main()
@@ -1372,7 +1412,7 @@ class TestCLIIntegration:
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "must be between 0.0 and 1.0" in captured.err
-        assert "-0.1" in captured.err
+        assert low_threshold in captured.err
 
     def test_cli_threshold_boundary_values_are_accepted(
         self,
@@ -1400,7 +1440,8 @@ class TestCLIIntegration:
         output_dir = tmp_path / "runs"
 
         # Test threshold = 0.0
-        with patch("sys.argv", ["run_eval.py", "--threshold", "0.0"]), \
+        zero_threshold  = 0.0
+        with patch("sys.argv", ["run_eval.py", "--threshold", f"{zero_threshold}"]), \
              patch("scripts.run_eval.DEFAULT_GOLDEN_DATASET_PATH", golden_dir), \
              patch("scripts.run_eval.DEFAULT_EVAL_ARTIFACTS_PATH", output_dir), \
              patch("scripts.run_eval.build_chain", return_value=mock_chain), \
@@ -1412,15 +1453,17 @@ class TestCLIIntegration:
         artifact_files = list(output_dir.glob("*.json"))
         assert len(artifact_files) == 1
         saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+        _assert_valid_eval_run(saved_run)
         for threshold in saved_run.effective_thresholds.values():
-            assert threshold == 0.0
+            assert threshold == zero_threshold
 
         # Clear output for next test
         for f in artifact_files:
             f.unlink()
 
         # Test threshold = 1.0
-        with patch("sys.argv", ["run_eval.py", "--threshold", "1.0"]), \
+        one_threshold = 1.0
+        with patch("sys.argv", ["run_eval.py", "--threshold", f"{one_threshold}"]), \
              patch("scripts.run_eval.DEFAULT_GOLDEN_DATASET_PATH", golden_dir), \
              patch("scripts.run_eval.DEFAULT_EVAL_ARTIFACTS_PATH", output_dir), \
              patch("scripts.run_eval.build_chain", return_value=mock_chain), \
@@ -1432,6 +1475,7 @@ class TestCLIIntegration:
         artifact_files = list(output_dir.glob("*.json"))
         assert len(artifact_files) == 1
         saved_run = EvalRun.model_validate_json(artifact_files[0].read_text())
+        _assert_valid_eval_run(saved_run)
         for threshold in saved_run.effective_thresholds.values():
-            assert threshold == 1.0
+            assert threshold == one_threshold
 

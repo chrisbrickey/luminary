@@ -363,10 +363,13 @@ def main() -> int:
     print("\n" + "=" * 70)
     print("DATASET GENERATED SUCCESSFULLY")
     print("=" * 70)
-    print(f"  Scope: {dataset.scope}")
-    print(f"  Authors: {', '.join(dataset.authors)}")
-    print(f"  Version: {dataset.version}")
-    print(f"  Date: {dataset.created_date}")
+    for field_name, field_info in GoldenDataset.model_fields.items():
+        if field_name == "examples":
+            continue
+        value = getattr(dataset, field_name)
+        title = field_info.title or field_name
+        display = ", ".join(str(v) for v in value) if isinstance(value, list) else value
+        print(f"  {title}: {display}")
     print(f"  Examples: {len(dataset.examples)}")
     print(f"  Output: {output_path}")
     print("=" * 70)

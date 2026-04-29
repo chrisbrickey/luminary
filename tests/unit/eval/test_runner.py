@@ -133,12 +133,8 @@ class TestRunEval:
         # Assert
         assert isinstance(result, EvalRun)
 
-        # Dataset identification - verify EvalRun extracts metadata from GoldenDataset
-        assert result.dataset_scope == dataset.scope
-        assert result.dataset_authors == dataset.authors
-        assert result.dataset_identifier == dataset.identifier
-        assert result.dataset_version == dataset.version
-        assert result.dataset_date == dataset.created_date
+        # Dataset identification - verify EvalRun embeds GoldenDataset
+        assert result.golden_dataset.model_dump() == dataset.model_dump()
 
         # Results structure
         assert len(result.example_results) == 1
