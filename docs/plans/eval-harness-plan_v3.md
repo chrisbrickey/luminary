@@ -1216,7 +1216,7 @@ Instruct the user to complete these steps manually:
 
 ---
 
-## L. Narrative Eval Reports to document improvements
+## L. ✅ Narrative Eval Reports to document improvements
 
 **Goal:** Establish process and expediting tooling to create narrative reports that document eval runs, analysis, and resulting improvements.
 
@@ -1384,6 +1384,8 @@ Instruct the user to complete these steps manually:
 **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
   - Streamlined and improved report template (`docs/eval_reports/TEMPLATE.md`).
   - Removed [TODO] notations in autopopulation of markdown.
+  - Renamed SystemVersion to SystemSnapshot and improved field structure and naming.
+  - Simplified the README updates.
 
 ---
 
