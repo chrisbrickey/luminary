@@ -13,9 +13,14 @@ import pytest
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B
-from src.schemas.eval import EvalRun, ExampleResult, MetricResult
+from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
 from src.schemas.chat import ChatResponse
 from scripts.run_eval import print_summary_table
+
+
+@pytest.fixture(autouse=True)
+def _mock_authors(mock_author_configs):
+    """Apply author mocking to all tests in this file."""
 
 # Test constants
 TEST_QUESTION = "What is progress?"
@@ -43,7 +48,6 @@ DATASET_IDENTIFIER = f"{DATASET_SCOPE}_{"_".join(DATASET_AUTHORS)}_v{DATASET_VER
 
 
 def create_mock_eval_run(
-    dataset_identifier: str = DATASET_IDENTIFIER,
     dataset_scope: str = DATASET_SCOPE,
     dataset_authors: list[str] | None = None,
     dataset_version: str = DATASET_VERSION,
@@ -56,7 +60,6 @@ def create_mock_eval_run(
     """Create a mock EvalRun for testing print_summary_table.
     Returns: EvalRun instance"""
 
-    # Setup defaults to prevent mutable default parameters
     if dataset_authors is None:
         dataset_authors = DATASET_AUTHORS
 
@@ -65,6 +68,26 @@ def create_mock_eval_run(
 
     if effective_thresholds is None:
         effective_thresholds = {METRIC_NAME: THRESHOLD}
+
+    # One GoldenExample per author to satisfy the authors-match-examples validator
+    golden_examples = [
+        GoldenExample(
+            id=f"example_{author}",
+            question=TEST_QUESTION,
+            author=author,
+            language=ENGLISH_ISO_CODE,
+        )
+        for author in sorted(dataset_authors)
+    ]
+
+    golden_dataset = GoldenDataset(
+        scope=dataset_scope,
+        authors=sorted(dataset_authors),
+        version=dataset_version,
+        created_date=dataset_date,
+        description="Test dataset for print_summary_table tests",
+        examples=golden_examples,
+    )
 
     # Create example results
     example_results = []
@@ -89,11 +112,7 @@ def create_mock_eval_run(
         )
 
     return EvalRun(
-        dataset_scope=dataset_scope,
-        dataset_authors=dataset_authors,
-        dataset_identifier=dataset_identifier,
-        dataset_version=dataset_version,
-        dataset_date=dataset_date,
+        golden_dataset=golden_dataset,
         run_timestamp=EVAL_RUN_TIMESTAMP,
         system_snapshot={"commit": COMMIT, "timestamp": EVAL_RUN_TIMESTAMP, "chat_model": CHAT_MODEL, "embedding_model": EMBEDDING_MODEL, "retrieval_chunk_count": CHUNK_COUNT, "retrieval_chunk_size": CHUNK_SIZE},
         effective_thresholds=effective_thresholds,
@@ -280,8 +299,8 @@ class TestPrintSummaryTable:
     ) -> None:
         """Test that multiple authors are displayed correctly."""
         dataset_authors = [FAKE_AUTHOR_A, FAKE_AUTHOR_B]
-        multi_author_identifier = f"{DATASET_SCOPE}_{"_".join(dataset_authors)}_v{DATASET_VERSION}_{DATASET_DATE}"
-        eval_run = create_mock_eval_run(dataset_identifier=multi_author_identifier, dataset_authors=dataset_authors)
+        multi_author_identifier = f"{DATASET_SCOPE}_{"_".join(sorted(dataset_authors))}_v{DATASET_VERSION}_{DATASET_DATE}"
+        eval_run = create_mock_eval_run(dataset_authors=dataset_authors)
 
         print_summary_table(eval_run)
 

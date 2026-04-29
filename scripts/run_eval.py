@@ -74,7 +74,7 @@ def print_summary_table(eval_run: EvalRun) -> None:
         eval_run: EvalRun object containing evaluation results
     """
     print("\n" + "=" * 70)
-    print(f"EVALUATED DATASET: {eval_run.dataset_identifier}")
+    print(f"EVALUATED DATASET: {eval_run.golden_dataset.identifier}")
     print(f"\nEVAL RUN TIMESTAMP: {eval_run.run_timestamp}")
     print(f"\nSYSTEM CONFIGURATION:")
     for field_name, value in eval_run.system_snapshot.model_dump().items():
@@ -169,9 +169,14 @@ def _load_golden_dataset_from_args(
     logger.info("Loading and validating golden dataset...")
     golden_dataset = load_golden_dataset(resolved_path)
     logger.info(f"✓ Loaded dataset: {golden_dataset.identifier}")
-    logger.info(f"  - {len(golden_dataset.examples)} examples")
-    logger.info(f"  - Scope: {golden_dataset.scope}")
-    logger.info(f"  - Authors: {', '.join(golden_dataset.authors)}")
+    for field_name, field_info in GoldenDataset.model_fields.items():
+        if field_name == "examples":
+            continue
+        value = getattr(golden_dataset, field_name)
+        title = field_info.title or field_name
+        display = ", ".join(str(v) for v in value) if isinstance(value, list) else value
+        logger.info(f"  - {title}: {display}")
+    logger.info(f"  - Examples: {len(golden_dataset.examples)}")
 
     return golden_dataset, resolved_path
 

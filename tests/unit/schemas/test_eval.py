@@ -104,11 +104,14 @@ def _example_result_kwargs(**overrides: Any) -> dict[str, Any]:
 def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
     """Return default EvalRun kwargs, with optional overrides."""
     defaults: dict[str, Any] = {
-        "dataset_scope": DATASET_SCOPE,
-        "dataset_authors": [AUTHOR],
-        "dataset_identifier": DATASET_IDENTIFIER,
-        "dataset_version": DATASET_VERSION,
-        "dataset_date": DATASET_DATE,
+        "golden_dataset": {
+            "scope": DATASET_SCOPE,
+            "authors": [AUTHOR],
+            "version": DATASET_VERSION,
+            "created_date": DATASET_DATE,
+            "description": DATASET_DESCRIPTION,
+            "examples": [GoldenExample(**_golden_example_kwargs())],
+        },
         "run_timestamp": RUN_TIMESTAMP,
         "system_snapshot": {
             "commit": "abc123",
@@ -277,12 +280,10 @@ class TestGoldenExample:
 
 class TestGoldenDataset:
     def test_construction_with_required_fields(self) -> None:
-        dataset = GoldenDataset(**_golden_dataset_kwargs())
-        assert dataset.version == DATASET_VERSION
-        assert dataset.created_date == DATASET_DATE
-        assert dataset.authors == []
-        assert dataset.description == DATASET_DESCRIPTION
-        assert dataset.examples == []
+        expected = _golden_dataset_kwargs()
+        dataset = GoldenDataset(**expected)
+        for field_name in GoldenDataset.model_fields:
+            assert getattr(dataset, field_name) == expected[field_name]
 
     def test_construction_with_examples(self) -> None:
         example1 = GoldenExample(**_golden_example_kwargs(id="example_001"))
@@ -485,6 +486,21 @@ class TestGoldenDataset:
         assert f"_v{version}_" in dataset.identifier
         assert dataset.identifier.endswith(f"_{date}")
 
+    def test_construction_with_all_fields(self) -> None:
+        """model_dump() includes all declared fields plus the computed identifier."""
+        kwargs = _golden_dataset_kwargs()
+        dataset = GoldenDataset(**kwargs)
+        dumped = dataset.model_dump()
+        for key, value in kwargs.items():
+            assert dumped[key] == value
+        assert dumped["identifier"] == dataset.identifier
+
+    def test_all_fields_have_titles(self) -> None:
+        """Every GoldenDataset field has a non-empty title for human-readable display."""
+        for field_name, field_info in GoldenDataset.model_fields.items():
+            assert field_info.title is not None, f"Field '{field_name}' is missing a title"
+            assert field_info.title != "", f"Field '{field_name}' has an empty title"
+
 
 class TestExampleResult:
     def test_construction_with_required_fields(self) -> None:
@@ -525,11 +541,8 @@ class TestEvalRun:
         run = EvalRun(**_eval_run_kwargs())
 
         # Dataset identification
-        assert run.dataset_scope == DATASET_SCOPE
-        assert run.dataset_authors == [AUTHOR]
-        assert run.dataset_identifier == DATASET_IDENTIFIER
-        assert run.dataset_version == DATASET_VERSION
-        assert run.dataset_date == DATASET_DATE
+        expected_dataset = GoldenDataset(**_eval_run_kwargs()["golden_dataset"])
+        assert run.golden_dataset.model_dump() == expected_dataset.model_dump()
 
         # Run metadata
         assert run.run_timestamp == RUN_TIMESTAMP
@@ -541,11 +554,11 @@ class TestEvalRun:
         assert run.aggregate_scores == {"overall": {}}
         assert run.overall_pass_rate == 0.0
 
-    def test_missing_dataset_version_raises(self) -> None:
-        """Missing dataset_version raises error."""
+    def test_missing_golden_dataset_raises(self) -> None:
+        """Missing golden_dataset raises error."""
         with pytest.raises(ValidationError):
             kwargs = _eval_run_kwargs()
-            del kwargs["dataset_version"]
+            del kwargs["golden_dataset"]
             EvalRun(**kwargs)  # type: ignore[call-arg]
 
     def test_aggregate_scores_structure(self) -> None:

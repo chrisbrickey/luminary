@@ -151,10 +151,12 @@ def save_eval_run(eval_run: EvalRun, output_dir: Path) -> Path:
     filename = f"{timestamp}.json"
     filepath = output_dir / filename
 
-    # Save EvalRun as JSON
     try:
         with filepath.open("w") as f:
-            json.dump(eval_run.model_dump(), f, indent=2)
+            # Serialize and persist EvalRun object to JSON file
+            #  - golden dataset examples excluded to avoid duplicating entire golden dataset into eval artifact
+            #  - order is determined by pydantic schema (model_dump default)
+            json.dump(eval_run.model_dump(exclude={"golden_dataset": {"examples"}}), f, indent=2)
     except PermissionError as e:
         raise PermissionError(
             f"Permission denied: Cannot write to file '{filepath}'. Check file permissions and retry."
@@ -247,7 +249,7 @@ def format_eval_report_stub(artifact_path: Path) -> str:
     # Auto-fill Source Data section
     result = result.replace(
         "- **Eval Run Artifact:** `evals/runs/{filename}.json`\n- **Dataset Identifier:** `evals/golden/{filename}.json`",
-        f"- **Eval Run Artifact:** `{artifact_path}`\n- **Dataset Identifier:** `{eval_run.dataset_identifier}`",
+        f"- **Eval Run Artifact:** `{artifact_path}`\n- **Dataset Identifier:** `{eval_run.golden_dataset.identifier}`",
     )
 
     # Auto-fill System Snapshot section — skip any field absent in the artifact for backwards compatibility

@@ -68,7 +68,7 @@ INVALID_SCHEMA_JSON = {
 }
 
 INVALID_EVAL_RUN_SCHEMA_JSON = {
-    "dataset_scope": SCOPE,
+    "golden_dataset": {"scope": SCOPE},
     # Missing all other required EvalRun fields
 }
 
@@ -76,11 +76,22 @@ MALFORMED_JSON_CONTENT = '{"version": "1.0", "created_date": "2024-05-15"'  # Mi
 
 # Test data for save_eval_run
 VALID_EVAL_RUN_DICT = {
-    "dataset_scope": SCOPE,
-    "dataset_authors": [AUTHOR_A],
-    "dataset_identifier": f"{SCOPE}_{AUTHOR_A}_v{VERSION_OLD}_{DATE_OLD}",
-    "dataset_version": VERSION_OLD,
-    "dataset_date": DATE_OLD,
+    "golden_dataset": {
+        "scope": SCOPE,
+        "authors": [AUTHOR_A],
+        "version": VERSION_OLD,
+        "created_date": DATE_OLD,
+        "description": "Test dataset for unit tests",
+        "examples": [
+            {
+                "id": "test_example_001",
+                "question": "Sample question for testing?",
+                "author": AUTHOR_A,
+                "language": ENGLISH_ISO_CODE,
+                "expected_chunk_ids": ["chunk_abc123"],
+            }
+        ],
+    },
     "run_timestamp": "2025-06-15T14:30:45+00:00",
     "system_snapshot": {
         "commit": "abc123def456",
@@ -410,8 +421,8 @@ def test_save_eval_run_generates_valid_filename(tmp_path: Path) -> None:
     assert result_path.is_file()
 
 
-def test_save_eval_run_preserves_all_fields(tmp_path: Path) -> None:
-    """Test that save_eval_run preserves all EvalRun fields in JSON output."""
+def test_save_eval_run_preserves_required_fields(tmp_path: Path) -> None:
+    """Test that save_eval_run preserves required EvalRun fields in JSON output."""
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
 
     result_path = save_eval_run(eval_run, tmp_path)
@@ -420,19 +431,21 @@ def test_save_eval_run_preserves_all_fields(tmp_path: Path) -> None:
     saved_data = json.loads(result_path.read_text())
     loaded_eval_run = EvalRun(**saved_data)
 
-    # Verify all top-level fields are preserved
-    assert loaded_eval_run.dataset_scope == eval_run.dataset_scope
-    assert loaded_eval_run.dataset_authors == eval_run.dataset_authors
-    assert loaded_eval_run.dataset_identifier == eval_run.dataset_identifier
-    assert loaded_eval_run.dataset_version == eval_run.dataset_version
-    assert loaded_eval_run.dataset_date == eval_run.dataset_date
+    # Verify top-level fields are preserved
     assert loaded_eval_run.run_timestamp == eval_run.run_timestamp
     assert loaded_eval_run.system_snapshot == eval_run.system_snapshot
     assert loaded_eval_run.effective_thresholds == eval_run.effective_thresholds
     assert loaded_eval_run.aggregate_scores == eval_run.aggregate_scores
     assert loaded_eval_run.overall_pass_rate == eval_run.overall_pass_rate
 
-    # Verify example_results structure is preserved
+    # Verify nested .golden_dataset fields are preserved
+    # GoldenExamples (golden_dataset.examples) are intentionally excluded from the serialized eval run artifact (json)
+    # to avoid duplication of entire golden datasets. So we expect the deserialized .examples list to be empty.
+    # But we expect all other golden dataset fields to be present.
+    assert saved_data["golden_dataset"].get("examples", []) == []
+    assert loaded_eval_run.golden_dataset.model_dump(exclude={"examples"}) == eval_run.golden_dataset.model_dump(exclude={"examples"})
+
+    # Verify nested .example_results structure is preserved
     assert len(loaded_eval_run.example_results) == len(eval_run.example_results)
     for loaded_ex, orig_ex in zip(loaded_eval_run.example_results, eval_run.example_results):
         assert loaded_ex.example_id == orig_ex.example_id
@@ -497,8 +510,8 @@ def test_load_eval_run_valid(tmp_path: Path) -> None:
     result = load_eval_run(artifact_file)
 
     assert isinstance(result, EvalRun)
-    assert result.dataset_scope == SCOPE
-    assert result.dataset_version == VERSION_OLD
+    assert result.golden_dataset.scope == SCOPE
+    assert result.golden_dataset.version == VERSION_OLD
     assert result.overall_pass_rate == VALID_EVAL_RUN_DICT["overall_pass_rate"]
     assert len(result.example_results) == 1
     assert result.example_results[0].example_id == "test_example_001"
@@ -601,7 +614,7 @@ def test_format_eval_report_stub_includes_metadata(tmp_path: Path) -> None:
 
     # Verify Source Data section contains eval run artifact path and dataset identifier
     assert str(artifact_path) in result, "Should include eval artifact path"
-    assert eval_run.dataset_identifier in result, f"Should include dataset identifier: {eval_run.dataset_identifier}"
+    assert eval_run.golden_dataset.identifier in result, f"Should include dataset identifier: {eval_run.golden_dataset.identifier}"
 
     # Verify System Snapshot section contains all required fields
     sv = eval_run.system_snapshot
