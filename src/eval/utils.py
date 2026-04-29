@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.configs.authors import DEFAULT_AUTHOR
-from src.schemas.eval import GoldenDataset, EvalRun, SystemVersion
+from src.schemas.eval import GoldenDataset, EvalRun, SystemSnapshot
 
 
 #--- golden dataset utilities ---
@@ -250,9 +250,9 @@ def format_eval_report_stub(artifact_path: Path) -> str:
         f"- **Eval Run Artifact:** `{artifact_path}`\n- **Dataset Identifier:** `{eval_run.dataset_identifier}`",
     )
 
-    # Auto-fill System Version section — skip any field absent in the artifact for backwards compatibility
-    sv = eval_run.system_version
-    for field_name, field_info in SystemVersion.model_fields.items():
+    # Auto-fill System Snapshot section — skip any field absent in the artifact for backwards compatibility
+    sv = eval_run.system_snapshot
+    for field_name, field_info in SystemSnapshot.model_fields.items():
         value = getattr(sv, field_name)
         if value is not None and (title := field_info.title) is not None:
             result = re.sub(

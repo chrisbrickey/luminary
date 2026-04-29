@@ -95,7 +95,7 @@ EVALUATION (on-demand quality measurement)
  metrics/                 deterministic graders such as retrieval_relevance, citation_accuracy, language compliance
       │
       ▼
- EvalRun                  machine-readable artifact with all results, scores, and system version (saved to evals/runs/)
+ EvalRun                  machine-readable artifact with all results, scores, and system snapshot (saved to evals/runs/)
 ```
 
 

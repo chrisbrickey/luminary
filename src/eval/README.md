@@ -21,7 +21,7 @@
 
 **Eval Artifacts:**
 - Eval runs are saved to `evals/runs/` (gitignored) as timestamped JSON files with filename format: `{YYYY-MM-DD}T{HH-MM-SS}.json`.
-- Contains all example results, aggregate scores, and system version metadata for traceability
+- Contains all example results, aggregate scores, and system snapshot metadata for traceability
 
 ## Run the evaluation harness
 

@@ -163,7 +163,7 @@ class ExampleResult(BaseModel):
     passed: bool = Field(..., description="True if all required metrics above threshold")
 
 
-class SystemVersion(BaseModel):
+class SystemSnapshot(BaseModel):
     """System configuration captured at eval run time for reproducibility.
 
     All fields are optional for backwards compatability. This permits loading
@@ -183,13 +183,13 @@ class EvalRun(BaseModel):
 
     This is the machine-readable output saved to disk after running the evaluation
     harness. It contains all metadata needed for reproducibility and comparison:
-    - Dataset and system version info
+    - Dataset and system snapshot info
     - Individual results for every test case
     - Aggregated scores across all examples
     - Overall pass rate
 
     Design notes:
-    - system_version captures reproducibility info (model, commit hash, config)
+    - system_snapshot captures reproducibility info (model, commit hash, config)
     - example_results is a list instead of structure with constant access (e.g. dict) because:
         - Order matters in eval runs. We want to see results in the order examples were processed.
         - JSON serialization is simpler with lists.
@@ -211,7 +211,7 @@ class EvalRun(BaseModel):
     run_timestamp: str = Field(..., description="ISO 8601 timestamp with timezone")
 
     # System configuration (for reproducibility)
-    system_version: SystemVersion = Field(..., description="System config: chat model, commit, etc.")
+    system_snapshot: SystemSnapshot = Field(..., description="System config: chat model, commit, etc.")
     effective_thresholds: dict[str, float] = Field(..., description="Thresholds used for pass/fail (metric_name -> threshold)")
 
     # Results

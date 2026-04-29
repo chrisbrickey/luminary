@@ -16,15 +16,15 @@ from src.configs.common import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
 from src.configs.vectorstore_config import DEFAULT_K
 from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult, SystemVersion
+from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult, SystemSnapshot
 from src.utils.chunker import DEFAULT_CHUNK_SIZE
 
 # Auto-register all metrics; Skip unused import warning
 import src.eval.metrics  # noqa: F401
 
 
-def get_system_version() -> SystemVersion:
-    """Capture system version for reproducibility.
+def get_system_snapshot() -> SystemSnapshot:
+    """Capture system snapshot for reproducibility.
 
     If git is unavailable or not in a repo, commit will be "unknown".
     This method is intentionally public for testing and extensibility.
@@ -38,7 +38,7 @@ def get_system_version() -> SystemVersion:
     except (subprocess.CalledProcessError, FileNotFoundError):
         commit = "unknown"
 
-    return SystemVersion(
+    return SystemSnapshot(
         commit=commit,
         timestamp=datetime.now(timezone.utc).isoformat(),
         chat_model=DEFAULT_CHAT_MODEL,
@@ -302,8 +302,8 @@ def run_eval(
     # Calculate overall pass rate
     overall_pass_rate = passed_count / len(example_results) if example_results else 0.0
 
-    # Capture system version
-    system_version = get_system_version()
+    # Capture system snapshot
+    system_snapshot = get_system_snapshot()
 
     # Create and return EvalRun
     return EvalRun(
@@ -313,7 +313,7 @@ def run_eval(
         dataset_version=golden_dataset.version,
         dataset_date=golden_dataset.created_date,
         run_timestamp=datetime.now(timezone.utc).isoformat(),
-        system_version=system_version,
+        system_snapshot=system_snapshot,
         effective_thresholds=effective_thresholds,
         example_results=example_results,
         aggregate_scores=aggregate_scores,

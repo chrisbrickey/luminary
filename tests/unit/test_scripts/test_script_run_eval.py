@@ -95,7 +95,7 @@ def create_mock_eval_run(
         dataset_version=dataset_version,
         dataset_date=dataset_date,
         run_timestamp=EVAL_RUN_TIMESTAMP,
-        system_version={"commit": COMMIT, "timestamp": EVAL_RUN_TIMESTAMP, "chat_model": CHAT_MODEL, "embedding_model": EMBEDDING_MODEL, "retrieval_chunk_count": CHUNK_COUNT, "retrieval_chunk_size": CHUNK_SIZE},
+        system_snapshot={"commit": COMMIT, "timestamp": EVAL_RUN_TIMESTAMP, "chat_model": CHAT_MODEL, "embedding_model": EMBEDDING_MODEL, "retrieval_chunk_count": CHUNK_COUNT, "retrieval_chunk_size": CHUNK_SIZE},
         effective_thresholds=effective_thresholds,
         example_results=example_results,
         aggregate_scores=aggregate_scores,
