@@ -29,6 +29,9 @@ SCORE = 0.85
 THRESHOLD = 0.8
 
 CHAT_MODEL = "llama3"
+EMBEDDING_MODEL = "test-embedding"
+CHUNK_COUNT = "7"
+CHUNK_SIZE = "1000"
 COMMIT = "def456"
 EVAL_RUN_TIMESTAMP = "2025-08-01T12:00:00Z"
 
@@ -92,7 +95,7 @@ def create_mock_eval_run(
         dataset_version=dataset_version,
         dataset_date=dataset_date,
         run_timestamp=EVAL_RUN_TIMESTAMP,
-        system_version={"chat_model": CHAT_MODEL, "commit": COMMIT, "timestamp": EVAL_RUN_TIMESTAMP},
+        system_version={"commit": COMMIT, "timestamp": EVAL_RUN_TIMESTAMP, "chat_model": CHAT_MODEL, "embedding_model": EMBEDDING_MODEL, "retrieval_chunk_count": CHUNK_COUNT, "retrieval_chunk_size": CHUNK_SIZE},
         effective_thresholds=effective_thresholds,
         example_results=example_results,
         aggregate_scores=aggregate_scores,
@@ -103,7 +106,7 @@ def create_mock_eval_run(
 class TestPrintSummaryTable:
     """Test print_summary_table() function."""
 
-    def test_prints_dataset_metadata(
+    def test_prints_metadata(
         self,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -113,26 +116,17 @@ class TestPrintSummaryTable:
         print_summary_table(eval_run)
 
         captured = capsys.readouterr()
-        assert DATASET_IDENTIFIER in captured.out
-        assert f"Scope: {DATASET_SCOPE}" in captured.out
-        assert f"Authors: {"_".join(DATASET_AUTHORS)}" in captured.out
-        assert f"Version: {DATASET_VERSION}" in captured.out
-        assert f"Date: {DATASET_DATE}" in captured.out
-
-    def test_prints_other_metadata_and_symbols(
-        self,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        """Test that system version information is displayed."""
-        eval_run = create_mock_eval_run()
-
-        print_summary_table(eval_run)
-
-        captured = capsys.readouterr()
-        assert f"Chat Model: {CHAT_MODEL}" in captured.out
-        assert f"Git Commit: {COMMIT}" in captured.out
+        assert f"EVALUATED DATASET: {DATASET_IDENTIFIER}" in captured.out
         assert f"EVAL RUN TIMESTAMP: {EVAL_RUN_TIMESTAMP}" in captured.out
-        assert "✅" in captured.out # pass symbol when score >= threshold
+        assert f"commit: {COMMIT}" in captured.out
+        assert f"timestamp: {EVAL_RUN_TIMESTAMP}" in captured.out
+        assert f"chat_model: {CHAT_MODEL}" in captured.out
+        assert f"embedding_model: {EMBEDDING_MODEL}" in captured.out
+        assert f"retrieval_chunk_count: {CHUNK_COUNT}" in captured.out
+        assert f"retrieval_chunk_size: {CHUNK_SIZE}" in captured.out
+
+        # pass symbol when score >= threshold
+        assert "✅" in captured.out
 
         # Verify that language breakdown and cross-langugage metrics not displayed when not present in the input
         assert f"ONLY" not in captured.out
@@ -286,13 +280,13 @@ class TestPrintSummaryTable:
     ) -> None:
         """Test that multiple authors are displayed correctly."""
         dataset_authors = [FAKE_AUTHOR_A, FAKE_AUTHOR_B]
-        identifier = f"{DATASET_SCOPE}_{"_".join(dataset_authors)}_v{DATASET_VERSION}_{DATASET_DATE}"
-        eval_run = create_mock_eval_run(dataset_identifier=identifier, dataset_authors=dataset_authors)
+        multi_author_identifier = f"{DATASET_SCOPE}_{"_".join(dataset_authors)}_v{DATASET_VERSION}_{DATASET_DATE}"
+        eval_run = create_mock_eval_run(dataset_identifier=multi_author_identifier, dataset_authors=dataset_authors)
 
         print_summary_table(eval_run)
 
         captured = capsys.readouterr()
-        assert f"Authors: {", ".join(dataset_authors)}" in captured.out
+        assert multi_author_identifier in captured.out
 
     def test_formats_multiple_metrics_sorted_alphabetically(
         self,

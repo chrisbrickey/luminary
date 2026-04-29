@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE
 from src.eval.utils import discover_latest_golden_dataset, load_eval_run, load_golden_dataset, save_eval_run, format_eval_report_stub
-from src.schemas.eval import EvalRun, GoldenDataset
+from src.schemas.eval import EvalRun, GoldenDataset, SystemVersion
 
 # --- Pytest fixtures ---
 
@@ -83,11 +83,12 @@ VALID_EVAL_RUN_DICT = {
     "dataset_date": DATE_OLD,
     "run_timestamp": "2025-06-15T14:30:45+00:00",
     "system_version": {
+        "commit": "abc123def456",
+        "timestamp": "2025-06-15T14:30:45+00:00",
         "chat_model": "test-model",
         "embedding_model": "test-embedding",
-        "commit": "abc123def456",
-        "k": "5",
-        "chunk_size": "1000"
+        "retrieval_chunk_count": "10",
+        "retrieval_chunk_size": "700",
     },
     "effective_thresholds": {
         "test_metric": 0.7,
@@ -603,10 +604,12 @@ def test_format_eval_report_stub_includes_metadata(tmp_path: Path) -> None:
     assert eval_run.dataset_identifier in result, f"Should include dataset identifier: {eval_run.dataset_identifier}"
 
     # Verify System Version section contains all required fields
-    assert eval_run.system_version["chat_model"] in result, "Should include chat_model"
-    assert eval_run.system_version["embedding_model"] in result, "Should include embedding_model"
-    assert f"k={eval_run.system_version['k']}" in result, "Should include retrieval config k"
-    assert f"chunk_size={eval_run.system_version['chunk_size']}" in result, "Should include retrieval config chunk_size"
+    sv = eval_run.system_version
+    for field_name, field_info in SystemVersion.model_fields.items():
+        value = getattr(sv, field_name)
+        if value is not None:
+            expected = f"**{field_info.title}:** {value}"
+            assert expected in result, f"Should include {field_name} as '{expected}'"
 
 
 def test_format_eval_report_stub_includes_metrics_table(tmp_path: Path) -> None:
@@ -633,6 +636,48 @@ def test_format_eval_report_stub_includes_metrics_table(tmp_path: Path) -> None:
     # Verify overall pass rate is included and formatted as percentage
     expected_pass_rate = VALID_EVAL_RUN_DICT["overall_pass_rate"] * 100
     assert f"{expected_pass_rate:.1f}%" in result, "Should include overall pass rate as percentage"
+
+
+def test_format_eval_report_stub_skips_missing_system_version_fields(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub leaves placeholders intact for absent system_version fields.
+
+    Simulates a legacy artifact that only contains chat_model and commit — the three
+    fields added later (embedding_model, retrieval_chunk_count, retrieval_chunk_size) are absent from the JSON.
+    """
+    legacy_run = {**VALID_EVAL_RUN_DICT, "system_version": {"chat_model": "legacy-model", "commit": "old123"}}
+    artifact_path = tmp_path / "legacy_artifact.json"
+    artifact_path.write_text(json.dumps(legacy_run))
+
+    result = format_eval_report_stub(artifact_path)
+
+    # Present fields should be substituted
+    assert "legacy-model" in result, "chat_model should be pre-populated"
+    assert "old123" in result, "commit should be pre-populated"
+
+    # Absent fields should leave the template placeholder unchanged
+    assert "[nomic-embed-text|other]" in result, "embedding_model placeholder should remain"
+    assert "**Retrieval Chunk Count (k):** [value]" in result, "retrieval_chunk_count placeholder should remain"
+    assert "**Retrieval Chunk Size:** [value]" in result, "retrieval_chunk_size placeholder should remain"
+    assert "[ISO 8601]" in result, "timestamp placeholder should remain"
+
+
+def test_format_eval_report_stub_all_system_version_fields_absent(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub leaves all System Version placeholders intact
+    when system_version is an empty dict (e.g., very old artifact).
+    """
+    minimal_run = {**VALID_EVAL_RUN_DICT, "system_version": {}}
+    artifact_path = tmp_path / "minimal_artifact.json"
+    artifact_path.write_text(json.dumps(minimal_run))
+
+    result = format_eval_report_stub(artifact_path)
+
+    # All placeholders should remain unchanged
+    assert "[mistral|other]" in result, "chat_model placeholder should remain"
+    assert "[nomic-embed-text|other]" in result, "embedding_model placeholder should remain"
+    assert "**Retrieval Chunk Count (k):** [value]" in result, "retrieval_chunk_count placeholder should remain"
+    assert "**Retrieval Chunk Size:** [value]" in result, "retrieval_chunk_size placeholder should remain"
+    assert "[git-hash]" in result, "commit placeholder should remain"
+    assert "[ISO 8601]" in result, "timestamp placeholder should remain"
 
 
 def test_format_eval_report_stub_raises_on_missing_artifact(tmp_path: Path) -> None:

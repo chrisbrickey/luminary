@@ -22,9 +22,9 @@ from langchain_core.runnables import Runnable
 from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
-from src.eval.runner import run_eval
+from src.eval.runner import get_system_version, run_eval
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import EvalRun, GoldenDataset, GoldenExample
+from src.schemas.eval import EvalRun, GoldenDataset, GoldenExample, SystemVersion
 from tests.conftest import FakeChatModel
 
 
@@ -347,9 +347,29 @@ def test_eval_runner_end_to_end() -> None:
         )
 
     # Assert: Verify system version captured
-    assert "chat_model" in result.system_version
-    assert "commit" in result.system_version
-    assert "timestamp" in result.system_version
+    system_version = result.system_version
+    assert isinstance(system_version, SystemVersion)
+
+    for field_name in SystemVersion.model_fields:
+        assert getattr(system_version, field_name), (
+            f"Expected system_version.{field_name} to be set"
+        )
+
+
+def test_get_system_version_returns_all_fields() -> None:
+    """Integration test: get_system_version() wires all constants correctly.
+
+    The unit runner test mocks get_system_version, so this is the only test
+    that exercises the real function and verifies every field is populated.
+    """
+    result = get_system_version()
+
+    assert isinstance(result, SystemVersion)
+
+    for field_name in SystemVersion.model_fields:
+        assert getattr(result, field_name), (
+            f"Expected system_version.{field_name} to be set"
+        )
 
 
 def test_eval_runner_processes_multilingual_dataset() -> None:

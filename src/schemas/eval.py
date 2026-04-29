@@ -163,6 +163,21 @@ class ExampleResult(BaseModel):
     passed: bool = Field(..., description="True if all required metrics above threshold")
 
 
+class SystemVersion(BaseModel):
+    """System configuration captured at eval run time for reproducibility.
+
+    All fields are optional for backwards compatability. This permits loading
+    older eval artifact json files which may not include all of the current fields.
+    """
+
+    commit: str | None = Field(default=None, title="Commit", description="Git commit hash (short form) at run time")
+    timestamp: str | None = Field(default=None, title="Timestamp", description="ISO 8601 timestamp with timezone")
+    chat_model: str | None = Field(default=None, title="Chat Model", description="Name of the chat model used")
+    embedding_model: str | None = Field(default=None, title="Embedding Model", description="Name of the embedding model used")
+    retrieval_chunk_count: str | None = Field(default=None, title="Retrieval Chunk Count (k)", description="Number of chunks retrieved per query")
+    retrieval_chunk_size: str | None = Field(default=None, title="Retrieval Chunk Size", description="Maximum chunk size in characters")
+
+
 class EvalRun(BaseModel):
     """Complete results from running evaluation harness (the JSON artifact).
 
@@ -196,7 +211,7 @@ class EvalRun(BaseModel):
     run_timestamp: str = Field(..., description="ISO 8601 timestamp with timezone")
 
     # System configuration (for reproducibility)
-    system_version: dict[str, str] = Field(..., description="System config: model, commit, etc.")
+    system_version: SystemVersion = Field(..., description="System config: chat model, commit, etc.")
     effective_thresholds: dict[str, float] = Field(..., description="Thresholds used for pass/fail (metric_name -> threshold)")
 
     # Results

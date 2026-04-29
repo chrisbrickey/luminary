@@ -74,16 +74,11 @@ def print_summary_table(eval_run: EvalRun) -> None:
         eval_run: EvalRun object containing evaluation results
     """
     print("\n" + "=" * 70)
-    print("EVALUATED DATASET:")
-    print(f"  Identifier: {eval_run.dataset_identifier}")
-    print(f"  Scope: {eval_run.dataset_scope}")
-    print(f"  Authors: {', '.join(eval_run.dataset_authors)}")
-    print(f"  Version: {eval_run.dataset_version}")
-    print(f"  Date: {eval_run.dataset_date}")
+    print(f"EVALUATED DATASET: {eval_run.dataset_identifier}")
     print(f"\nEVAL RUN TIMESTAMP: {eval_run.run_timestamp}")
     print(f"\nSYSTEM CONFIGURATION:")
-    print(f"  Chat Model: {eval_run.system_version.get('chat_model', 'unknown')}")
-    print(f"  Git Commit: {eval_run.system_version.get('commit', 'unknown')}")
+    for field_name, value in eval_run.system_version.model_dump().items():
+        print(f"  {field_name}: {value if value is not None else 'unknown'}")
     print("=" * 70)
 
     # Overall scores

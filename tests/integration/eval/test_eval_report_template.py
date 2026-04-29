@@ -8,6 +8,8 @@ using test fixtures.
 import re
 from pathlib import Path
 
+from src.schemas.eval import SystemVersion
+
 
 # Template path (relative to project root)
 TEMPLATE_PATH = Path("docs/eval_reports/TEMPLATE.md")
@@ -48,6 +50,21 @@ def test_template_contains_required_sections() -> None:
 
     assert not missing_sections, (
         f"Template is missing {missing_sections} of the required sections: {REQUIRED_SECTIONS}."
+    )
+
+
+def test_template_contains_system_version_bullets() -> None:
+    """Test that TEMPLATE.md contains a bullet for every SystemVersion field."""
+    template_content = TEMPLATE_PATH.read_text()
+
+    missing_bullets = [
+        f"- **{info.title}:**"
+        for info in SystemVersion.model_fields.values()
+        if f"- **{info.title}:**" not in template_content
+    ]
+
+    assert not missing_bullets, (
+        f"Template is missing System Version bullets: {missing_bullets}"
     )
 
 
