@@ -328,12 +328,12 @@ class TestRunEval:
         assert result.example_results[1].passed is False # 0.5 < 0.8 -> fail
         assert result.example_results[2].passed is True # 0.85 >= 0.8 -> pass
 
-    @patch("src.eval.runner.get_system_version")
+    @patch("src.eval.runner.get_system_snapshot")
     @patch("src.eval.runner.METRIC_REGISTRY")
-    def test_run_eval_captures_system_version(
-        self, mock_registry: Mock, mock_get_system_version: Mock
+    def test_run_eval_captures_system_snapshot(
+        self, mock_registry: Mock, mock_get_system_snapshot: Mock
     ) -> None:
-        """system_version has chat_model, commit fields."""
+        """system_snapshot has chat_model, commit fields."""
         # Arrange
         chat_model: str = "test-model-v2"
         commit: str = "abc123def456"
@@ -349,8 +349,8 @@ class TestRunEval:
         )
         mock_registry.__iter__ = Mock(side_effect=lambda: iter([metric_spec]))
 
-        from src.schemas.eval import SystemVersion
-        expected_system_version = SystemVersion(
+        from src.schemas.eval import SystemSnapshot
+        expected_system_snapshot = SystemSnapshot(
             commit=commit,
             timestamp="2025-06-15T14:30:45+00:00",
             chat_model=chat_model,
@@ -358,7 +358,7 @@ class TestRunEval:
             retrieval_chunk_count="6",
             retrieval_chunk_size="800",
         )
-        mock_get_system_version.return_value = expected_system_version
+        mock_get_system_snapshot.return_value = expected_system_snapshot
 
         example = GoldenExample(**_golden_example_kwargs())
         dataset = GoldenDataset(**_golden_dataset_kwargs(authors=[TEST_AUTHOR_1], examples=[example]))
@@ -373,10 +373,10 @@ class TestRunEval:
         result = run_eval(dataset, chains)
 
         # Assert
-        #  run_eval() calls get_system_version(); if it didn't, the mock wouldn't be hit
+        #  run_eval() calls get_system_snapshot(); if it didn't, the mock wouldn't be hit
         #  run_eval() uses the return value instead of ignoring it
         #  run_eval() assigns it to the correct field
-        assert result.system_version == expected_system_version
+        assert result.system_snapshot == expected_system_snapshot
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_uses_custom_metric_thresholds(

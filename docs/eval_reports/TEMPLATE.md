@@ -9,7 +9,7 @@ The pair of eval run and golden dataset that were used as the input to this repo
 - **Dataset Identifier:** `evals/golden/{filename}.json`
 
 
-## System Version
+## System Snapshot
 - **Commit:** [git-hash]
 - **Timestamp:** [ISO 8601]
 - **Chat Model:** [mistral|other]

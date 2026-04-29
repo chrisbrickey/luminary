@@ -22,9 +22,9 @@ from langchain_core.runnables import Runnable
 from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
-from src.eval.runner import get_system_version, run_eval
+from src.eval.runner import get_system_snapshot, run_eval
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import EvalRun, GoldenDataset, GoldenExample, SystemVersion
+from src.schemas.eval import EvalRun, GoldenDataset, GoldenExample, SystemSnapshot
 from tests.conftest import FakeChatModel
 
 
@@ -346,29 +346,29 @@ def test_eval_runner_end_to_end() -> None:
             f"Expected metric '{metric_name}' in overall aggregate scores"
         )
 
-    # Assert: Verify system version captured
-    system_version = result.system_version
-    assert isinstance(system_version, SystemVersion)
+    # Assert: Verify system snapshot captured
+    system_snapshot = result.system_snapshot
+    assert isinstance(system_snapshot, SystemSnapshot)
 
-    for field_name in SystemVersion.model_fields:
-        assert getattr(system_version, field_name), (
-            f"Expected system_version.{field_name} to be set"
+    for field_name in SystemSnapshot.model_fields:
+        assert getattr(system_snapshot, field_name), (
+            f"Expected system_snapshot.{field_name} to be set"
         )
 
 
-def test_get_system_version_returns_all_fields() -> None:
-    """Integration test: get_system_version() wires all constants correctly.
+def test_get_system_snapshot_returns_all_fields() -> None:
+    """Integration test: get_system_snapshot() wires all constants correctly.
 
-    The unit runner test mocks get_system_version, so this is the only test
+    The unit runner test mocks get_system_snapshot, so this is the only test
     that exercises the real function and verifies every field is populated.
     """
-    result = get_system_version()
+    result = get_system_snapshot()
 
-    assert isinstance(result, SystemVersion)
+    assert isinstance(result, SystemSnapshot)
 
-    for field_name in SystemVersion.model_fields:
+    for field_name in SystemSnapshot.model_fields:
         assert getattr(result, field_name), (
-            f"Expected system_version.{field_name} to be set"
+            f"Expected system_snapshot.{field_name} to be set"
         )
 
 

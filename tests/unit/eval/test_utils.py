@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE
 from src.eval.utils import discover_latest_golden_dataset, load_eval_run, load_golden_dataset, save_eval_run, format_eval_report_stub
-from src.schemas.eval import EvalRun, GoldenDataset, SystemVersion
+from src.schemas.eval import EvalRun, GoldenDataset, SystemSnapshot
 
 # --- Pytest fixtures ---
 
@@ -82,7 +82,7 @@ VALID_EVAL_RUN_DICT = {
     "dataset_version": VERSION_OLD,
     "dataset_date": DATE_OLD,
     "run_timestamp": "2025-06-15T14:30:45+00:00",
-    "system_version": {
+    "system_snapshot": {
         "commit": "abc123def456",
         "timestamp": "2025-06-15T14:30:45+00:00",
         "chat_model": "test-model",
@@ -427,7 +427,7 @@ def test_save_eval_run_preserves_all_fields(tmp_path: Path) -> None:
     assert loaded_eval_run.dataset_version == eval_run.dataset_version
     assert loaded_eval_run.dataset_date == eval_run.dataset_date
     assert loaded_eval_run.run_timestamp == eval_run.run_timestamp
-    assert loaded_eval_run.system_version == eval_run.system_version
+    assert loaded_eval_run.system_snapshot == eval_run.system_snapshot
     assert loaded_eval_run.effective_thresholds == eval_run.effective_thresholds
     assert loaded_eval_run.aggregate_scores == eval_run.aggregate_scores
     assert loaded_eval_run.overall_pass_rate == eval_run.overall_pass_rate
@@ -580,7 +580,7 @@ def test_format_eval_report_stub_includes_all_sections(tmp_path: Path) -> None:
 
     assert "# Eval Report" in result
     assert "## Source Data" in result
-    assert "## System Version" in result
+    assert "## System Snapshot" in result
     assert "## Eval Run Summary" in result
     assert "## Issue Analysis" in result
     assert "## Changes Made" in result
@@ -603,9 +603,9 @@ def test_format_eval_report_stub_includes_metadata(tmp_path: Path) -> None:
     assert str(artifact_path) in result, "Should include eval artifact path"
     assert eval_run.dataset_identifier in result, f"Should include dataset identifier: {eval_run.dataset_identifier}"
 
-    # Verify System Version section contains all required fields
-    sv = eval_run.system_version
-    for field_name, field_info in SystemVersion.model_fields.items():
+    # Verify System Snapshot section contains all required fields
+    sv = eval_run.system_snapshot
+    for field_name, field_info in SystemSnapshot.model_fields.items():
         value = getattr(sv, field_name)
         if value is not None:
             expected = f"**{field_info.title}:** {value}"
@@ -638,13 +638,13 @@ def test_format_eval_report_stub_includes_metrics_table(tmp_path: Path) -> None:
     assert f"{expected_pass_rate:.1f}%" in result, "Should include overall pass rate as percentage"
 
 
-def test_format_eval_report_stub_skips_missing_system_version_fields(tmp_path: Path) -> None:
-    """Test that format_eval_report_stub leaves placeholders intact for absent system_version fields.
+def test_format_eval_report_stub_skips_missing_system_snapshot_fields(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub leaves placeholders intact for absent system_snapshot fields.
 
     Simulates a legacy artifact that only contains chat_model and commit — the three
     fields added later (embedding_model, retrieval_chunk_count, retrieval_chunk_size) are absent from the JSON.
     """
-    legacy_run = {**VALID_EVAL_RUN_DICT, "system_version": {"chat_model": "legacy-model", "commit": "old123"}}
+    legacy_run = {**VALID_EVAL_RUN_DICT, "system_snapshot": {"chat_model": "legacy-model", "commit": "old123"}}
     artifact_path = tmp_path / "legacy_artifact.json"
     artifact_path.write_text(json.dumps(legacy_run))
 
@@ -661,11 +661,11 @@ def test_format_eval_report_stub_skips_missing_system_version_fields(tmp_path: P
     assert "[ISO 8601]" in result, "timestamp placeholder should remain"
 
 
-def test_format_eval_report_stub_all_system_version_fields_absent(tmp_path: Path) -> None:
-    """Test that format_eval_report_stub leaves all System Version placeholders intact
-    when system_version is an empty dict (e.g., very old artifact).
+def test_format_eval_report_stub_all_system_snapshot_fields_absent(tmp_path: Path) -> None:
+    """Test that format_eval_report_stub leaves all System Snapshot placeholders intact
+    when system_snapshot is an empty dict (e.g., very old artifact).
     """
-    minimal_run = {**VALID_EVAL_RUN_DICT, "system_version": {}}
+    minimal_run = {**VALID_EVAL_RUN_DICT, "system_snapshot": {}}
     artifact_path = tmp_path / "minimal_artifact.json"
     artifact_path.write_text(json.dumps(minimal_run))
 

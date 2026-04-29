@@ -8,7 +8,7 @@ using test fixtures.
 import re
 from pathlib import Path
 
-from src.schemas.eval import SystemVersion
+from src.schemas.eval import SystemSnapshot
 
 
 # Template path (relative to project root)
@@ -18,7 +18,7 @@ TEMPLATE_PATH = Path("docs/eval_reports/TEMPLATE.md")
 REQUIRED_SECTIONS = [
     "# Eval Report",
     "## Source Data",
-    "## System Version",
+    "## System Snapshot",
     "## Eval Run Summary",
     "## Issue Analysis",
     "## Changes Made",
@@ -53,18 +53,18 @@ def test_template_contains_required_sections() -> None:
     )
 
 
-def test_template_contains_system_version_bullets() -> None:
-    """Test that TEMPLATE.md contains a bullet for every SystemVersion field."""
+def test_template_contains_system_snapshot_bullets() -> None:
+    """Test that TEMPLATE.md contains a bullet for every SystemSnapshot field."""
     template_content = TEMPLATE_PATH.read_text()
 
     missing_bullets = [
         f"- **{info.title}:**"
-        for info in SystemVersion.model_fields.values()
+        for info in SystemSnapshot.model_fields.values()
         if f"- **{info.title}:**" not in template_content
     ]
 
     assert not missing_bullets, (
-        f"Template is missing System Version bullets: {missing_bullets}"
+        f"Template is missing System Snapshot bullets: {missing_bullets}"
     )
 
 

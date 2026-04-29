@@ -77,7 +77,7 @@ def print_summary_table(eval_run: EvalRun) -> None:
     print(f"EVALUATED DATASET: {eval_run.dataset_identifier}")
     print(f"\nEVAL RUN TIMESTAMP: {eval_run.run_timestamp}")
     print(f"\nSYSTEM CONFIGURATION:")
-    for field_name, value in eval_run.system_version.model_dump().items():
+    for field_name, value in eval_run.system_snapshot.model_dump().items():
         print(f"  {field_name}: {value if value is not None else 'unknown'}")
     print("=" * 70)
 
