@@ -9,7 +9,7 @@ from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult, SystemSnapshot
+from src.schemas.eval import AggregateScores, EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult, SystemSnapshot
 
 # --- Pytest fixtures ---
 
@@ -122,8 +122,9 @@ def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
         },
         "effective_thresholds": {METRIC_NAME: FALLBACK_THRESHOLD},
         "example_results": [],
-        "aggregate_scores": {"overall": {}},
+        "aggregate_scores": {},
         "overall_pass_rate": 0.0,
+        "overall_average": 0.0,
     }
     defaults.update(overrides)
     return defaults
@@ -549,8 +550,9 @@ class TestEvalRun:
 
         # Results
         assert run.example_results == []
-        assert run.aggregate_scores == {"overall": {}}
+        assert run.aggregate_scores == AggregateScores()
         assert run.overall_pass_rate == 0.0
+        assert run.overall_average == 0.0
 
     def test_missing_golden_dataset_raises(self) -> None:
         """Missing golden_dataset raises error."""
@@ -561,16 +563,16 @@ class TestEvalRun:
 
     def test_aggregate_scores_structure(self) -> None:
         """Aggregate scores has expected nested structure."""
-        aggregate_scores = {
-            "overall": {"metric_a": 0.85, "metric_b": 0.90},
-            "by_language": {
+        aggregate_scores = AggregateScores(
+            averages_by_metric={"metric_a": 0.85, "metric_b": 0.90},
+            averages_by_language_and_metric={
                 ENGLISH_ISO_CODE: {"metric_a": 0.87, "metric_b": 0.92},
-                FRENCH_ISO_CODE: {"metric_a": 0.83, "metric_b": 0.88}
+                FRENCH_ISO_CODE: {"metric_a": 0.83, "metric_b": 0.88},
             },
-            "cross_language": {"translation_consistency": 0.75}
-        }
+            cross_language={"translation_consistency": 0.75},
+        )
         run = EvalRun(**_eval_run_kwargs(aggregate_scores=aggregate_scores))
-        assert "overall" in run.aggregate_scores
-        assert "by_language" in run.aggregate_scores
-        assert "cross_language" in run.aggregate_scores
-        assert run.aggregate_scores["by_language"][ENGLISH_ISO_CODE]["metric_a"] == 0.87
+        assert "metric_a" in run.aggregate_scores.averages_by_metric
+        assert ENGLISH_ISO_CODE in run.aggregate_scores.averages_by_language_and_metric
+        assert "translation_consistency" in run.aggregate_scores.cross_language
+        assert run.aggregate_scores.averages_by_language_and_metric[ENGLISH_ISO_CODE]["metric_a"] == 0.87

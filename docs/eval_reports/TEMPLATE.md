@@ -19,13 +19,14 @@ The pair of eval run and golden dataset that were used as the input to this repo
 
 ## Eval Run Summary
 
+**Overall pass rate:** [XX%]
+**Overall average:** [X.XX]
+
 | Metric Name | Effective Threshold | Score | Status    |
 |-------------|---------------------|-------|-----------|
 | ...         | ...                 | ... | Pass/Fail |
 | ...         | ...                 | ... | Pass/Fail |
 | ...         | ...                 | ... | Pass/Fail |
-
-**Overall pass rate:** [XX%] ([N]/[M] examples)
 
 
 ## Issue Analysis

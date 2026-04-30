@@ -13,7 +13,7 @@ import pytest
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B
-from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
+from src.schemas.eval import AggregateScores, EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult
 from src.schemas.chat import ChatResponse
 from scripts.run_eval import print_summary_table
 
@@ -53,7 +53,8 @@ def create_mock_eval_run(
     dataset_version: str = DATASET_VERSION,
     dataset_date: str = DATASET_DATE,
     overall_pass_rate: float = 0.75,
-    aggregate_scores: dict | None = None,
+    overall_average: float = 0.80,
+    aggregate_scores: AggregateScores | None = None,
     effective_thresholds: dict | None = None,
     num_examples: int = 1,
 ) -> EvalRun:
@@ -64,7 +65,7 @@ def create_mock_eval_run(
         dataset_authors = DATASET_AUTHORS
 
     if aggregate_scores is None:
-        aggregate_scores = {"overall": {METRIC_NAME: SCORE}}
+        aggregate_scores = AggregateScores(averages_by_metric={METRIC_NAME: SCORE})
 
     if effective_thresholds is None:
         effective_thresholds = {METRIC_NAME: THRESHOLD}
@@ -119,6 +120,7 @@ def create_mock_eval_run(
         example_results=example_results,
         aggregate_scores=aggregate_scores,
         overall_pass_rate=overall_pass_rate,
+        overall_average=overall_average,
     )
 
 
@@ -156,7 +158,7 @@ class TestPrintSummaryTable:
     ) -> None:
         """Test that ❌ appears when score is below threshold."""
         eval_run = create_mock_eval_run(
-            aggregate_scores={"overall": {METRIC_NAME: 0.65}},
+            aggregate_scores=AggregateScores(averages_by_metric={METRIC_NAME: 0.65}),
             effective_thresholds={METRIC_NAME: THRESHOLD},
         )
 
@@ -172,13 +174,13 @@ class TestPrintSummaryTable:
         """Test that by-language breakdown is displayed when available."""
         french_score, english_score = 0.88, 0.82
         eval_run = create_mock_eval_run(
-            aggregate_scores={
-                "overall": {METRIC_NAME: SCORE},
-                "by_language": {
+            aggregate_scores=AggregateScores(
+                averages_by_metric={METRIC_NAME: SCORE},
+                averages_by_language_and_metric={
                     FRENCH_ISO_CODE: {METRIC_NAME: french_score},
-                    ENGLISH_ISO_CODE : {METRIC_NAME: english_score},
+                    ENGLISH_ISO_CODE: {METRIC_NAME: english_score},
                 },
-            },
+            ),
             effective_thresholds={METRIC_NAME: THRESHOLD},
         )
 
@@ -197,11 +199,11 @@ class TestPrintSummaryTable:
         """Test that cross-language metrics section appears when available."""
         name2, score2, threshold2,  = "translation_consistency", 0.78, 0.7
         eval_run = create_mock_eval_run(
-            aggregate_scores={
-                "overall": {METRIC_NAME: SCORE},
-                "cross_language": {name2 : score2},
-            },
-            effective_thresholds={ METRIC_NAME: THRESHOLD, name2: threshold2 },
+            aggregate_scores=AggregateScores(
+                averages_by_metric={METRIC_NAME: SCORE},
+                cross_language={name2: score2},
+            ),
+            effective_thresholds={METRIC_NAME: THRESHOLD, name2: threshold2},
         )
 
         print_summary_table(eval_run)
@@ -211,18 +213,17 @@ class TestPrintSummaryTable:
         assert f"{name2}" in captured.out
         assert f"{score2}" in captured.out
 
-    def test_prints_overall_scores_with_thresholds(
+    def test_prints_overall_averages_with_thresholds(
         self,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Test that overall scores are displayed with their thresholds."""
         name2, score2, threshold2,  = "answer_correctness", 0.72, 0.7
         eval_run = create_mock_eval_run(
-            aggregate_scores={
-                "overall": { METRIC_NAME: SCORE, name2: score2 }
-            },
-            effective_thresholds={ METRIC_NAME: THRESHOLD, name2: threshold2,
-            },
+            aggregate_scores=AggregateScores(
+                averages_by_metric={METRIC_NAME: SCORE, name2: score2},
+            ),
+            effective_thresholds={METRIC_NAME: THRESHOLD, name2: threshold2},
         )
 
         print_summary_table(eval_run)
@@ -257,7 +258,6 @@ class TestPrintSummaryTable:
         captured = capsys.readouterr()
         assert "OVERALL PASS RATE" in captured.out
         assert f"{pass_rate:.1%}" in captured.out
-        assert f"(3/{example_count} examples)" in captured.out
 
     def test_perfect_pass_rate_displays_correctly(
         self,
@@ -274,7 +274,6 @@ class TestPrintSummaryTable:
 
         captured = capsys.readouterr()
         assert f"{pass_rate:.1%}" in captured.out
-        assert f"({example_count}/{example_count} examples)" in captured.out
 
     def test_zero_pass_rate_displays_correctly(
         self,
@@ -290,7 +289,6 @@ class TestPrintSummaryTable:
 
         captured = capsys.readouterr()
         assert f"{pass_rate:.1%}" in captured.out
-        assert f"(0/{example_count} examples)" in captured.out
 
     def test_handles_multi_author_dataset(
         self,
@@ -313,8 +311,10 @@ class TestPrintSummaryTable:
         """Test that multiple metrics are displayed in alphabetical order."""
         a_metric, m_metric, z_metric = "a_metric", "m_metric", "z_metric"
         eval_run = create_mock_eval_run(
-            aggregate_scores={ "overall": { z_metric: 0.90, a_metric: SCORE, m_metric: 0.78 } },
-            effective_thresholds={ z_metric: THRESHOLD, a_metric: THRESHOLD, m_metric: THRESHOLD },
+            aggregate_scores=AggregateScores(
+                averages_by_metric={z_metric: 0.90, a_metric: SCORE, m_metric: 0.78},
+            ),
+            effective_thresholds={z_metric: THRESHOLD, a_metric: THRESHOLD, m_metric: THRESHOLD},
         )
 
         print_summary_table(eval_run)
@@ -334,7 +334,7 @@ class TestPrintSummaryTable:
     ) -> None:
         """Test that empty overall metrics dict shows 'No metrics available'."""
         eval_run = create_mock_eval_run(
-            aggregate_scores={"overall": {}},
+            aggregate_scores=AggregateScores(averages_by_metric={}),
         )
 
         print_summary_table(eval_run)

@@ -128,13 +128,14 @@ VALID_EVAL_RUN_DICT = {
         }
     ],
     "aggregate_scores": {
-        "overall": {
+        "averages_by_metric": {
             "test_metric": 0.85,
             "citation_quality": 0.92,
             "language_match": 0.88
         }
     },
-    "overall_pass_rate": 0.75
+    "overall_pass_rate": 0.75,
+    "overall_average": 0.883,
 }
 
 
@@ -662,7 +663,7 @@ def test_format_eval_report_stub_includes_metrics_table(tmp_path: Path) -> None:
     assert "| Metric Name | Effective Threshold | Score | Status |" in result, "Should include metrics table header"
 
     # Verify table contains rows for all metrics
-    for metric_name, score in eval_run.aggregate_scores["overall"].items():
+    for metric_name, score in eval_run.aggregate_scores.averages_by_metric.items():
         assert metric_name in result, f"Should include metric: {metric_name}"
 
         threshold = eval_run.effective_thresholds[metric_name]

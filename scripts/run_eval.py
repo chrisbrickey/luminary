@@ -84,21 +84,22 @@ def print_summary_table(eval_run: EvalRun) -> None:
     # Overall scores
     print("\nOVERALL SCORES")
     print("-" * 70)
-    overall = eval_run.aggregate_scores.get("overall", {})
+    print(f"\nOVERALL PASS RATE: {eval_run.overall_pass_rate:.1%}")
+    print(f"\nOVERALL AVERAGE:   {eval_run.overall_average:.3f}")
 
+    overall = eval_run.aggregate_scores.averages_by_metric
     if not overall:
         print("  No metrics available")
     else:
         for metric_name in sorted(overall.keys()):
             score = overall[metric_name]
-            # Get threshold for this metric from effective_thresholds
             threshold = eval_run.effective_thresholds.get(metric_name, 0.8)
             status = "✅" if score >= threshold else "❌"
             print(f"  {metric_name:30s} {score:5.2f}  (threshold: {threshold:.2f}) {status}")
 
     # By-language breakdown
-    if "by_language" in eval_run.aggregate_scores:
-        for lang, scores in sorted(eval_run.aggregate_scores["by_language"].items()):
+    if eval_run.aggregate_scores.averages_by_language_and_metric:
+        for lang, scores in sorted(eval_run.aggregate_scores.averages_by_language_and_metric.items()):
             print(f"\n{lang.upper()} ONLY")
             print("-" * 70)
             for metric_name in sorted(scores.keys()):
@@ -108,20 +109,15 @@ def print_summary_table(eval_run: EvalRun) -> None:
                 print(f"  {metric_name:30s} {score:5.2f}  (threshold: {threshold:.2f}) {status}")
 
     # Cross-language metrics (if available)
-    if eval_run.aggregate_scores.get("cross_language"):
+    if eval_run.aggregate_scores.cross_language:
         print("\nCROSS-LANGUAGE METRICS")
         print("-" * 70)
-        for metric_name in sorted(eval_run.aggregate_scores["cross_language"].keys()):
-            score = eval_run.aggregate_scores["cross_language"][metric_name]
+        for metric_name in sorted(eval_run.aggregate_scores.cross_language.keys()):
+            score = eval_run.aggregate_scores.cross_language[metric_name]
             threshold = eval_run.effective_thresholds.get(metric_name, 0.7)
             status = "✅" if score >= threshold else "❌"
             print(f"  {metric_name:30s} {score:5.2f}  (threshold: {threshold:.2f}) {status}")
 
-    # Overall pass rate
-    print("\n" + "=" * 70)
-    passed = sum(1 for r in eval_run.example_results if r.passed)
-    total = len(eval_run.example_results)
-    print(f"OVERALL PASS RATE: {eval_run.overall_pass_rate:.1%} ({passed}/{total} examples)")
     print("=" * 70 + "\n")
 
 
@@ -131,13 +127,14 @@ def _print_next_steps(artifact_path: Path) -> None:
     Args:
         artifact_path: Path to the saved artifact file
     """
-    print(f"\n✅ Evaluation complete!")
+    print(f"\n✅ Evaluation complete! JSON artifact: {artifact_path}")
     print(f"\nNext steps:")
-    print(f"  1. Review artifact: {artifact_path}")
-    print(f"  2. Identify failing metrics (❌ in table above)")
-    print(f"  3. Analyze failure modes in artifact JSON")
-    print(f"  4. Make targeted improvements (prompts, config, dataset)")
-    print(f"  5. Re-run eval to measure progress\n")
+    print(f"  1. Generate pre-populated markdown evaluation report from terminal:")
+    print(f"        uv run python scripts/stub_eval_report.py {artifact_path}")
+    print(f"  2. Identify failing metrics (score < threshold)")
+    print(f"  3. Investigate failure modes by manually reviewing outputs for failing metrics in the actual json artifact")
+    print(f"  4. Update the evaluation report with: failure modes, proposed improvements, rejected ideas with rationales")
+    print(f"  5. Commit completed evaluation report and re-run eval to measure progress\n")
 
 
 def _load_golden_dataset_from_args(
@@ -195,7 +192,7 @@ def _check_metric_coverage(eval_run: EvalRun, logger: logging.Logger) -> None:
     registered_metrics = {spec.name for spec in METRIC_REGISTRY}
 
     # Get all metrics that were actually computed (appear in aggregate_scores)
-    computed_metrics = set(eval_run.aggregate_scores.get("overall", {}).keys())
+    computed_metrics = set(eval_run.aggregate_scores.averages_by_metric.keys())
 
     # Find metrics that were registered but never computed
     unused_metrics = registered_metrics - computed_metrics
@@ -331,6 +328,7 @@ def main() -> None:
         )
         logger.info(f"✓ Evaluation complete")
         logger.info(f"  - Overall pass rate: {eval_run.overall_pass_rate:.1%}")
+        logger.info(f"  - Overall average:   {eval_run.overall_average:.3f}")
 
         # Check for metrics that weren't applied
         _check_metric_coverage(eval_run, logger)

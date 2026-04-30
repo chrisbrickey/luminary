@@ -160,7 +160,7 @@ def _assert_valid_eval_run(saved_run: EvalRun) -> None:
         )
 
     assert saved_run.effective_thresholds, "Expected at least one metric threshold"
-    assert "overall" in saved_run.aggregate_scores
+    assert isinstance(saved_run.aggregate_scores.averages_by_metric, dict)
     assert 0.0 <= saved_run.overall_pass_rate <= 1.0
 
 
@@ -378,17 +378,30 @@ def test_eval_runner_end_to_end() -> None:
     # Assert: Verify pass/fail logic is consistent with scores and thresholds
     _assert_pass_fail_consistent(result)
 
-    # Assert: Verify overall pass rate matches count of passed examples
-    passed_count = sum(1 for ex in result.example_results if ex.passed)
-    expected_pass_rate = passed_count / len(result.example_results)
+    # Assert: Verify overall_pass_rate is mean per-metric pass rate
+    metric_pass_counts: dict[str, int] = {}
+    metric_total_counts: dict[str, int] = {}
+    for ex in result.example_results:
+        for m in ex.metrics:
+            metric_pass_counts.setdefault(m.name, 0)
+            metric_total_counts.setdefault(m.name, 0)
+            metric_total_counts[m.name] += 1
+            if m.score >= result.effective_thresholds[m.name]:
+                metric_pass_counts[m.name] += 1
+    expected_pass_rate = (
+        sum(metric_pass_counts[n] / metric_total_counts[n] for n in metric_pass_counts)
+        / len(metric_pass_counts)
+    ) if metric_pass_counts else 0.0
     assert result.overall_pass_rate == pytest.approx(expected_pass_rate, abs=0.001)
 
-    # Assert: Verify aggregate scores structure
-    assert "by_language" in result.aggregate_scores
+    # Assert: Verify overall_average is mean of per-metric average scores
+    metric_avgs = result.aggregate_scores.averages_by_metric
+    expected_overall_average = sum(metric_avgs.values()) / len(metric_avgs) if metric_avgs else 0.0
+    assert result.overall_average == pytest.approx(expected_overall_average, abs=0.001)
 
     # Assert: Verify all applicable metrics appear in aggregate scores
     for metric_name in applicable_metric_names:
-        assert metric_name in result.aggregate_scores["overall"], (
+        assert metric_name in result.aggregate_scores.averages_by_metric, (
             f"Expected metric '{metric_name}' in overall aggregate scores"
         )
 
@@ -530,18 +543,27 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
     # Assert: Verify pass/fail logic is consistent with scores and thresholds
     _assert_pass_fail_consistent(result)
 
-    # Assert: Verify overall pass rate matches count of passed examples
-    passed_count = sum(1 for ex in result.example_results if ex.passed)
-    expected_pass_rate = passed_count / len(result.example_results)
-    assert result.overall_pass_rate == pytest.approx(expected_pass_rate, abs=0.001)
+    # Assert: Verify overall_pass_rate is mean per-metric pass rate
+    metric_pass_counts_ml: dict[str, int] = {}
+    metric_total_counts_ml: dict[str, int] = {}
+    for ex in result.example_results:
+        for m in ex.metrics:
+            metric_pass_counts_ml.setdefault(m.name, 0)
+            metric_total_counts_ml.setdefault(m.name, 0)
+            metric_total_counts_ml[m.name] += 1
+            if m.score >= result.effective_thresholds[m.name]:
+                metric_pass_counts_ml[m.name] += 1
+    expected_pass_rate_ml = (
+        sum(metric_pass_counts_ml[n] / metric_total_counts_ml[n] for n in metric_pass_counts_ml)
+        / len(metric_pass_counts_ml)
+    ) if metric_pass_counts_ml else 0.0
+    assert result.overall_pass_rate == pytest.approx(expected_pass_rate_ml, abs=0.001)
 
     # Assert: Verify aggregate scores by language
-    assert "by_language" in result.aggregate_scores
-    assert ENGLISH_ISO_CODE in result.aggregate_scores["by_language"]
-    assert FRENCH_ISO_CODE in result.aggregate_scores["by_language"]
+    assert ENGLISH_ISO_CODE in result.aggregate_scores.averages_by_language_and_metric
+    assert FRENCH_ISO_CODE in result.aggregate_scores.averages_by_language_and_metric
 
     # Assert: Verify all applicable metrics from METRIC_REGISTRY are computed by language
-    # Determine which metrics should be applicable to our test data
     example_for_check = dataset.examples[0]
     response_for_check = response_en_1
 
@@ -551,21 +573,57 @@ def test_eval_runner_processes_multilingual_dataset() -> None:
         if is_metric_applicable(spec, example_for_check, response_for_check)
     }
 
-    # Check that each applicable metric appears in both language aggregates
     for metric_name in applicable_metric_names:
-        # Find the metric spec to check language constraints
         metric_spec = next(spec for spec in METRIC_REGISTRY if spec.name == metric_name)
 
-        # If metric applies to all languages or specifically to 'en'/'fr', check it's present
         if metric_spec.languages is None or ENGLISH_ISO_CODE in metric_spec.languages:
-            assert metric_name in result.aggregate_scores["by_language"][ENGLISH_ISO_CODE], (
+            assert metric_name in result.aggregate_scores.averages_by_language_and_metric[ENGLISH_ISO_CODE], (
                 f"Expected metric '{metric_name}' in English aggregate scores"
             )
 
         if metric_spec.languages is None or FRENCH_ISO_CODE in metric_spec.languages:
-            assert metric_name in result.aggregate_scores["by_language"][FRENCH_ISO_CODE], (
+            assert metric_name in result.aggregate_scores.averages_by_language_and_metric[FRENCH_ISO_CODE], (
                 f"Expected metric '{metric_name}' in French aggregate scores"
             )
+
+
+def test_runner_output_flows_through_print_summary_table(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Seam test: runner-produced AggregateScores is consumed correctly by print_summary_table.
+
+    This test catches key-name mismatches between what _compute_averages() produces
+    and what print_summary_table() reads. Prior to the AggregateScores typed schema,
+    these two sides could diverge silently because both sides used dict[str, Any].
+    """
+    from scripts.run_eval import print_summary_table
+
+    example = GoldenExample(
+        **_golden_example_kwargs(
+            id=EXAMPLE_ID_EN_001,
+            language=ENGLISH_ISO_CODE,
+            expected_chunk_ids=[CHUNK_001],
+        )
+    )
+    dataset = GoldenDataset(
+        **_golden_dataset_kwargs(authors=[DEFAULT_AUTHOR], examples=[example])
+    )
+
+    mock_chain = Mock(spec=Runnable)
+    mock_chain.invoke.return_value = ChatResponse(
+        **_chat_response_kwargs(retrieved_passage_ids=[CHUNK_001])
+    )
+
+    # Use the real runner — its output feeds directly into print_summary_table
+    result = run_eval(dataset, {DEFAULT_AUTHOR: mock_chain})
+    print_summary_table(result)
+
+    captured = capsys.readouterr()
+    assert "OVERALL SCORES" in captured.out
+    assert "OVERALL PASS RATE" in captured.out
+    # At least one metric should appear in the per-metric block
+    for metric_name in result.aggregate_scores.averages_by_metric:
+        assert metric_name in captured.out
 
 
 class TestCLIIntegration:
