@@ -182,7 +182,6 @@ class SystemSnapshot(BaseModel):
     """
 
     commit: str | None = Field(default=None, title="Commit", description="Git commit hash (short form) at run time")
-    timestamp: str | None = Field(default=None, title="Timestamp", description="ISO 8601 timestamp with timezone")
     chat_model: str | None = Field(default=None, title="Chat Model", description="Name of the chat model used")
     embedding_model: str | None = Field(default=None, title="Embedding Model", description="Name of the embedding model used")
     retrieval_chunk_count: str | None = Field(default=None, title="Retrieval Chunk Count (k)", description="Number of chunks retrieved per query")

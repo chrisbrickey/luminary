@@ -40,7 +40,6 @@ def get_system_snapshot() -> SystemSnapshot:
 
     return SystemSnapshot(
         commit=commit,
-        timestamp=datetime.now(timezone.utc).isoformat(),
         chat_model=DEFAULT_CHAT_MODEL,
         embedding_model=DEFAULT_EMBEDDING_MODEL,
         retrieval_chunk_count=str(DEFAULT_K),

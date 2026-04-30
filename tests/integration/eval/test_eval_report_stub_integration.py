@@ -47,7 +47,6 @@ METRIC_THRESHOLD = 0.60
 
 RUN_TIMESTAMP = "2029-01-15T08:00:00+00:00"
 SNAPSHOT_COMMIT = "abc1234"
-SNAPSHOT_TIMESTAMP = "2029-01-15T10:00:00+00:00"
 SNAPSHOT_CHAT_MODEL = "test-chat-model"
 SNAPSHOT_EMBEDDING_MODEL = "test-embedding-model"
 SNAPSHOT_CHUNK_COUNT = "4"
@@ -94,7 +93,6 @@ def _make_eval_run() -> EvalRun:
         golden_dataset=dataset,
         system_snapshot=SystemSnapshot(
             commit=SNAPSHOT_COMMIT,
-            timestamp=SNAPSHOT_TIMESTAMP,
             chat_model=SNAPSHOT_CHAT_MODEL,
             embedding_model=SNAPSHOT_EMBEDDING_MODEL,
             retrieval_chunk_count=SNAPSHOT_CHUNK_COUNT,

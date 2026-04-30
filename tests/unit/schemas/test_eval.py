@@ -115,7 +115,6 @@ def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
         "run_timestamp": RUN_TIMESTAMP,
         "system_snapshot": {
             "commit": "abc123",
-            "timestamp": "2025-06-15T14:30:45+00:00",
             "chat_model": "test-model",
             "embedding_model": "test-embedding",
             "retrieval_chunk_count": "3",
@@ -138,7 +137,6 @@ class TestSystemSnapshot:
             "retrieval_chunk_count": "5",
             "retrieval_chunk_size": "1200",
             "commit": "abc123",
-            "timestamp": "2025-06-15T14:30:45+00:00",
         }
         sv = SystemSnapshot(**kwargs)
         assert sv.model_dump() == kwargs

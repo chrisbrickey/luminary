@@ -95,7 +95,6 @@ VALID_EVAL_RUN_DICT = {
     "run_timestamp": "2025-06-15T14:30:45+00:00",
     "system_snapshot": {
         "commit": "abc123def456",
-        "timestamp": "2025-06-15T14:30:45+00:00",
         "chat_model": "test-model",
         "embedding_model": "test-embedding",
         "retrieval_chunk_count": "10",
@@ -671,7 +670,6 @@ def test_format_eval_report_stub_skips_missing_system_snapshot_fields(tmp_path: 
     assert "[nomic-embed-text|other]" in result, "embedding_model placeholder should remain"
     assert "**Retrieval Chunk Count (k):** [value]" in result, "retrieval_chunk_count placeholder should remain"
     assert "**Retrieval Chunk Size:** [value]" in result, "retrieval_chunk_size placeholder should remain"
-    assert "[ISO 8601]" in result, "timestamp placeholder should remain"
 
 
 def test_format_eval_report_stub_all_system_snapshot_fields_absent(tmp_path: Path) -> None:
@@ -690,7 +688,6 @@ def test_format_eval_report_stub_all_system_snapshot_fields_absent(tmp_path: Pat
     assert "**Retrieval Chunk Count (k):** [value]" in result, "retrieval_chunk_count placeholder should remain"
     assert "**Retrieval Chunk Size:** [value]" in result, "retrieval_chunk_size placeholder should remain"
     assert "[git-hash]" in result, "commit placeholder should remain"
-    assert "[ISO 8601]" in result, "timestamp placeholder should remain"
 
 
 def test_format_eval_report_stub_raises_on_missing_artifact(tmp_path: Path) -> None:

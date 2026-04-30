@@ -114,7 +114,7 @@ def create_mock_eval_run(
     return EvalRun(
         golden_dataset=golden_dataset,
         run_timestamp=EVAL_RUN_TIMESTAMP,
-        system_snapshot={"commit": COMMIT, "timestamp": EVAL_RUN_TIMESTAMP, "chat_model": CHAT_MODEL, "embedding_model": EMBEDDING_MODEL, "retrieval_chunk_count": CHUNK_COUNT, "retrieval_chunk_size": CHUNK_SIZE},
+        system_snapshot={"commit": COMMIT, "chat_model": CHAT_MODEL, "embedding_model": EMBEDDING_MODEL, "retrieval_chunk_count": CHUNK_COUNT, "retrieval_chunk_size": CHUNK_SIZE},
         effective_thresholds=effective_thresholds,
         example_results=example_results,
         aggregate_scores=aggregate_scores,
@@ -138,7 +138,6 @@ class TestPrintSummaryTable:
         assert f"EVALUATED DATASET: {DATASET_IDENTIFIER}" in captured.out
         assert f"EVAL RUN TIMESTAMP: {EVAL_RUN_TIMESTAMP}" in captured.out
         assert f"commit: {COMMIT}" in captured.out
-        assert f"timestamp: {EVAL_RUN_TIMESTAMP}" in captured.out
         assert f"chat_model: {CHAT_MODEL}" in captured.out
         assert f"embedding_model: {EMBEDDING_MODEL}" in captured.out
         assert f"retrieval_chunk_count: {CHUNK_COUNT}" in captured.out
