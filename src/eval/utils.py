@@ -4,9 +4,13 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-
 from src.configs.authors import DEFAULT_AUTHOR
 from src.schemas.eval import GoldenDataset, EvalRun, SystemSnapshot
+
+
+def format_timestamp(iso_timestamp: str) -> str:
+    """Convert ISO 8601 timestamp to format used for filenames: YYYY-MM-DDTHH-MM-SS."""
+    return datetime.fromisoformat(iso_timestamp).strftime("%Y-%m-%dT%H-%M-%S")
 
 
 #--- golden dataset utilities ---
@@ -146,9 +150,8 @@ def save_eval_run(eval_run: EvalRun, output_dir: Path) -> Path:
             f"Failed to create directory '{output_dir}': {e}"
         ) from e
 
-    # Generate timestamped filename
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    filename = f"{timestamp}.json"
+    # Generate filename from the run_timestamp
+    filename = f"{format_timestamp(eval_run.run_timestamp)}.json"
     filepath = output_dir / filename
 
     try:
@@ -216,14 +219,16 @@ def load_eval_run(path: Path) -> EvalRun:
 #--- narrative eval report utilities ---
 
 
-def format_eval_report_stub(artifact_path: Path) -> str:
+def format_eval_report_stub(artifact_path: Path, stub_created_at: str) -> str:
     """Generate pre-populated markdown stub for narrative eval report.
 
-    Reads template from docs/eval_reports/TEMPLATE.md and auto-fills sections with
-    data from the eval run artifact, leaving [TODO] prompts for manual sections.
+    Reads template from docs/eval_reports/TEMPLATE.md and auto-fills sections
+    with data from the eval run artifact.
 
     Args:
         artifact_path: Path to the eval run JSON artifact file
+        stub_created_at: ISO timestamp when the eval report is initiated for stubbing.
+            Caller supplies this so that the report title and filename use the same value.
 
     Returns:
         Markdown string ready to save as .md file
@@ -242,9 +247,11 @@ def format_eval_report_stub(artifact_path: Path) -> str:
 
     template = template_path.read_text()
 
-    # Auto-fill title with timestamp
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    result = template.replace("# Eval Report [YYYY-MM-DDTHH-MM-SS]", f"# Eval Report {timestamp}")
+    # Auto-fill title with caller-supplied timestamp
+    result = template.replace(
+        "# Eval Report [YYYY-MM-DDTHH-MM-SS]",
+        f"# Eval Report {format_timestamp(stub_created_at)}"
+    )
 
     # Auto-fill Source Data section
     result = result.replace(

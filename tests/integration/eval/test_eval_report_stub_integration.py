@@ -46,6 +46,7 @@ METRIC_SCORE = 0.75
 METRIC_THRESHOLD = 0.60
 
 RUN_TIMESTAMP = "2029-01-15T08:00:00+00:00"
+STUB_CREATED_AT = "2029-01-16T09:00:00"  # ISO 8601 — format_eval_report_stub calls format_timestamp internally
 SNAPSHOT_COMMIT = "abc1234"
 SNAPSHOT_CHAT_MODEL = "test-chat-model"
 SNAPSHOT_EMBEDDING_MODEL = "test-embedding-model"
@@ -127,7 +128,7 @@ class TestFormatEvalReportStub:
         """Test that the return value is a non-empty string with the report header."""
         artifact_path = _save_artifact(tmp_path)
 
-        result = format_eval_report_stub(artifact_path)
+        result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
         assert isinstance(result, str)
         assert "# Eval Report" in result
@@ -137,7 +138,7 @@ class TestFormatEvalReportStub:
         artifact_path = _save_artifact(tmp_path)
         expected_identifier = f"{DATASET_SCOPE}_{DEFAULT_AUTHOR}_v{DATASET_VERSION}_{DATASET_DATE}"
 
-        result = format_eval_report_stub(artifact_path)
+        result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
         assert str(artifact_path) in result
         assert expected_identifier in result
@@ -151,7 +152,7 @@ class TestFormatEvalReportStub:
         eval_run = _make_eval_run()
         artifact_path = save_eval_run(eval_run, tmp_path)
 
-        result = format_eval_report_stub(artifact_path)
+        result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
         for field_name, field_info in SystemSnapshot.model_fields.items():
             value = getattr(eval_run.system_snapshot, field_name)
@@ -164,7 +165,7 @@ class TestFormatEvalReportStub:
         """Test that metric name, threshold, score, and Pass/Fail status appear in output."""
         artifact_path = _save_artifact(tmp_path)
 
-        result = format_eval_report_stub(artifact_path)
+        result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
         assert METRIC_NAME in result
         assert f"{METRIC_THRESHOLD:.2f}" in result
@@ -178,7 +179,7 @@ class TestFormatEvalReportStub:
         """
         artifact_path = _save_artifact(tmp_path)
 
-        result = format_eval_report_stub(artifact_path)
+        result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
         assert "100.0%" in result
         assert "1/1 examples" in result
@@ -188,7 +189,7 @@ class TestFormatEvalReportStub:
         missing_path = tmp_path / "nonexistent.json"
 
         with pytest.raises(FileNotFoundError):
-            format_eval_report_stub(missing_path)
+            format_eval_report_stub(missing_path, STUB_CREATED_AT)
 
 
 class TestStubEvalReportCLI:

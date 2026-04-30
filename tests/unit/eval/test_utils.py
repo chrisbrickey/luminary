@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import stat
 from pathlib import Path
 from unittest.mock import patch
@@ -12,7 +11,7 @@ from pydantic import ValidationError
 
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE
-from src.eval.utils import discover_latest_golden_dataset, load_eval_run, load_golden_dataset, save_eval_run, format_eval_report_stub
+from src.eval.utils import discover_latest_golden_dataset, format_timestamp, load_eval_run, load_golden_dataset, save_eval_run, format_eval_report_stub
 from src.schemas.eval import EvalRun, GoldenDataset, SystemSnapshot
 
 # --- Pytest fixtures ---
@@ -73,6 +72,7 @@ INVALID_EVAL_RUN_SCHEMA_JSON = {
 }
 
 MALFORMED_JSON_CONTENT = '{"version": "1.0", "created_date": "2024-05-15"'  # Missing closing brace
+STUB_CREATED_AT = "2025-06-16T09:00:00"  # ISO 8601 — format_eval_report_stub calls format_timestamp internally
 
 # Test data for save_eval_run
 VALID_EVAL_RUN_DICT = {
@@ -136,6 +136,39 @@ VALID_EVAL_RUN_DICT = {
     },
     "overall_pass_rate": 0.75
 }
+
+
+# --- Tests for format_timestamp() ---
+
+TIMESTAMP_WITHOUT_TZ = "2025-06-15T14:30:45"
+EXPECTED_FILENAME_FORMAT = "2025-06-15T14-30-45"
+
+def test_format_timestamp_colons_replaced_with_hyphens() -> None:
+    """Test that time-separator colons in the input become hyphens in the output."""
+    result = format_timestamp(TIMESTAMP_WITHOUT_TZ)
+
+    assert ":" not in result
+    assert result.count("-") == 4  # 2 in date, 2 in time portion
+
+def test_format_timestamp_without_timezone() -> None:
+    """Test that a plain ISO timestamp is converted to filename-safe format."""
+    assert format_timestamp(TIMESTAMP_WITHOUT_TZ) == EXPECTED_FILENAME_FORMAT
+
+
+def test_format_timestamp_with_utc_offset() -> None:
+    """Test that a timestamp with +00:00 UTC offset is converted correctly."""
+    utc_offset = "2025-06-15T14:30:45+00:00"
+    assert format_timestamp(utc_offset) == EXPECTED_FILENAME_FORMAT
+
+
+def test_format_timestamp_with_negative_offset() -> None:
+    """Test that a timestamp with a negative UTC offset preserves the local wall-clock time."""
+    assert format_timestamp("2025-06-15T09:30:45-05:00") == "2025-06-15T09-30-45"
+
+
+def test_format_timestamp_midnight() -> None:
+    """Test that midnight (00:00:00) formats correctly without collapsing zeroes."""
+    assert format_timestamp("2025-01-01T00:00:00") == "2025-01-01T00-00-00"
 
 
 # --- Tests for load_golden_dataset() ---
@@ -400,22 +433,16 @@ def test_save_eval_run_creates_directory(tmp_path: Path) -> None:
     assert result_path.parent == nonexistent_dir
 
 
-def test_save_eval_run_generates_valid_filename(tmp_path: Path) -> None:
-    """Test that save_eval_run generates filename matching pattern {YYYY-MM-DD}T{HH-MM-SS}.json."""
+def test_save_eval_run_generates_filename_from_run_timestamp(tmp_path: Path) -> None:
+    """Test that save_eval_run derives filename from EvalRun.run_timestamp."""
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
+    # run_timestamp is "2025-06-15T14:30:45+00:00" → filename-safe → "2025-06-15T14-30-45.json"
+    expected_filename = "2025-06-15T14-30-45.json"
 
     result_path = save_eval_run(eval_run, tmp_path)
 
-    # Filename should match pattern: {YYYY-MM-DD}T{HH-MM-SS}.json
-    timestamp_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}"
-    expected_pattern = rf"^{timestamp_pattern}\.json$"
-
     assert result_path.parent == tmp_path
-    assert re.match(expected_pattern, result_path.name), (
-        f"Filename '{result_path.name}' does not match expected pattern '{expected_pattern}'"
-    )
-
-    # Verify file was created and contains valid JSON
+    assert result_path.name == expected_filename
     assert result_path.exists()
     assert result_path.is_file()
 
@@ -588,7 +615,7 @@ def test_format_eval_report_stub_includes_all_sections(tmp_path: Path) -> None:
     artifact_path = tmp_path / "artifact.json"
     artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
 
-    result = format_eval_report_stub(artifact_path)
+    result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
     assert "# Eval Report" in result
     assert "## Source Data" in result
@@ -605,11 +632,10 @@ def test_format_eval_report_stub_includes_metadata(tmp_path: Path) -> None:
     artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
 
-    result = format_eval_report_stub(artifact_path)
+    result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
-    # Verify title contains timestamp in YYYY-MM-DDTHH-MM-SS format
-    timestamp_pattern = r"# Eval Report \d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}"
-    assert re.search(timestamp_pattern, result), "Title should contain timestamp in YYYY-MM-DDTHH-MM-SS format"
+    # Verify title contains the filename-safe conversion of stub_created_at
+    assert f"# Eval Report {format_timestamp(STUB_CREATED_AT)}" in result, "Title should contain stub_created_at as filename-safe timestamp"
 
     # Verify Source Data section contains eval run artifact path and dataset identifier
     assert str(artifact_path) in result, "Should include eval artifact path"
@@ -630,7 +656,7 @@ def test_format_eval_report_stub_includes_metrics_table(tmp_path: Path) -> None:
     artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
     eval_run = EvalRun(**VALID_EVAL_RUN_DICT)
 
-    result = format_eval_report_stub(artifact_path)
+    result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
     # Verify table header exists
     assert "| Metric Name | Effective Threshold | Score | Status |" in result, "Should include metrics table header"
@@ -660,7 +686,7 @@ def test_format_eval_report_stub_skips_missing_system_snapshot_fields(tmp_path: 
     artifact_path = tmp_path / "legacy_artifact.json"
     artifact_path.write_text(json.dumps(legacy_run))
 
-    result = format_eval_report_stub(artifact_path)
+    result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
     # Present fields should be substituted
     assert "legacy-model" in result, "chat_model should be pre-populated"
@@ -680,7 +706,7 @@ def test_format_eval_report_stub_all_system_snapshot_fields_absent(tmp_path: Pat
     artifact_path = tmp_path / "minimal_artifact.json"
     artifact_path.write_text(json.dumps(minimal_run))
 
-    result = format_eval_report_stub(artifact_path)
+    result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
     # All placeholders should remain unchanged
     assert "[mistral|other]" in result, "chat_model placeholder should remain"
@@ -695,7 +721,7 @@ def test_format_eval_report_stub_raises_on_missing_artifact(tmp_path: Path) -> N
     nonexistent_artifact = tmp_path / "nonexistent.json"
 
     with pytest.raises(FileNotFoundError) as exc_info:
-        format_eval_report_stub(nonexistent_artifact)
+        format_eval_report_stub(nonexistent_artifact, STUB_CREATED_AT)
 
     error_message = str(exc_info.value)
     assert "nonexistent.json" in error_message, "Error message should include the missing path"
@@ -710,7 +736,7 @@ def test_format_eval_report_stub_raises_on_missing_template(tmp_path: Path) -> N
         mock_path.return_value.exists.return_value = False
 
         with pytest.raises(FileNotFoundError) as exc_info:
-            format_eval_report_stub(artifact_path)
+            format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
         error_message = str(exc_info.value)
         assert "template" in error_message.lower(), "Error message should mention template"
