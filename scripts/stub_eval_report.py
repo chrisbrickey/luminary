@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from src.eval.utils import format_eval_report_stub
+from src.eval.utils import format_eval_report_stub, format_timestamp
 
 DEFAULT_OUTPUT_PATH = Path("docs/eval_reports")
 
@@ -52,8 +52,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # Generate markdown stub from artifact
+    stub_created_at = datetime.now().isoformat()
     try:
-        markdown = format_eval_report_stub(args.artifact_path)
+        markdown = format_eval_report_stub(args.artifact_path, stub_created_at)
     except FileNotFoundError as e:
         print(f"\n❌ ERROR: Eval artifact not found: {args.artifact_path}", file=sys.stderr)
         print(f"  {e}", file=sys.stderr)
@@ -69,8 +70,7 @@ def main() -> None:
     # Persist markdown to output directory
     try:
         args.output_path.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-        output_path = args.output_path / f"eval_report_{timestamp}.md"
+        output_path = args.output_path / f"eval_report_{format_timestamp(stub_created_at)}.md"
         output_path.write_text(markdown)
     except (PermissionError, OSError) as e:
         print(f"\n❌ ERROR writing report: {e}", file=sys.stderr)
