@@ -282,7 +282,7 @@ def _populate_metrics_table(interim_text: str, eval_run: EvalRun) -> str:
 
 
     rows = []
-    for metric_name, score in eval_run.aggregate_scores["overall"].items():
+    for metric_name, score in eval_run.aggregate_scores.averages_by_metric.items():
         threshold = eval_run.effective_thresholds[metric_name]
         status = "Pass" if score >= threshold else "Fail"
         rows.append(f"| {metric_name} | {threshold:.2f} | {score:.2f} | {status} |")
@@ -292,11 +292,11 @@ def _populate_metrics_table(interim_text: str, eval_run: EvalRun) -> str:
     return interim_text.replace(old_table, new_table)
 
 def _populate_metrics_summary(interim_text: str, eval_run: EvalRun) -> str:
-    pass_rate_percent = eval_run.overall_pass_rate * 100
-    total_examples = len(eval_run.example_results)
-    passed_examples = int(eval_run.overall_pass_rate * total_examples)
-
-    return interim_text.replace(
-        "**Overall pass rate:** [XX%] ([N]/[M] examples)",
-        f"**Overall pass rate:** {pass_rate_percent:.1f}% ({passed_examples}/{total_examples} examples)",
+    text = interim_text.replace(
+        "**Overall pass rate:** [XX%]",
+        f"**Overall pass rate:** {(eval_run.overall_pass_rate * 100):.1f}%",
+    )
+    return text.replace(
+        "**Overall average:** [X.XX]",
+        f"**Overall average:** {eval_run.overall_average:.2f}",
     )

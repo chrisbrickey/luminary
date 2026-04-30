@@ -582,6 +582,10 @@ All test development in this plan follows this workflow:
     - Add FALLBACK_THRESHOLD on `base.py` to which metric-specific thresholds default.
     - Add capability to override metric thresholds in the eval runner including test coverage. 
     - Add effective_thresholds property to EvalRun so that actual thresholds used per run are recorded for traceability.
+  - **Aggregate Scores**: 
+      - `aggregate_scores`: Add pydantic schema for this attribute of an EvalRun to prevent unexpected behavior during runtime and testing gaps
+      - `overall_pass_rate`: Change calculations to be the average of per-metric pass/fail rates; Prevents collapse to zero if all examples only fail on one metric but still uses effective thresholds
+      - Add an `overall_average` score: average score across all metrics and examples (regardless of thresholds); Provides a sense of performance independent from individual effective thresholds.
   - Extract all language code references to constants on `configs/common.py` (e.g. ENGLISH_ISO_CODE, FRENCH_ISO_CODE); Clarify difference between language sets: `LOCALIZATION_LANGUAGES` (on `messages.py` for localization of string literals in UI) vs `EVALUATED_LANGUAGES` (on `eval.py` for evaluation harness).
 
 ---

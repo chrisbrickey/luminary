@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas.chat import ChatResponse
@@ -188,6 +188,29 @@ class SystemSnapshot(BaseModel):
     retrieval_chunk_size: str | None = Field(default=None, title="Retrieval Chunk Size", description="Maximum chunk size in characters")
 
 
+class AggregateScores(BaseModel):
+    """Typed aggregate metric scores produced by an eval run.
+
+    All three fields use default_factory so an empty AggregateScores() is valid
+    for runs with no examples.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    averages_by_metric: dict[str, float] = Field(
+        default_factory=dict,
+        description="Mean score per metric across all examples (language-agnostic)"
+    )
+    averages_by_language_and_metric: dict[str, dict[str, float]] = Field(
+        default_factory=dict,
+        description="Mean score per language per metric"
+    )
+    cross_language: dict[str, float] = Field(
+        default_factory=dict,
+        description="Scores for metrics that compare across languages (e.g., translation consistency)"
+    )
+
+
 class EvalRun(BaseModel):
     """Complete results from running evaluation harness (the JSON artifact).
 
@@ -215,6 +238,7 @@ class EvalRun(BaseModel):
     effective_thresholds: dict[str, float] = Field(..., description="Thresholds used for pass/fail (metric_name -> threshold)")
 
     # Results
-    overall_pass_rate: float = Field(..., ge=0.0, le=1.0, description="Fraction of examples passing all metrics")
-    aggregate_scores: dict[str, Any] = Field(..., description="Overall + Breakdown by language")
+    overall_pass_rate: float = Field(..., ge=0.0, le=1.0, description="Mean of pass rates: Compute fraction of examples passing each metric's effective threshold. Then average across all metrics.")
+    overall_average: float = Field(..., ge=0.0, le=1.0, description="Mean per-metric score: Compute the mean of per-metric scores (continuous) regardless of effective thresholds.")
+    aggregate_scores: AggregateScores = Field(..., description="Mean scores by metric and by language")
     example_results: list[ExampleResult] = Field(..., description="Results for each example")

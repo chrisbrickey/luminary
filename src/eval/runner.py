@@ -16,7 +16,7 @@ from src.configs.common import DEFAULT_CHAT_MODEL, DEFAULT_EMBEDDING_MODEL
 from src.configs.vectorstore_config import DEFAULT_K
 from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import EvalRun, ExampleResult, GoldenDataset, MetricResult, SystemSnapshot
+from src.schemas.eval import AggregateScores, EvalRun, ExampleResult, GoldenDataset, MetricResult, SystemSnapshot
 from src.utils.chunker import DEFAULT_CHUNK_SIZE
 
 # Auto-register all metrics; Skip unused import warning
@@ -47,65 +47,54 @@ def get_system_snapshot() -> SystemSnapshot:
     )
 
 
-def _compute_aggregate_scores(
+def _compute_averages(
     example_results: list[ExampleResult],
-) -> dict[str, Any]:
-    """Aggregate metric scores across all examples.
-
-    Computes:
-    - overall: Average score for each metric across all examples
-    - by_language: Average score for each metric, grouped by language
-
-    Args:
-        example_results: List of ExampleResult objects
-
-    Returns:
-        Dict with structure:
-        {
-            "overall": {"metric_name": avg_score, ...},
-            "by_language": {
-                "en": {"metric_name": avg_score, ...},
-                "fr": {"metric_name": avg_score, ...}
-            }
-        }
-    """
+) -> AggregateScores:
+    """Computes aggregate metric scores across all examples."""
+    # Early return if zero results
     if not example_results:
-        return {"overall": {}, "by_language": {}}
+        return AggregateScores()
 
-    overall_scores: dict[str, list[float]] = {}
+    # Declare interim structures to collect scores
+    by_metric_scores: dict[str, list[float]] = {} # e.g., {"accuracy": [0.8, 0.9, 1.0]}
     by_language_scores: dict[str, dict[str, list[float]]] = {}
 
+    # Record individual scores
     for result in example_results:
-        # Initialize language dict if needed
+
+        # Initialize language dict if not yet included
         if result.language not in by_language_scores:
             by_language_scores[result.language] = {}
 
         for metric in result.metrics:
-            # Collect for overall
-            if metric.name not in overall_scores:
-                overall_scores[metric.name] = []
-            overall_scores[metric.name].append(metric.score)
 
-            # Collect for by-language
+            # Collect by metric
+            if metric.name not in by_metric_scores:
+                by_metric_scores[metric.name] = []
+            by_metric_scores[metric.name].append(metric.score)
+
+            # Collect by language and by metric
             if metric.name not in by_language_scores[result.language]:
                 by_language_scores[result.language][metric.name] = []
             by_language_scores[result.language][metric.name].append(metric.score)
 
-    # Compute averages
-    overall: dict[str, float] = {}
-    for metric_name, scores in overall_scores.items():
-        overall[metric_name] = sum(scores) / len(scores)
+    # Compute averages by metric (language agnostic)
+    averages_by_metric: dict[str, float] = {}
+    for metric_name, scores in by_metric_scores.items():
+        averages_by_metric[metric_name] = sum(scores) / len(scores)
 
-    by_language: dict[str, dict[str, float]] = {}
+    # Compute averages by metric and language
+    # This averages smaller subsets of scores to communicate the relative performance by language for each metric.
+    averages_by_language: dict[str, dict[str, float]] = {}
     for lang, metrics in by_language_scores.items():
-        by_language[lang] = {}
+        averages_by_language[lang] = {}
         for metric_name, scores in metrics.items():
-            by_language[lang][metric_name] = sum(scores) / len(scores)
+            averages_by_language[lang][metric_name] = sum(scores) / len(scores)
 
-    return {
-        "overall": overall,
-        "by_language": by_language,
-    }
+    return AggregateScores(
+        averages_by_metric=averages_by_metric,
+        averages_by_language_and_metric=averages_by_language,
+    )
 
 def _build_effective_thresholds(overrides: dict[str, float] | None) -> dict[str, float]:
     """Create record of effective thresholds that will be used to determine success/failure.
@@ -175,6 +164,33 @@ def _check_example_passed(
         if metric.score < thresholds[metric.name]:
             return False
     return True
+
+
+def _calculate_overall_pass_rate(
+    example_results: list[ExampleResult],
+    effective_thresholds: dict[str, float],
+) -> float:
+    """Fraction of examples passing each metric's threshold, averaged across metrics."""
+    if not example_results:
+        return 0.0
+    metric_pass_counts: dict[str, int] = {}
+    metric_total_counts: dict[str, int] = {}
+    for ex in example_results:
+        for m in ex.metrics:
+            metric_pass_counts.setdefault(m.name, 0)
+            metric_total_counts.setdefault(m.name, 0)
+            metric_total_counts[m.name] += 1
+            if m.score >= effective_thresholds[m.name]:
+                metric_pass_counts[m.name] += 1
+    if not metric_pass_counts:
+        return 0.0
+    return sum(metric_pass_counts[n] / metric_total_counts[n] for n in metric_pass_counts) / len(metric_pass_counts)
+
+
+# def _calculate_overall_average(aggregate_scores: dict[str, Any]) -> float:
+#     """Mean of per-metric average scores from the aggregate, regardless of thresholds."""
+#
+#     return sum(metric_averages.values()) / len(metric_averages) if metric_averages else 0.0
 
 
 def _validate_chains(
@@ -259,6 +275,7 @@ def run_eval(
     Warns:
         If extra chains are provided that aren't needed by the dataset
     """
+
     # Validate chains before processing
     _validate_chains(golden_dataset.authors, author_chains)
 
@@ -267,7 +284,6 @@ def run_eval(
 
     # Process each example
     example_results: list[ExampleResult] = []
-    passed_count = 0
 
     for example in golden_dataset.examples:
         # Route to the appropriate author's chain
@@ -281,8 +297,6 @@ def run_eval(
 
         # Check if example passed all metrics
         passed = _check_example_passed(metrics, effective_thresholds)
-        if passed:
-            passed_count += 1
 
         # Create ExampleResult
         example_result = ExampleResult(
@@ -295,22 +309,22 @@ def run_eval(
         )
         example_results.append(example_result)
 
-    # Aggregate scores
-    aggregate_scores = _compute_aggregate_scores(example_results)
+    # Calculate aggregate scores (continuous mean scores by metric and language regardless of thresholds)
+    average_scores = _compute_averages(example_results)
+    averages_by_metric = average_scores.averages_by_metric
+    overall_average = sum(averages_by_metric.values()) / len(averages_by_metric) if averages_by_metric else 0.0
 
-    # Calculate overall pass rate
-    overall_pass_rate = passed_count / len(example_results) if example_results else 0.0
-
-    # Capture system snapshot
-    system_snapshot = get_system_snapshot()
+    # Calculate fraction of examples that cleared the effective thresholds
+    overall_pass_rate = _calculate_overall_pass_rate(example_results, effective_thresholds)
 
     # Create and return EvalRun
     return EvalRun(
         golden_dataset=golden_dataset,
         run_timestamp=datetime.now(timezone.utc).isoformat(),
-        system_snapshot=system_snapshot,
+        system_snapshot=get_system_snapshot(),
         effective_thresholds=effective_thresholds,
         example_results=example_results,
-        aggregate_scores=aggregate_scores,
+        aggregate_scores=average_scores,
+        overall_average=overall_average,
         overall_pass_rate=overall_pass_rate,
     )

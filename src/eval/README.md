@@ -64,7 +64,8 @@ Optional flags:
    - Scores: 0.0 to 1.0, where 1.0 is perfect
    - Threshold examples: 0.8 for most metrics
    - Pass / Fail for above/ below threshold
-   - Overall pass rate: Fraction of examples where ALL metrics passed
+   - **Overall pass rate:** Mean of per-metric pass rates — for each metric, compute the fraction of examples passing its threshold; then average across all metrics
+   - **Overall average:** Mean of per-metric scores (continuous, threshold-independent) — for each metric, compute the mean score across all examples; then average across all metrics
 
 3. Investigate failure modes by manually reviewing outputs for failing metrics in the actual json artifact at `evals/runs/{timestamp}.json`.
 

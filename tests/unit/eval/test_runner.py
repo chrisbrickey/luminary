@@ -138,7 +138,7 @@ class TestRunEval:
 
         # Results structure
         assert len(result.example_results) == 1
-        assert "overall" in result.aggregate_scores
+        assert isinstance(result.aggregate_scores.averages_by_metric, dict)
         assert 0.0 <= result.overall_pass_rate <= 1.0
         assert METRIC_NAME in result.effective_thresholds
         assert result.effective_thresholds[METRIC_NAME] == FALLBACK_THRESHOLD
@@ -270,11 +270,9 @@ class TestRunEval:
         # Act
         result = run_eval(dataset, chains)
 
-        # Assert; cross_language will be added when appropriate metrics are added
-        assert "overall" in result.aggregate_scores # No assertion on the value returned because that value is mocked
-        assert "by_language" in result.aggregate_scores
-        assert ENGLISH_ISO_CODE in result.aggregate_scores["by_language"]
-        assert FRENCH_ISO_CODE in result.aggregate_scores["by_language"]
+        assert isinstance(result.aggregate_scores.averages_by_metric, dict)
+        assert ENGLISH_ISO_CODE in result.aggregate_scores.averages_by_language_and_metric
+        assert FRENCH_ISO_CODE in result.aggregate_scores.averages_by_language_and_metric
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_calculates_pass_rate(
@@ -319,7 +317,10 @@ class TestRunEval:
         result = run_eval(dataset, chains)
 
         # Assert
+        # 1 metric: per-metric pass rate = 2/3; mean of 1 metric = 0.667
         assert result.overall_pass_rate == pytest.approx(0.667, abs=0.01)
+        # overall_average: mean of per-metric averages = (0.9 + 0.5 + 0.85) / 3 = 0.75
+        assert result.overall_average == pytest.approx(0.75, abs=0.01)
         assert result.example_results[0].passed is True # 0.9 >= 0.8 -> pass
         assert result.example_results[1].passed is False # 0.5 < 0.8 -> fail
         assert result.example_results[2].passed is True # 0.85 >= 0.8 -> pass
@@ -418,7 +419,10 @@ class TestRunEval:
         assert result.example_results[0].passed is True  # 0.75 >= 0.7 -> pass
         assert result.example_results[1].passed is False  # 0.65 < 0.7 -> fail
         assert result.example_results[2].passed is True  # 0.85 >= 0.7 -> pass
+        # 1 metric: per-metric pass rate = 2/3; mean of 1 metric = 0.667
         assert result.overall_pass_rate == pytest.approx(0.667, abs=0.01)
+        # overall_average: (0.75 + 0.65 + 0.85) / 3 = 0.75
+        assert result.overall_average == pytest.approx(0.75, abs=0.01)
 
         # Assert - verify custom threshold is recorded in EvalRun
         assert result.effective_thresholds[METRIC_NAME] == 0.7
@@ -519,11 +523,8 @@ class TestRunEval:
         # Act
         result = run_eval(dataset, chains)
 
-        # Assert - both metrics appear in aggregate scores
-        assert "overall" in result.aggregate_scores
-        overall_scores = result.aggregate_scores["overall"]
-        assert METRIC_NAME in overall_scores
-        assert METRIC_NAME_2 in overall_scores
+        assert METRIC_NAME in result.aggregate_scores.averages_by_metric
+        assert METRIC_NAME_2 in result.aggregate_scores.averages_by_metric
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_pass_fail_requires_all_metrics_pass(
@@ -583,7 +584,10 @@ class TestRunEval:
         assert result.example_results[0].passed is True   # Both pass: 0.9, 0.85
         assert result.example_results[1].passed is False  # One fails: 0.9, 0.7
         assert result.example_results[2].passed is False  # Both fail: 0.5, 0.6
-        assert result.overall_pass_rate == pytest.approx(0.333, abs=0.01)  # 1/3 pass
+        # metric_1 pass rate: 2/3; metric_2 pass rate: 1/3; mean = 0.5
+        assert result.overall_pass_rate == pytest.approx(0.5, abs=0.01)
+        # overall_average: metric_1 avg=(0.9+0.9+0.5)/3≈0.767; metric_2 avg=(0.85+0.7+0.6)/3≈0.717; mean≈0.742
+        assert result.overall_average == pytest.approx(0.742, abs=0.01)
 
     @patch("src.eval.runner.METRIC_REGISTRY")
     def test_run_eval_records_thresholds_for_all_metrics(

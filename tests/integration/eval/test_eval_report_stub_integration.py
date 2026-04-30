@@ -19,6 +19,7 @@ from src.configs.common import ENGLISH_ISO_CODE
 from src.eval.utils import format_eval_report_stub, save_eval_run
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import (
+    AggregateScores,
     EvalRun,
     ExampleResult,
     GoldenDataset,
@@ -41,9 +42,18 @@ CHUNK_001 = "chunk_001"
 CONTEXT_001 = "Context about tolerance."
 SOURCE_TITLE_001 = "Test Title, Page 12"
 
+EXAMPLE_ID_2 = "example_en_002"
+QUESTION_2 = "What is free speech?"
+CHUNK_002 = "chunk_002"
+CONTEXT_002 = "Context about free speech."
+SOURCE_TITLE_002 = "Test Title, Page 34"
+
 METRIC_NAME = "retrieval_recall"
-METRIC_SCORE = 0.75
+METRIC_SCORE = 0.75       # above threshold → Pass
+METRIC_SCORE_FAIL = 0.40  # below threshold → Fail
 METRIC_THRESHOLD = 0.60
+OVERALL_PASS_RATE = 0.5   # 1 of 2 examples passes
+OVERALL_AVERAGE = 0.575   # (METRIC_SCORE + METRIC_SCORE_FAIL) / 2
 
 RUN_TIMESTAMP = "2029-01-15T08:00:00+00:00"
 STUB_CREATED_AT = "2029-01-16T09:00:00"  # ISO 8601 — format_eval_report_stub calls format_timestamp internally
@@ -58,36 +68,58 @@ SNAPSHOT_CHUNK_SIZE = "512"
 
 
 def _make_eval_run() -> EvalRun:
-    """Build a minimal valid EvalRun for stub formatting tests."""
-    example = GoldenExample(
-        id=EXAMPLE_ID,
-        question=QUESTION,
-        author=DEFAULT_AUTHOR,
-        language=ENGLISH_ISO_CODE,
-        expected_chunk_ids=[CHUNK_001],
-    )
+    """Build a realistic EvalRun with mixed pass/fail results for stub formatting tests."""
+    examples = [
+        GoldenExample(
+            id=EXAMPLE_ID,
+            question=QUESTION,
+            author=DEFAULT_AUTHOR,
+            language=ENGLISH_ISO_CODE,
+            expected_chunk_ids=[CHUNK_001],
+        ),
+        GoldenExample(
+            id=EXAMPLE_ID_2,
+            question=QUESTION_2,
+            author=DEFAULT_AUTHOR,
+            language=ENGLISH_ISO_CODE,
+            expected_chunk_ids=[CHUNK_002],
+        ),
+    ]
     dataset = GoldenDataset(
         scope=DATASET_SCOPE,
         authors=[DEFAULT_AUTHOR],
         version=DATASET_VERSION,
         created_date=DATASET_DATE,
         description=DATASET_DESCRIPTION,
-        examples=[example],
+        examples=examples,
     )
-    response = ChatResponse(
-        text="Sample response.",
-        retrieved_passage_ids=[CHUNK_001],
-        retrieved_contexts=[CONTEXT_001],
-        retrieved_source_titles=[SOURCE_TITLE_001],
-        language=ENGLISH_ISO_CODE,
-    )
-    example_result = ExampleResult(
+    passing_result = ExampleResult(
         example_id=EXAMPLE_ID,
         question=QUESTION,
         language=ENGLISH_ISO_CODE,
-        response=response,
+        response=ChatResponse(
+            text="Sample response.",
+            retrieved_passage_ids=[CHUNK_001],
+            retrieved_contexts=[CONTEXT_001],
+            retrieved_source_titles=[SOURCE_TITLE_001],
+            language=ENGLISH_ISO_CODE,
+        ),
         metrics=[MetricResult(name=METRIC_NAME, score=METRIC_SCORE)],
         passed=True,
+    )
+    failing_result = ExampleResult(
+        example_id=EXAMPLE_ID_2,
+        question=QUESTION_2,
+        language=ENGLISH_ISO_CODE,
+        response=ChatResponse(
+            text="Another sample response.",
+            retrieved_passage_ids=[CHUNK_002],
+            retrieved_contexts=[CONTEXT_002],
+            retrieved_source_titles=[SOURCE_TITLE_002],
+            language=ENGLISH_ISO_CODE,
+        ),
+        metrics=[MetricResult(name=METRIC_NAME, score=METRIC_SCORE_FAIL)],
+        passed=False,
     )
     return EvalRun(
         run_timestamp=RUN_TIMESTAMP,
@@ -100,12 +132,13 @@ def _make_eval_run() -> EvalRun:
             retrieval_chunk_size=SNAPSHOT_CHUNK_SIZE,
         ),
         effective_thresholds={METRIC_NAME: METRIC_THRESHOLD},
-        overall_pass_rate=1.0,
-        aggregate_scores={
-            "overall": {METRIC_NAME: METRIC_SCORE},
-            "by_language": {ENGLISH_ISO_CODE: {METRIC_NAME: METRIC_SCORE}},
-        },
-        example_results=[example_result],
+        overall_pass_rate=OVERALL_PASS_RATE,
+        overall_average=OVERALL_AVERAGE,
+        aggregate_scores=AggregateScores(
+            averages_by_metric={METRIC_NAME: OVERALL_AVERAGE},
+            averages_by_language_and_metric={ENGLISH_ISO_CODE: {METRIC_NAME: OVERALL_AVERAGE}},
+        ),
+        example_results=[passing_result, failing_result],
     )
 
 
@@ -162,27 +195,27 @@ class TestFormatEvalReportStub:
                 )
 
     def test_populates_metrics_table_with_name_threshold_score_and_status(self, tmp_path: Path) -> None:
-        """Test that metric name, threshold, score, and Pass/Fail status appear in output."""
+        """Test that metric name, threshold, aggregate score, and Fail status appear in output.
+
+        The table renders one row per metric using the aggregate (average) score, not individual
+        example scores. OVERALL_AVERAGE (0.575) < METRIC_THRESHOLD (0.60), so status is Fail.
+        """
         artifact_path = _save_artifact(tmp_path)
 
         result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
         assert METRIC_NAME in result
         assert f"{METRIC_THRESHOLD:.2f}" in result
-        assert f"{METRIC_SCORE:.2f}" in result
-        assert "Pass" in result
+        assert "Fail" in result
 
-    def test_populates_overall_pass_rate(self, tmp_path: Path) -> None:
-        """Test that overall pass rate is formatted and present in output.
-
-        EvalRun has overall_pass_rate=1.0 and 1 example → "100.0% (1/1 examples)".
-        """
+    def test_populates_overall_scores(self, tmp_path: Path) -> None:
+        """Test that overall_pass_rate and overall_average are formatted and present in output."""
         artifact_path = _save_artifact(tmp_path)
 
         result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
-        assert "100.0%" in result
-        assert "1/1 examples" in result
+        assert f"{OVERALL_PASS_RATE * 100:.1f}%" in result
+        assert f"{OVERALL_AVERAGE:.2f}" in result
 
     def test_raises_file_not_found_for_missing_artifact(self, tmp_path: Path) -> None:
         """Test that FileNotFoundError is raised when artifact does not exist."""
@@ -235,7 +268,8 @@ class TestStubEvalReportCLI:
         assert expected_identifier in content
         assert SNAPSHOT_COMMIT in content
         assert METRIC_NAME in content
-        assert "100.0%" in content
+        assert f"{OVERALL_PASS_RATE * 100:.1f}%" in content
+        assert f"{OVERALL_AVERAGE:.2f}" in content
 
         # Assert: success message printed to stdout
         captured = capsys.readouterr()
