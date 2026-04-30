@@ -348,7 +348,6 @@ class TestRunEval:
         from src.schemas.eval import SystemSnapshot
         expected_system_snapshot = SystemSnapshot(
             commit=commit,
-            timestamp="2025-06-15T14:30:45+00:00",
             chat_model=chat_model,
             embedding_model="test-embedding",
             retrieval_chunk_count="6",
