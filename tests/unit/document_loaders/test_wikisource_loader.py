@@ -158,10 +158,10 @@ class TestWikisourceLoader:
         mock_sleep: Mock,
         mock_urlopen: Mock
     ) -> None:
-        """Test retry logic for transient errors (429, 5xx)."""
-        # First attempt fails with 429, second succeeds
+        """Test retry logic for transient errors (e.g., 5XX)"""
+        # First attempt fails with 500, second succeeds
         mock_urlopen.side_effect = [
-            HTTPError("url", 429, "Too Many Requests", {}, None),
+            HTTPError("url", 500, "Internal Server Error", {}, None),
             create_mock_response(create_api_response_bytes(SAMPLE_API_RESPONSE))
         ]
 
@@ -171,6 +171,52 @@ class TestWikisourceLoader:
         assert len(documents) == 1
         # Should have called sleep for retry delay
         assert mock_sleep.call_count >= 1
+
+    def test_429_uses_rate_limit_delay(
+        self,
+        minimal_config: WikisourceCollection,
+        mock_sleep: Mock,
+        mock_urlopen: Mock
+    ) -> None:
+        """Test that 429 errors use rate_limit_delay instead of base_retry_delay."""
+        mock_urlopen.side_effect = [
+            HTTPError("url", 429, "Too Many Requests", {}, None),
+            create_mock_response(create_api_response_bytes(SAMPLE_API_RESPONSE))
+        ]
+
+        rate_limit_delay = 45.0
+        loader = WikisourceLoader(
+            minimal_config,
+            max_retries=2,
+            base_retry_delay=2.0,
+            rate_limit_delay=rate_limit_delay
+        )
+        loader.load()
+
+        sleep_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert any(s == rate_limit_delay for s in sleep_calls)
+
+    def test_429_respects_retry_after_header(
+        self,
+        minimal_config: WikisourceCollection,
+        mock_sleep: Mock,
+        mock_urlopen: Mock
+    ) -> None:
+        """Test retry after a 429 rate limit error."""
+        mock_urlopen.side_effect = [
+            HTTPError("url", 429, "Too Many Requests", {"Retry-After": "30"}, None),
+            create_mock_response(create_api_response_bytes(SAMPLE_API_RESPONSE))
+        ]
+
+        loader = WikisourceLoader(
+            minimal_config,
+            max_retries=2,
+            rate_limit_delay=60.0
+        )
+        loader.load()
+
+        sleep_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert any(s == 30.0 for s in sleep_calls)
 
     def test_retry_on_network_error(
         self,

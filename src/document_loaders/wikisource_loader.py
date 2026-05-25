@@ -82,7 +82,8 @@ class WikisourceLoader:
         config: WikisourceCollection,
         delay: float = 1.0,
         max_retries: int = 3,
-        base_retry_delay: float = 2.0
+        base_retry_delay: float = 2.0,
+        rate_limit_delay: float = 60.0
     ):
         """Initialize the loader.
 
@@ -90,12 +91,14 @@ class WikisourceLoader:
             config: Configuration for the collection to load
             delay: Delay in seconds between API requests (be polite!)
             max_retries: Maximum number of retry attempts for transient errors
-            base_retry_delay: Base delay for exponential backoff on retries
+            base_retry_delay: Base delay for 5XX errors; exponential backoff on retries
+            rate_limit_delay: Base delay for 429 rate-limit errors
         """
         self.config = config
         self.delay = delay
         self.max_retries = max_retries
         self.base_retry_delay = base_retry_delay
+        self.rate_limit_delay = rate_limit_delay
 
     def _fetch_page_html(self, page_title: str) -> str:
         """Fetch the HTML content of a single Wikisource page.
@@ -163,8 +166,14 @@ class WikisourceLoader:
                     is_transient = True
 
                 if is_transient and attempt < self.max_retries - 1:
-                    # Exponential backoff
-                    retry_delay = self.base_retry_delay * (2 ** attempt)
+                    if isinstance(e, HTTPError) and e.code == 429:
+                        retry_after = e.headers.get('Retry-After') if e.headers else None
+                        try:
+                            retry_delay = float(retry_after) if retry_after else self.rate_limit_delay * (2 ** attempt)
+                        except ValueError:
+                            retry_delay = self.rate_limit_delay * (2 ** attempt)
+                    else:
+                        retry_delay = self.base_retry_delay * (2 ** attempt)
                     logger.warning(
                         f"Transient error fetching {page_title}: {e}. "
                         f"Retrying in {retry_delay}s..."
