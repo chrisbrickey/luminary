@@ -6,7 +6,7 @@ from src.configs.common import DEFAULT_EMBEDDING_MODEL, VECTOR_DB_PATH
 COLLECTION_NAME = "philosophes"
 
 # Default number of chunks to retrieve per query
-DEFAULT_K = 5
+DEFAULT_K = 9
 
 __all__ = [
     "VECTOR_DB_PATH",

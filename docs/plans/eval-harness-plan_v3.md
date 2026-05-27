@@ -1401,8 +1401,11 @@ Instruct the user to complete these steps manually:
 
 ### Implementation
 
-This subsection is **procedural** rather than code-focused. It walks through analyzing eval results, proposing fixes, implementing changes, re-running eval, and documenting findings.
-This process should be repeated throughout development of subsequent sections.
+This subsection is **procedural** rather than code-focused. 
+It walks through the format established by the eval report template (generate via script): 
+    analyzing eval results, proposing fixes, implementing changes, re-running eval, and documenting findings.
+
+This entire process should be repeated throughout development of subsequent sections.
 
 1. **Analyze baseline eval results**
    - User should have already run `scripts/run_eval.py` in previous subsection
@@ -1418,7 +1421,7 @@ This process should be repeated throughout development of subsequent sections.
 
 2. **Propose fixes based on common failure modes**
 
-   Fixes should be targeted at root causes, not symptoms.
+   Fixes should be targeted at root causes, not symptoms. Examples follow.
 
    **Low retrieval_relevance:**
    - **Root cause:** `k` parameter too low, relevant chunks ranked outside top-k
@@ -1446,24 +1449,10 @@ This process should be repeated throughout development of subsequent sections.
 
 3. **Implement fixes systematically**
 
-   **Important:** Don't change everything at once. Make isolated changes to understand cause-and-effect.
-
-   **Recommended order:**
-   1. **Start with easiest wins:** Config changes (k parameter)
-   2. **Then prompt improvements:** Citation placement examples, persona constraints
-   3. **Finally dataset refinement:** If needed after re-running eval
-
-   **For each change:**
-   - Make edit in one file
-   - Run `uv run pytest` to ensure no regressions
-   - Run `uv run mypy src scripts` to ensure type safety
-   - Commit change with clear message: `"Increase retrieval k from 5 to 8 to improve recall"`
-
-   **If changes are substantial (>3 files, >100 lines):**
-   - Break into multiple PRs:
-     - PR 1: Config changes (k parameter, thresholds)
-     - PR 2: Voltaire prompt improvements (citations, persona)
-     - PR 3: Golden dataset refinements (keywords, examples)
+   Don't change everything at once. Make isolated changes to understand cause-and-effect. e.g.,
+   - Start with easiest wins like config changes like k parameter
+   - Then prompt improvements such as citation placement examples, persona constraints
+   - Finally, refine the dataset (if needed after re-running eval)
 
 4. **Re-run evaluation to measure improvements**
 
@@ -1493,7 +1482,7 @@ This process should be repeated throughout development of subsequent sections.
       - Added explicit 18th-century constraint + anachronism list (commit ghi789)
       ```
 
-6. **Commit the report**
+6. **Commit the narrative eval report**
    - Do NOT commit eval artifacts** - they're gitignored. Only commit the narrative report.
 
 ### Documentation
