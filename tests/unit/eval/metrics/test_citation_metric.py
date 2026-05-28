@@ -16,6 +16,9 @@ SOURCE_WORK_B = "sample document beta"
 SOURCE_WORK_C = "generic treatise gamma"
 
 # Retrieved titles (with page numbers and variations)
+RETRIEVED_WORK_A_P1 = f"{SOURCE_WORK_A}, page 1"
+RETRIEVED_WORK_A_P4 = f"{SOURCE_WORK_A}, page 4"
+RETRIEVED_WORK_A_P5 = f"{SOURCE_WORK_A}, page 5"
 RETRIEVED_WORK_A_P12 = f"{SOURCE_WORK_A}, page 12"
 RETRIEVED_WORK_A_CAPITALIZED_P45 = f"{SOURCE_WORK_A.capitalize()}, page 45"  # Different capitalization
 RETRIEVED_WORK_B_CH3 = "sample document beta, chapter 3"
@@ -28,6 +31,11 @@ CITATION_WORK_B = f"[source: {SOURCE_WORK_B}]"
 CITATION_WORK_C = f"[source: {SOURCE_WORK_C}]"
 CITATION_OTHER = "[source: unrelated work delta]"
 CITATION_HALLUCINATED = "[source: nonexistent work epsilon]"
+
+# Multi-page summary citations (LLM aggregates inline citations at end of response)
+CITATION_WORK_A_PAGES_1_4_5_EN = f"[source: {SOURCE_WORK_A}, pages 1, 4, and 5]"
+CITATION_WORK_A_PAGES_1_4_5_FR = f"[source: {SOURCE_WORK_A}, pages 1, 4 et 5]"
+CITATION_WORK_A_PAGES_1_AND_4 = f"[source: {SOURCE_WORK_A}, pages 1 and 4]"
 
 # Response text samples with citations
 RESPONSE_WITH_CITATION_A = f"This is a claim. {CITATION_WORK_A}"
@@ -168,4 +176,70 @@ class TestCitationToRetrievalConsistency:
         assert result.name == CONSISTENCY_METRIC
         assert result.score == 1.0
         assert len(result.details["matched"]) == 1
+        assert result.details["hallucinated"] == []
+
+    def test_multi_page_citation_all_pages_match(self) -> None:
+        """Multi-page summary citation expands into single-page equivalents → all match → 1.0."""
+        response_text = f"Several claims. {CITATION_WORK_A_PAGES_1_4_5_EN}"
+        retrieved_sources = [RETRIEVED_WORK_A_P1, RETRIEVED_WORK_A_P4, RETRIEVED_WORK_A_P5]
+
+        result = citation_to_retrieval_consistency(response_text, retrieved_sources)
+
+        assert result.name == CONSISTENCY_METRIC
+        assert result.score == 1.0
+        assert len(result.details["matched"]) == 3
+        assert result.details["hallucinated"] == []
+
+    def test_multi_page_citation_partial_match(self) -> None:
+        """Multi-page summary citation with one page missing from retrieved → score 2/3."""
+        response_text = f"Several claims. {CITATION_WORK_A_PAGES_1_4_5_EN}"
+        # Only pages 1 and 4 retrieved; page 5 was not retrieved
+        retrieved_sources = [RETRIEVED_WORK_A_P1, RETRIEVED_WORK_A_P4]
+
+        result = citation_to_retrieval_consistency(response_text, retrieved_sources)
+
+        assert result.name == CONSISTENCY_METRIC
+        assert result.score == pytest.approx(2 / 3, abs=0.01)
+        assert len(result.details["matched"]) == 2
+        assert len(result.details["hallucinated"]) == 1
+
+    def test_multi_page_citation_french_separator(self) -> None:
+        """Multi-page summary citation using French 'et' separator → all match → 1.0."""
+        response_text = f"Plusieurs revendications. {CITATION_WORK_A_PAGES_1_4_5_FR}"
+        retrieved_sources = [RETRIEVED_WORK_A_P1, RETRIEVED_WORK_A_P4, RETRIEVED_WORK_A_P5]
+
+        result = citation_to_retrieval_consistency(response_text, retrieved_sources)
+
+        assert result.name == CONSISTENCY_METRIC
+        assert result.score == 1.0
+        assert len(result.details["matched"]) == 3
+        assert result.details["hallucinated"] == []
+
+    def test_multi_page_citation_two_pages(self) -> None:
+        """Two-page summary citation 'pages X and Y' → both expand and match → 1.0."""
+        response_text = f"Two claims. {CITATION_WORK_A_PAGES_1_AND_4}"
+        retrieved_sources = [RETRIEVED_WORK_A_P1, RETRIEVED_WORK_A_P4]
+
+        result = citation_to_retrieval_consistency(response_text, retrieved_sources)
+
+        assert result.name == CONSISTENCY_METRIC
+        assert result.score == 1.0
+        assert len(result.details["matched"]) == 2
+        assert result.details["hallucinated"] == []
+
+    def test_mixed_single_and_multi_page_citations(self) -> None:
+        """Mix of inline single-page and summary multi-page citations counted individually."""
+        # 1 single-page inline citation + 1 three-page summary citation = 4 individual requirements
+        single_page_citation = f"[source: {RETRIEVED_WORK_A_P1}]"
+        response_text = (
+            f"Inline claim. {single_page_citation} "
+            f"Summary citation. {CITATION_WORK_A_PAGES_1_4_5_EN}"
+        )
+        retrieved_sources = [RETRIEVED_WORK_A_P1, RETRIEVED_WORK_A_P4, RETRIEVED_WORK_A_P5]
+
+        result = citation_to_retrieval_consistency(response_text, retrieved_sources)
+
+        assert result.name == CONSISTENCY_METRIC
+        assert result.score == 1.0
+        assert len(result.details["matched"]) == 4
         assert result.details["hallucinated"] == []

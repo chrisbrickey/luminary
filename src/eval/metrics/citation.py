@@ -75,6 +75,39 @@ def citation_accuracy(
     )
 
 
+def _expand_multi_page_citation(citation: str) -> list[str]:
+    """Expand a multi-page summary citation into single-page equivalents.
+
+    The LLM sometimes aggregates inline citations into a single summary citation like
+    "Lettres Philosophiques 1734, pages 1, 4, and 5". Retrieved chunk titles are
+    single-page strings (e.g. "Lettres Philosophiques 1734, page 4"), so a summary
+    citation never substring-matches a retrieved title. Expanding it lets each page
+    be evaluated as an individual requirement.
+
+    Examples:
+        "Lettres Philosophiques 1734, pages 1, 4, and 5"
+        → ["Lettres Philosophiques 1734, page 1",
+           "Lettres Philosophiques 1734, page 4",
+           "Lettres Philosophiques 1734, page 5"]
+
+        "Some Work, pages 1 et 2" (French)
+        → ["Some Work, page 1", "Some Work, page 2"]
+
+    Returns the citation unchanged (as a single-element list) if no multi-page
+    pattern is detected.
+    """
+    match = re.match(r'^(.*?),\s*pages\s+(.+?)$', citation, re.IGNORECASE)
+    if not match:
+        return [citation]
+
+    title = match.group(1).strip()
+    page_numbers = re.findall(r'\d+', match.group(2))
+    if not page_numbers:
+        return [citation]
+
+    return [f"{title}, page {page}" for page in page_numbers]
+
+
 def citation_to_retrieval_consistency(
     response_text: str,
     retrieved_chunk_sources: list[str],
@@ -93,6 +126,9 @@ def citation_to_retrieval_consistency(
         retrieved_chunk_sources: ["Lettres philosophiques, page 12"]
         → Citation matches retrieved source (case-insensitive substring)
 
+    Multi-page summary citations (e.g. "Work, pages 1, 4, and 5") are expanded into
+    single-page equivalents before matching, so each page is evaluated independently.
+
     Args:
         response_text: The LLM response text containing inline citations
         retrieved_chunk_sources: List of source titles from actually retrieved chunks
@@ -109,7 +145,13 @@ def citation_to_retrieval_consistency(
     # Extract all citations from response text using regex
     # Pattern matches: [source: some title here]
     citation_pattern = r'\[source:\s*([^\]]+)\]'
-    citations = re.findall(citation_pattern, response_text)
+    raw_citations = re.findall(citation_pattern, response_text)
+
+    # Expand multi-page summary citations into single-page equivalents so each
+    # page counts as an individual requirement.
+    citations: list[str] = []
+    for raw_citation in raw_citations:
+        citations.extend(_expand_multi_page_citation(raw_citation))
 
     # Handle empty citations (no citations = perfect consistency)
     if not citations:
