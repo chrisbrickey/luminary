@@ -459,3 +459,43 @@ def test_rag_chain_does_not_expose_chunk_ids_to_llm(
     # Should contain the actual content
     assert "First passage about philosophy." in llm_input_str
     assert "Second passage about philosophy." in llm_input_str
+
+
+def test_rag_chain_preserves_non_english_source_titles_verbatim(
+    setup_test_db, make_test_document
+) -> None:
+    """Test that source titles are passed to the LLM verbatim and are not translated.
+
+    This verifies that a French title (a proper noun like "Lettres philosophiques")
+    arrives in the LLM input unchanged when the chain is invoked in another language.
+    The context-formatting layer should not perform translation or anglicization of titles.
+    """
+    from unittest.mock import Mock
+
+    db_path, embeddings = setup_test_db
+
+    chunks = [
+        make_test_document(
+            content="La tolérance est nécessaire à la société civile.",
+            chunk_id="lettres_001",
+            chunk_index=0,
+            doc_id="lettres-philosophiques",
+            title="Lettres philosophiques",
+            page_number=3,
+        ),
+    ]
+
+    embed_and_store(chunks=chunks, embeddings=embeddings)
+    retriever = build_retriever(embeddings=embeddings, k=DEFAULT_K, author=DEFAULT_AUTHOR)
+
+    mock_llm = Mock()
+    mock_llm.invoke.return_value = Mock(content="Mock response")
+
+    chain = build_chain(author=DEFAULT_AUTHOR, retriever=retriever, llm=mock_llm)
+    chain.invoke("test question", language=ENGLISH_ISO_CODE)
+
+    llm_input_str = str(mock_llm.invoke.call_args[0][0])
+
+    # French title should appear verbatim (not anglicized) in the source citation
+    assert "[source: Lettres philosophiques" in llm_input_str
+    assert "[source: Philosophical Letters" not in llm_input_str
