@@ -1393,7 +1393,7 @@ Instruct the user to complete these steps manually:
 
 ---
 
-## M. Voltaire improvement cycle (First eval-driven iteration)
+## M. ✅ Voltaire improvement cycle (First eval-driven iteration)
 
 **Goal:** Close the feedback loop. Use eval artifact to improve quality. Establish an iterative improvement workflow for future features.
 
@@ -1490,7 +1490,8 @@ This entire process should be repeated throughout development of subsequent sect
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
-
+  - No major deviations. Three improvements resulted from analysis of the latest eval artifact (2026-04-30T18-33-59.json). See eval_report_2026-05-27T18-25-45.md for documentation.
+  
 ---
 
 ## N. Faithfulness metrics
