@@ -1,4 +1,6 @@
-"""Unit tests for vectorstore config module."""
+"""Unit tests for vectorstore config module.
+
+These tests should prevent a major configuration change by accident."""
 
 from pathlib import Path
 
@@ -15,9 +17,9 @@ def test_collection_name_is_philosophes() -> None:
     assert COLLECTION_NAME == "philosophes"
     assert isinstance(COLLECTION_NAME, str)
 
-def test_default_k_is_five() -> None:
-    """Test that DEFAULT_K is set to 5."""
-    assert DEFAULT_K == 5
+def test_default_k_is_nine() -> None:
+    """Test that DEFAULT_K is set to 9."""
+    assert DEFAULT_K == 9
     assert isinstance(DEFAULT_K, int)
 
 def test_default_embedding_model_imported_correctly() -> None:

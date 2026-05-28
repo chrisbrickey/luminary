@@ -73,6 +73,13 @@ class TestBuildVoltairePrompt:
             """Should NOT instruct to include chunk_id in citations."""
             assert "chunk_id" not in system_template.lower()
 
+        def test_requires_verbatim_source_titles(self, system_template: str) -> None:
+            """Should instruct to reproduce source titles verbatim in their original language."""
+            template_lower = system_template.lower()
+            assert "verbatim" in template_lower
+            assert any(keyword in template_lower for keyword in ["translate", "anglicize", "alter"])
+            assert "lettres" in template_lower
+
     class TestContentGuidance:
         """Tests for content fidelity and style rules."""
 
