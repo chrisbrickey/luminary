@@ -113,6 +113,15 @@ def build_field_guidance(field_name: str) -> str:
 - Use base title without page numbers or formatting
 - Example: ["Lettres philosophiques", "Traité sur la tolérance"]
 """,
+        "expected_keywords": """
+**expected_keywords**: List of key-concept strings (in the example's language)
+- Key philosophical concepts that should appear in a good response
+- Use actual terms from the chunks (French chunks → French keywords; English chunks → English keywords)
+- 3-5 keywords typical
+- Provide base/lemma forms when possible; the metric tolerates short suffixes (plurals, simple inflections)
+- French example: ["tolérance", "conscience", "persécution"]
+- English example: ["tolerance", "conscience", "persecution"]
+""",
     }
 
     # Return specific guidance if available, otherwise generic fallback

@@ -31,6 +31,9 @@ class GoldenExample(BaseModel):
     """A single eval case in the golden dataset.
 
     Agile development: Add fields as new metrics are implemented. Only French and English are included for MVP.
+
+    Note: list fields whose contents are language-specific (e.g., `expected_keywords`)
+    are interpreted in the language given by the `language` field on this example.
     """
 
     id: str = Field(..., description="Unique identifier (e.g., 'tolerance_fr', 'pascal_en')")
@@ -48,6 +51,12 @@ class GoldenExample(BaseModel):
     expected_source_titles: list[str] = Field(
         default_factory=list,
         description="Expected source titles in citations"
+    )
+
+    # keyword coverage metric
+    expected_keywords: list[str] = Field(
+        default_factory=list,
+        description="Key concepts expected in the response, in the language of example.language"
     )
 
     @field_validator('author')

@@ -1494,7 +1494,7 @@ This entire process should be repeated throughout development of subsequent sect
   
 ---
 
-## N. Keyword coverage metric
+## N. ✅ Keyword coverage metric
 **Goal:** Implement a deterministic content-quality metric that checks whether expected key concepts (e.g., "tolérance", "conscience") appear in the response.
 
 **Naming note:** This was originally drafted as "faithfulness," but that term is reserved in RAG literature for *groundedness against retrieved sources* (catching hallucinations beyond what the sources support). 
@@ -1606,6 +1606,8 @@ Review documentation and update as needed.
   - In preparation for updating the golden dataset, I discovered that the golden dataset generation functionality and documentation required significant updates. 
     e.g., the documentation had drifted out of sync with the dataset generation script, anthropic had deprecated the `temperature` parameter.
     I updated the golden dataset generation functionality before adding the new metric.
+  - Before adding the new metric, I ran the eval harness with the newly generated golden dataset (v3.0) and documented the findings in a narrative eval report.
+    This isolated the performance of the app on the new dataset from performance of the app on the new dataset AND with the new metric.
 
 ---
 
