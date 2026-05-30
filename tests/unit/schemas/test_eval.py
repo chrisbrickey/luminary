@@ -276,6 +276,17 @@ class TestGoldenExample:
         example = GoldenExample(**_golden_example_kwargs(expected_source_titles=source_titles))
         assert example.expected_source_titles == source_titles
 
+    def test_expected_keywords_defaults_to_empty_list(self) -> None:
+        """expected_keywords defaults to empty list when not provided."""
+        example = GoldenExample(**_golden_example_kwargs())
+        assert example.expected_keywords == []
+
+    def test_expected_keywords_accepts_unicode(self) -> None:
+        """expected_keywords round-trips accented (unicode) strings correctly."""
+        keywords = ["élément", "modèle", "système"]
+        example = GoldenExample(**_golden_example_kwargs(expected_keywords=keywords))
+        assert example.expected_keywords == keywords
+
 
 class TestGoldenDataset:
     def test_construction_with_required_fields(self) -> None:
