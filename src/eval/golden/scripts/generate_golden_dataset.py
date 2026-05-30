@@ -1,8 +1,11 @@
 """CLI script for generating golden datasets using LLM-based independent evaluation.
 
-This script uses a local LLM to independently judge which chunks are relevant,
+This script uses an LLM to independently judge which chunks are relevant,
 what sources to expect, etc. This provides independent quality validation -
 not just regression testing.
+
+**Default**: provider=`anthropic`, model=`claude-opus-4-7`.
+**Alternative**: provider=`ollama` (local; may struggle with complex JSON).
 
 Why No Test Coverage?
 The core logic is thoroughly tested in src/eval/golden/dataset_generation.py.
@@ -14,24 +17,24 @@ Usage:
     cp .env.example .env
     # Edit .env and add your ANTHROPIC_API_KEY
 
-    # Generate using Anthropic (recommended - better JSON generation)
-    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --provider anthropic
+    # Generate with defaults (Anthropic + Opus)
+    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json
 
     # Alternatively, set API key via environment variable
     export ANTHROPIC_API_KEY='your-key-here'
-    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --provider anthropic
+    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json
 
-    # Generate using Ollama (local, may struggle with complex JSON)
-    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --provider ollama --model llama3
-
-    # Use different model
-    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --provider anthropic --model claude-opus-4-20250514
+    # Override the default Anthropic model
+    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --model claude-sonnet-4-6
 
     # Specify version directly (non-interactive)
-    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --provider anthropic --version 1.2
+    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --version 1.2
 
     # Enable verbose logging
-    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --provider anthropic --verbose
+    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --verbose
+
+    # Alternative provider: Ollama (local, may struggle with complex JSON)
+    uv run python src/eval/golden/scripts/generate_golden_dataset.py --config src/eval/golden/configs/voltaire_examples.json --provider ollama --model llama3
 
 Design principles:
 - LLM-based independent evaluation (not circular)
@@ -72,23 +75,23 @@ def _parser_epilogue() -> str:
       # Edit .env and add your ANTHROPIC_API_KEY
 
     Examples:
-      # Generate with Anthropic (recommended)
-      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --provider anthropic
-
-      # Generate with Ollama (local, may struggle with complex JSON)
-      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --provider ollama --model llama3
+      # Generate with defaults (provider=anthropic, model=claude-opus-4-7)
+      %(prog)s --config src/eval/golden/configs/voltaire_examples.json
 
       # Specify version directly (non-interactive)
-      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --provider anthropic --version 1.2
+      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --version 1.2
 
-      # Use different model
-      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --provider anthropic --model claude-opus-4-20250514
+      # Override the default Anthropic model
+      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --model claude-sonnet-4-6
 
       # Save to custom directory
-      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --provider anthropic --output custom/output
+      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --output custom/output
 
       # Enable debug logging
-      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --provider anthropic --verbose
+      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --verbose
+
+      # Alternative provider: Ollama (local, may struggle with complex JSON)
+      %(prog)s --config src/eval/golden/configs/voltaire_examples.json --provider ollama --model llama3
       """
     return epilogue
 
@@ -121,11 +124,13 @@ def initialize_llm(provider: str, model: str | None) -> BaseChatModel:
     """Initialize LLM based on provider.
 
     Args:
-        provider: Either "ollama" or "anthropic"
-        model: Model name (defaults to "mistral" for ollama, "claude-sonnet-4-5-20250929" for anthropic)
+        provider: Either "anthropic" (default) or "ollama"
+        model: Model name (defaults to "claude-opus-4-7" for anthropic, "mistral" for ollama)
 
     Returns:
-        Initialized LLM instance with temperature=0
+        Initialized LLM instance. Ollama is set to temperature=0 for
+        determinism; newer Anthropic models (e.g. Opus 4.7) no longer
+        accept a temperature parameter, so it is omitted for that provider.
 
     Raises:
         ValueError: If provider is invalid or required env vars are missing
@@ -138,9 +143,9 @@ def initialize_llm(provider: str, model: str | None) -> BaseChatModel:
                 "Set it with: export ANTHROPIC_API_KEY='your-key-here'"
             )
 
-        model_name = model or "claude-sonnet-4-5-20250929"
-        logger.info(f"Initializing Anthropic LLM: {model_name} (temperature=0)")
-        return ChatAnthropic(model=model_name, temperature=0)  # type: ignore[call-arg]
+        model_name = model or "claude-opus-4-7"
+        logger.info(f"Initializing Anthropic LLM: {model_name}")
+        return ChatAnthropic(model=model_name)  # type: ignore[call-arg]
 
     elif provider == "ollama":
         model_name = model or "mistral"
@@ -148,7 +153,7 @@ def initialize_llm(provider: str, model: str | None) -> BaseChatModel:
         return ChatOllama(model=model_name, temperature=0, format="json")
 
     else:
-        raise ValueError(f"Invalid provider: {provider}. Must be 'ollama' or 'anthropic'")
+        raise ValueError(f"Invalid provider: {provider}. Must be 'anthropic' or 'ollama'")
 
 
 def prompt_version_increment(current_version: str) -> str:
@@ -206,14 +211,14 @@ def main() -> int:
     parser.add_argument(
         "--provider",
         type=str,
-        choices=["ollama", "anthropic"],
+        choices=["anthropic", "ollama"],
         default="anthropic",
-        help="LLM provider to use (default: anthropic, recommended for better JSON generation)",
+        help="LLM provider to use (default: anthropic, recommended for better JSON generation; ollama available as a local alternative)",
     )
     parser.add_argument(
         "--model",
         type=str,
-        help="Model name (default: mistral for ollama, claude-sonnet-4-5-20250929 for anthropic)",
+        help="Model name (default: claude-opus-4-7 for anthropic, mistral for ollama)",
     )
     parser.add_argument(
         "--verbose",
@@ -293,7 +298,7 @@ def main() -> int:
     else:
         new_version = prompt_version_increment(current_version)
 
-    # Initialize LLM with temperature=0 for deterministic generation
+    # Initialize LLM (Ollama uses temperature=0; Opus 4.7 has it deprecated)
     try:
         llm = initialize_llm(
             provider=args.provider,

@@ -34,5 +34,29 @@
     "author": "voltaire",
     "language": "fr",
     "topics": ["newton", "science"]
+  },
+  {
+    "question": "What is your view on religious fanaticism and the clergy?",
+    "author": "voltaire",
+    "language": "en",
+    "topics": ["fanaticism", "religion"]
+  },
+  {
+    "question": "Que pensez-vous du fanatisme religieux et du clergé ?",
+    "author": "voltaire",
+    "language": "fr",
+    "topics": ["fanaticism", "religion"]
+  },
+  {
+    "question": "What is your view on judicial torture and miscarriages of justice?",
+    "author": "voltaire",
+    "language": "en",
+    "topics": ["justice", "torture"]
+  },
+  {
+    "question": "Que pensez-vous de la torture judiciaire et des erreurs de la justice ?",
+    "author": "voltaire",
+    "language": "fr",
+    "topics": ["justice", "torture"]
   }
 ]
