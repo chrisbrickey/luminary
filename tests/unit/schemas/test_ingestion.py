@@ -1,4 +1,4 @@
-"""Tests for src/schemas/ingestion.py - data ingestion and document loading schemas"""
+"""Unit tests for data ingestion and document loading schemas"""
 
 from typing import Any
 

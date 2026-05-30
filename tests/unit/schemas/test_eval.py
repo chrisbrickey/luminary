@@ -1,4 +1,4 @@
-"""Tests for src/schemas/eval.py - evaluation harness schemas"""
+"""Unit tests for evaluation harness schemas"""
 
 from typing import Any
 

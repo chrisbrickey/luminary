@@ -1,4 +1,4 @@
-"""Unit tests for language detection utilities."""
+"""Unit tests for language detection utilities"""
 
 from unittest.mock import patch
 

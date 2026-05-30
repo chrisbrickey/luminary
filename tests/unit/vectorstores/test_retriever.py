@@ -1,4 +1,4 @@
-"""Tests for retriever wrapper."""
+"""Unit tests for retriever wrapper"""
 
 from pathlib import Path
 

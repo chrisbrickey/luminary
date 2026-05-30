@@ -1,4 +1,4 @@
-"""Tests for src/schemas/chat.py - chat response schemas"""
+"""Unit tests for chat response schemas"""
 
 from typing import Any
 

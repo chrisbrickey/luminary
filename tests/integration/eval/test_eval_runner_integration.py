@@ -614,7 +614,7 @@ def test_runner_output_flows_through_print_summary_table(
         **_chat_response_kwargs(retrieved_passage_ids=[CHUNK_001])
     )
 
-    # Use the real runner — its output feeds directly into print_summary_table
+    # Use the real runner; its output feeds directly into print_summary_table
     result = run_eval(dataset, {DEFAULT_AUTHOR: mock_chain})
     print_summary_table(result)
 

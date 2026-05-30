@@ -1,4 +1,4 @@
-"""Tests for src/eval/runner.py — evaluation runner."""
+"""Unit tests for evaluation runner"""
 
 from typing import Any
 from unittest.mock import Mock, patch

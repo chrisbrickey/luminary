@@ -1,4 +1,4 @@
-"""Tests for src/eval/metrics/base.py — metric registry infrastructure."""
+"""Unit tests for metric registry infrastructure"""
 
 from pathlib import Path
 from unittest.mock import Mock

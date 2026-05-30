@@ -1,4 +1,4 @@
-"""Tests for src/eval/metrics/citation.py — citation metrics."""
+"""Unit tsts for citation metrics"""
 
 import pytest
 

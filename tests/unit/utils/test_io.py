@@ -1,4 +1,4 @@
-"""Unit tests for IO utilities."""
+"""Unit tests for IO utilities"""
 
 import json
 import tempfile
