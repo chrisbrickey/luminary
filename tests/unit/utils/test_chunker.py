@@ -1,4 +1,4 @@
-"""Tests for src/utils/chunker.py — text chunking with metadata validation."""
+"""Unit tests for text chunking with metadata validation"""
 
 from typing import Any
 

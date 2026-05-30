@@ -1,4 +1,4 @@
-"""Fake author constants for unit tests.
+"""Fake author constants for unit tests
 
 Unit tests should use these fake philosophers instead of production authors
 to ensure test isolation and avoid coupling to production AUTHOR_CONFIGS.

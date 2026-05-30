@@ -1,4 +1,4 @@
-"""Tests for src/utils/logging.py - logging utilities for CLI scripts."""
+"""Unit tests for logging utilities for CLI scripts."""
 
 import logging
 

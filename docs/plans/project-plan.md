@@ -1,4 +1,4 @@
-# Plan: Luminary — Enlightenment Philosopher RAG Chatbot
+# Plan: Luminary, an Enlightenment Philosopher RAG Chatbot
 
 ## Context
 Luminary is a RAG chatbot where Enlightenment philosophers (e.g., Voltaire, Olympe de Gouges) answer questions grounded in their historical texts. 
@@ -9,9 +9,9 @@ This plan covers the complete system from project scaffolding through production
 
 All design decisions should keep Heroku deployment in mind:
 
-1. **ChromaDB storage** — Heroku has an ephemeral filesystem. Database path configured via `CHROMA_DB_PATH` env var (implemented 2026-03-19). Step 17 introduces `ChromaDBConfig` with `EMBEDDED` (local dev) and `SERVER` (production) modes via env vars.
-2. **LLM + embeddings** — Heroku cannot run Ollama. Step 18 adds provider abstraction: `LLM_PROVIDER` and `EMBEDDING_PROVIDER` env vars to swap between Ollama (local) and hosted APIs (Anthropic, OpenAI).
-3. **Port binding** — `Procfile` binds Streamlit web UI to `$PORT`.
+1. **ChromaDB storage** Heroku has an ephemeral filesystem. Database path configured via `CHROMA_DB_PATH` env var (implemented 2026-03-19). Step 17 introduces `ChromaDBConfig` with `EMBEDDED` (local dev) and `SERVER` (production) modes via env vars.
+2. **LLM + embeddings** Heroku cannot run Ollama. Step 18 adds provider abstraction: `LLM_PROVIDER` and `EMBEDDING_PROVIDER` env vars to swap between Ollama (local) and hosted APIs (Anthropic, OpenAI).
+3. **Port binding** `Procfile` binds Streamlit web UI to `$PORT`.
 
 **Design rule:** prefer injectable dependencies (LLM, embeddings, retriever) over hardcoded defaults so local and hosted implementations can be swapped via configuration without touching business logic.
 
@@ -94,47 +94,47 @@ All test development in this plan follows this workflow:
   packages = ["src"]
   ```
 - Update `.gitignore`: `__pycache__/`, `.venv/`, `.idea/`
-- Create `src/utils/ollama_health.py`: `check_ollama_available(base_url="http://localhost:11434") -> None` — sends GET to `/api/tags`; raises `RuntimeError("Ollama is not running. Start it with: ollama serve")` on connection failure; called at the top of all CLI scripts that need Ollama
-- **Test:** `tests/unit/utils/test_ollama_health.py` — mock `urllib.request.urlopen`: assert raises `RuntimeError` with expected message on `ConnectionRefusedError`; assert returns `None` on normal response
-- **Test:** `tests/integration/test_mypy.py` — run `mypy src scripts` via subprocess; assert exit code 0
+- Create `src/utils/ollama_health.py`: `check_ollama_available(base_url="http://localhost:11434") -> None` sends GET to `/api/tags`; raises `RuntimeError("Ollama is not running. Start it with: ollama serve")` on connection failure; called at the top of all CLI scripts that need Ollama
+- **Test:** `tests/unit/utils/test_ollama_health.py` mock `urllib.request.urlopen`: assert raises `RuntimeError` with expected message on `ConnectionRefusedError`; assert returns `None` on normal response
+- **Test:** `tests/integration/test_mypy.py` run `mypy src scripts` via subprocess; assert exit code 0
 - **Verify:** `uv run python -c "import langchain; print('ok')"`
 - **README:** Add Technology table (all initial dependencies + purposes); add Setup section (clone, `uv sync`, Ollama install + model pulls); add project structure diagram
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ## ✅ Step 2: Pydantic schemas
 - Create `src/schemas.py` with:
-  - `WikisourceCollection`: Pydantic schema for validating Wikisource collection specifications (`document_id`, `document_title`, `author`, `page_title_template`, `total_pages`, `api_url`) — moved here in 2026-03-27 refactoring for organizational consistency
+  - `WikisourceCollection`: Pydantic schema for validating Wikisource collection specifications (`document_id`, `document_title`, `author`, `page_title_template`, `total_pages`, `api_url`) moved here in 2026-03-27 refactoring for organizational consistency
   - `ChunkInfo`: `chunk_id` (SHA256 of `document_id:chunk_index`, truncated to 12 chars), `document_id`, `document_title: str | None = None`, `author: str | None = None` (lowercase), `chunk_index`, `source` (+ `extra="allow"` for domain-specific fields)
   - `ChatResponse`: `text`, `retrieved_passage_ids: list[str]`, `retrieved_contexts: list[str]`, `retrieved_source_titles: list[str]`, `language` (ISO 639-1: `^[a-z]{2}$`)
-- **Test:** `tests/unit/test_schemas.py` — validate construction, required fields, type enforcement, extra fields on ChunkInfo, language regex validation, page_number optional field
+- **Test:** `tests/unit/test_schemas.py` validate construction, required fields, type enforcement, extra fields on ChunkInfo, language regex validation, page_number optional field
 - **README:** No user-facing command; update project structure diagram to add `src/schemas.py`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
   - **Schema organization refactoring (2026-03-27):** Moved `WikisourceCollection` (originally named `WikisourceCollectionConfig`) from `src/configs/loader_configs.py` to `src/schemas.py` for consistency. Rationale: Since it uses Pydantic validation for external data, it belongs with other schemas rather than with simple config constants. This establishes the pattern: Pydantic validation schemas → `schemas.py`, simple constants/registries → `configs/`. Also renamed constant from `LETTRES_PHILOSOPHIQUES_CONFIG` to `LETTRES_PHILOSOPHIQUES` to avoid "config" terminology for data that's now clearly a schema instance.
 
-## ✅ Step 3: Corpus ingestion — loader
+## ✅ Step 3: Corpus ingestion loader
 - Create new directories with `__init__.py`: `src/configs/`, `src/document_loaders/`; create `scripts/`
 - Update `pyproject.toml` mypy config: change `packages = ["src"]` to `packages = ["src", "scripts"]`
 - Update `tests/integration/test_mypy.py`: add `"scripts"` to the mypy command
 - Update `.gitignore`: add `data/raw/`
 - Create `src/configs/loader_configs.py`:
-  - `VECTOR_DB_PATH = Path("data/chroma_db")` — simplified to relative path (not resolved)
-  - `WikisourceCollection` (Pydantic): `document_id`, `document_title`, `author` (lowercase), `page_title_template` (with `{n}` placeholder), `total_pages: int | None` (auto-discovered if None), `api_url` (default: `https://fr.wikisource.org/w/api.php`) — **Note:** as of 2026-03-27, this schema is defined in `src/schemas.py` and imported here
+  - `VECTOR_DB_PATH = Path("data/chroma_db")` simplified to relative path (not resolved)
+  - `WikisourceCollection` (Pydantic): `document_id`, `document_title`, `author` (lowercase), `page_title_template` (with `{n}` placeholder), `total_pages: int | None` (auto-discovered if None), `api_url` (default: `https://fr.wikisource.org/w/api.php`) **Note:** as of 2026-03-27, this schema is defined in `src/schemas.py` and imported here
   - `LETTRES_PHILOSOPHIQUES`: pre-built collection specification for Voltaire's Lettres philosophiques (renamed from VOLTAIRE_LETTRES_CONFIG, then from LETTRES_PHILOSOPHIQUES_CONFIG in 2026-03-27 refactoring)
-  - `INGEST_CONFIGS: dict[str, WikisourceCollection]` — registry mapping author key → collection specification; initially `{"voltaire": LETTRES_PHILOSOPHIQUES}`
+  - `INGEST_CONFIGS: dict[str, WikisourceCollection]` registry mapping author key → collection specification; initially `{"voltaire": LETTRES_PHILOSOPHIQUES}`
 - Create `src/document_loaders/wikisource_loader.py`:
   - `WikisourceLoader`: class-based loader with `load() -> list[Document]`; fetches HTML via Wikisource API; parses with `_WikisourceHTMLExtractor` (HTMLParser subclass, skip-depth tracking to strip ws-noexport, reference, reflist, script, style)
   - Metadata per Document: `document_id`, `document_title`, `author`, `source` (canonical URL), `page_number`
   - Polite delay (`delay: float = 1.0`) between requests
-  - **Retry with exponential backoff** (max 3 retries, base 2s) for transient HTTP errors (429, 5xx, connection timeouts) — improvement over rag-chat-1 which had no retry logic
+  - **Retry with exponential backoff** (max 3 retries, base 2s) for transient HTTP errors (429, 5xx, connection timeouts) improvement over rag-chat-1 which had no retry logic
 - Create `src/utils/io.py`:
   - `save_documents_to_disk(docs, directory) -> list[Path]`: saves each Document as `page_NN.json`
-  - ~~`load_documents_from_disk(directory) -> list[Document]`~~ — deferred to Step 7 (not needed until combined ingestion script)
-- Create `scripts/scrape_wikisource.py` — CLI entrypoint: loads config, calls loader, saves to `data/raw/<document_id>/`; does NOT call `check_ollama_available()` (no Ollama dependency for scraping)
-- **Test:** `tests/unit/test_script_scrape_wikisource.py` — mock all external dependencies; test successful scraping, invalid author, no documents loaded, loader exception, save exception, custom output directory, output path construction, default scraping all authors (9 tests)
-- **Test:** `tests/unit/configs/test_loader_configs.py` — validate LETTRES_PHILOSOPHIQUES fields, `INGEST_CONFIGS` has `"voltaire"` key, VECTOR_DB_PATH correctness, WikisourceCollection validation (custom API URL, optional total_pages, default values) (6 tests)
-- **Test:** `tests/unit/document_loaders/test_wikisource_loader.py` — comprehensive tests for HTML parser and loader with mocked HTTP calls; test retry on 429/5xx, network errors, max retries, non-transient errors, auto-discovery, empty responses, metadata construction (15 tests for parser and loader combined)
-- **Test:** `tests/unit/utils/test_io.py` — test save operations: directory creation, error handling, Unicode preservation, padding (6 tests for save only; load tests deferred to Step 7)
+  - ~~`load_documents_from_disk(directory) -> list[Document]`~~ deferred to Step 7 (not needed until combined ingestion script)
+- Create `scripts/scrape_wikisource.py` CLI entrypoint: loads config, calls loader, saves to `data/raw/<document_id>/`; does NOT call `check_ollama_available()` (no Ollama dependency for scraping)
+- **Test:** `tests/unit/test_script_scrape_wikisource.py` mock all external dependencies; test successful scraping, invalid author, no documents loaded, loader exception, save exception, custom output directory, output path construction, default scraping all authors (9 tests)
+- **Test:** `tests/unit/configs/test_loader_configs.py` validate LETTRES_PHILOSOPHIQUES fields, `INGEST_CONFIGS` has `"voltaire"` key, VECTOR_DB_PATH correctness, WikisourceCollection validation (custom API URL, optional total_pages, default values) (6 tests)
+- **Test:** `tests/unit/document_loaders/test_wikisource_loader.py` comprehensive tests for HTML parser and loader with mocked HTTP calls; test retry on 429/5xx, network errors, max retries, non-transient errors, auto-discovery, empty responses, metadata construction (15 tests for parser and loader combined)
+- **Test:** `tests/unit/utils/test_io.py` test save operations: directory creation, error handling, Unicode preservation, padding (6 tests for save only; load tests deferred to Step 7)
 - **README:** Added Usage > Ingestion section with `scripts/scrape_wikisource.py` command, options table, output location details, and example; updated project structure diagram to add `scripts/` and clarify directories
 - **Deviations from plan:**
   - `VECTOR_DB_PATH` simplified to relative path `Path("data/chroma_db")` instead of absolute resolved path; later moved to `src/configs/common.py` in 2026-03-08 refactoring (see Step 6 deviations)
@@ -147,12 +147,12 @@ All test development in this plan follows this workflow:
   - Added integration test `tests/integration/document_loaders/test_wikisource_loader_integration.py` for external API contract testing
   - Refactored `scripts/scrape_wikisource.py` with `scrape_author()` helper function for cleaner code organization
 
-## ✅ Step 4: Corpus ingestion — chunking
+## ✅ Step 4: Corpus ingestion chunking
 - Create `src/utils/chunker.py`
 - Use LangChain `RecursiveCharacterTextSplitter` (chunk_size=1200 chars, chunk_overlap=150, separators=["\n\n", "\n", ". ", " ", ""] for French prose)
 - Attach chunk metadata: `chunk_id` (SHA256 of `document_id:chunk_index`[:12]), `chunk_index` (0-indexed per document); preserve all source metadata
-- **Validate chunks via ChunkInfo** — construct a `ChunkInfo` from each chunk's metadata before returning, ensuring schema compliance at chunking time (improvement over rag-chat-1 where ChunkInfo was defined but never enforced)
-- **Test:** `tests/unit/utils/test_chunker.py` — given a known Document, assert chunks are within size bounds, metadata is correct, no text is lost, ChunkInfo validation passes; test empty document edge case
+- **Validate chunks via ChunkInfo** construct a `ChunkInfo` from each chunk's metadata before returning, ensuring schema compliance at chunking time (improvement over rag-chat-1 where ChunkInfo was defined but never enforced)
+- **Test:** `tests/unit/utils/test_chunker.py` given a known Document, assert chunks are within size bounds, metadata is correct, no text is lost, ChunkInfo validation passes; test empty document edge case
 - **README:** No user-facing command; update pipeline diagram to show chunking stage
 - **Deviations from plan:**
   - Added 14 comprehensive tests covering all edge cases including deterministic chunk ID generation, multi-document processing, custom parameters, and validation failures
@@ -166,11 +166,11 @@ All test development in this plan follows this workflow:
 - Create `src/vectorstores/chroma.py` (renamed from `embed_and_store.py` for better module naming)
 - `embed_and_store(chunks, collection_name="philosophes", embeddings=None) -> Chroma`:
   - Uses `VECTOR_DB_PATH` from config (no user-facing persist_dir parameter)
-  - Uses `Chroma.from_documents()` with **`ids=` set to each chunk's `chunk_id`** — idempotent upserts on re-run (improvement over rag-chat-1 which omitted `ids=`, causing duplicates)
+  - Uses `Chroma.from_documents()` with **`ids=` set to each chunk's `chunk_id`** idempotent upserts on re-run (improvement over rag-chat-1 which omitted `ids=`, causing duplicates)
   - Accepts injectable embeddings for testing; defaults to `OllamaEmbeddings(model="nomic-embed-text")`
   - Refactored with private helper functions `_get_embeddings_instance()` and `_extract_and_validate_chunk_ids()` following SRP
-- Create `scripts/embed_and_store.py` — CLI entrypoint: calls `check_ollama_available()`, loads chunks from disk, embeds and stores (no `--db` flag)
-- **Test:** `tests/unit/vectorstores/test_chroma.py` (renamed from `test_embed_and_store.py`) — ingest 2-3 fixture chunks with FakeEmbeddings; verify retrievable by similarity search; verify re-running with same IDs does not create duplicates
+- Create `scripts/embed_and_store.py` CLI entrypoint: calls `check_ollama_available()`, loads chunks from disk, embeds and stores (no `--db` flag)
+- **Test:** `tests/unit/vectorstores/test_chroma.py` (renamed from `test_embed_and_store.py`) ingest 2-3 fixture chunks with FakeEmbeddings; verify retrievable by similarity search; verify re-running with same IDs does not create duplicates
 - **README:** Add ingestion step 2 (`scripts/embed_and_store.py`) with command, output location (`data/chroma_db/` or `$CHROMA_DB_PATH`); update project structure diagram to add `src/vectorstores/`, `data/chroma_db/`; update pipeline diagram to reference `chroma.py`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
@@ -192,8 +192,8 @@ All test development in this plan follows this workflow:
 - `build_retriever(collection_name="philosophes", embeddings=None, k=5, author=None) -> VectorStoreRetriever`
   - Uses `VECTOR_DB_PATH` from config (no user-facing persist_dir parameter)
 - Wrap ChromaDB as LangChain retriever; apply author filter at retriever level via `search_kwargs={"filter": {"author": author}}` (ChromaDB metadata filter, not post-retrieval)
-- **Test:** `tests/unit/vectorstores/test_retriever.py` — with small fixture DB, query and assert relevant chunks returned with intact metadata; test author filter; test without filter returns all
-- **Test:** `tests/integration/test_retriever.py` — wire real ChromaDB + FakeEmbeddings end-to-end; embed fixtures then retrieve; verify round-trip
+- **Test:** `tests/unit/vectorstores/test_retriever.py` with small fixture DB, query and assert relevant chunks returned with intact metadata; test author filter; test without filter returns all
+- **Test:** `tests/integration/test_retriever.py` wire real ChromaDB + FakeEmbeddings end-to-end; embed fixtures then retrieve; verify round-trip
 - **README:** No user-facing command; update pipeline diagram to show retrieval stage
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
@@ -223,37 +223,37 @@ All test development in this plan follows this workflow:
   - Flags: `--author` (optional, defaults to all registered in `INGEST_CONFIGS`), `--skip-scrape`, `--skip-embed`, `--raw-data-path` (no `--db` flag)
   - Calls existing `scrape_wikisource.py` and `embed_and_store.py` scripts via `subprocess.run()` (maintains script separation)
   - Calls `check_ollama_available()` unless `--skip-embed` (only embedding needs Ollama)
-- **Test:** `tests/unit/test_scripts/test_script_ingest.py` — mock all external deps; test default (scrape+embed), skip-scrape, skip-embed, all-authors, single-author, invalid-author, both-skip-flags error, custom directories, ollama availability checks, file-not-found errors, general exceptions (17 tests total covering main() and ingest_author())
+- **Test:** `tests/unit/test_scripts/test_script_ingest.py` mock all external deps; test default (scrape+embed), skip-scrape, skip-embed, all-authors, single-author, invalid-author, both-skip-flags error, custom directories, ollama availability checks, file-not-found errors, general exceptions (17 tests total covering main() and ingest_author())
 - **README:** Moved two-step ingestion instructions to new ## Troubleshooting section at bottom. In section 5 (Run the ingestion pipeline), added unified `scripts/ingest.py` as primary command with comprehensive documentation of all flags and usage examples
 - **Deviations from plan:**
-  - `ingest_author()` signature uses positional parameters `author, raw_data_path, skip_scrape, skip_embed` (no `db_dir` parameter) — directly takes author string and looks up config internally for cleaner interface
+  - `ingest_author()` signature uses positional parameters `author, raw_data_path, skip_scrape, skip_embed` (no `db_dir` parameter) directly takes author string and looks up config internally for cleaner interface
   - Added `--raw-data-path` flag for consistency with individual scripts (not in original plan)
-  - **Implementation approach:** Uses `subprocess.run()` to call the existing `scrape_wikisource.py` and `embed_and_store.py` scripts rather than importing their functions — this maintains complete separation between scripts and avoids the need to make scripts a Python package
+  - **Implementation approach:** Uses `subprocess.run()` to call the existing `scrape_wikisource.py` and `embed_and_store.py` scripts rather than importing their functions this maintains complete separation between scripts and avoids the need to make scripts a Python package
   - `ingest_author()` returns `None` instead of `tuple[int, int]` since subprocess calls don't return counts
   - Final summary simplified (no database location shown)
   - Added validation to prevent both `--skip-scrape` and `--skip-embed` flags being used together
   - Added `subprocess.CalledProcessError` handling for script execution failures
-  - Added 17 comprehensive tests vs. suggested 6 test scenarios, covering both main() and ingest_author() functions — tests mock `subprocess.run()` and verify correct command arguments
+  - Added 17 comprehensive tests vs. suggested 6 test scenarios, covering both main() and ingest_author() functions tests mock `subprocess.run()` and verify correct command arguments
   - Test organization follows existing pattern in `tests/unit/test_scripts/`
   - **DB path override removal (2026-03-19):** Removed `db_dir` parameter from `ingest_author()` function signature and `--db` flag from script. Database location now configured solely via `CHROMA_DB_PATH` environment variable.
 
 ## ✅ Step 8: Voltaire prompt + chat chain
 - Create new directories with `__init__.py`: `src/prompts/`, `src/chains/`; create `tests/unit/chains/`
-- Create `src/prompts/voltaire.py` — Voltaire system prompt (irony/wit, mandatory inline citations, responds in `{language}`); export `build_voltaire_prompt() -> ChatPromptTemplate`
-  - **Bilingual from the start** — prompt includes `{language}` placeholder (improvement over rag-chat-1 which had to retrofit this later)
+- Create `src/prompts/voltaire.py` Voltaire system prompt (irony/wit, mandatory inline citations, responds in `{language}`); export `build_voltaire_prompt() -> ChatPromptTemplate`
+  - **Bilingual from the start** prompt includes `{language}` placeholder (improvement over rag-chat-1 which had to retrofit this later)
 - Create `src/chains/chat_chain.py`:
-  - `DEFAULT_AUTHOR = "voltaire"` — canonical author key
-  - `_AUTHOR_CONFIGS: dict[str, AuthorConfig]` — extensible registry (AuthorConfig is a dataclass with `prompt_factory` and `exit_message` fields)
-  - `build_chain(author=DEFAULT_AUTHOR, retriever=None, llm=None, prompt=None) -> Runnable[dict, ChatResponse]` — unified API supporting both production use (with defaults) and testing use (with mocks); uses `VECTOR_DB_PATH` from config (no user-facing persist_dir parameter); chain accepts dict input `{"question": str, "language": str}` via `.invoke()`
+  - `DEFAULT_AUTHOR = "voltaire"` canonical author key
+  - `_AUTHOR_CONFIGS: dict[str, AuthorConfig]` extensible registry (AuthorConfig is a dataclass with `prompt_factory` and `exit_message` fields)
+  - `build_chain(author=DEFAULT_AUTHOR, retriever=None, llm=None, prompt=None) -> Runnable[dict, ChatResponse]` unified API supporting both production use (with defaults) and testing use (with mocks); uses `VECTOR_DB_PATH` from config (no user-facing persist_dir parameter); chain accepts dict input `{"question": str, "language": str}` via `.invoke()`
   - Internal `_run(question, language) -> ChatResponse`: retrieves top-k docs, formats context with `[source: {title}, page {page_number}]` labels (page-specific from the start), invokes LLM with language parameter, returns structured ChatResponse
   - Helpers: `_format_docs_with_titles()`, `_extract_chunk_ids()`, `_extract_source_titles()` (combines document_title + page_number; fallback: title-only → source URL → "unknown")
-- **Test:** `tests/unit/chains/test_chat_chain.py` — mock LLM and retriever; assert chain wires retrieval + prompt correctly; test `_extract_source_titles()` with title+page, title-only, fallback to source URL, missing metadata; test empty retrieval; test unknown author raises ValueError; test language detection integration
-- **Test:** `tests/integration/test_chat_chain_integration.py` — wire small fixture ChromaDB (FakeEmbeddings) → real retriever → real prompt → FakeChatModel; assert full chain returns ChatResponse with correct retrieved_source_titles and non-empty text
+- **Test:** `tests/unit/chains/test_chat_chain.py` mock LLM and retriever; assert chain wires retrieval + prompt correctly; test `_extract_source_titles()` with title+page, title-only, fallback to source URL, missing metadata; test empty retrieval; test unknown author raises ValueError; test language detection integration
+- **Test:** `tests/integration/test_chat_chain_integration.py` wire small fixture ChromaDB (FakeEmbeddings) → real retriever → real prompt → FakeChatModel; assert full chain returns ChatResponse with correct retrieved_source_titles and non-empty text
 - **README:** Add Architecture Overview section with full pipeline diagram (Ingestion, Query, Debate, Eval); update project structure diagram to add `src/prompts/`, `src/chains/`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
   - Created `FakeChatModel` in integration tests (similar to `FakeEmbeddings`) for testing without real LLM calls
-  - Language detection support added to chain API — chain accepts `language` parameter via `.invoke({"question": str, "language": str})`, but actual detection logic implemented later in Step 12 at call site (CLI/UI), not inside chain
+  - Language detection support added to chain API chain accepts `language` parameter via `.invoke({"question": str, "language": str})`, but actual detection logic implemented later in Step 12 at call site (CLI/UI), not inside chain
   - Comprehensive test coverage: 21 unit tests covering all helper functions, chain wiring, error cases, and author registry; 2 integration tests covering full end-to-end pipeline with real ChromaDB and retriever
   - All tests pass; mypy type checking passes
   - **Post-implementation refactoring:**
@@ -261,7 +261,7 @@ All test development in this plan follows this workflow:
     - **Unified API:** Merged `build_default_chain()` and `build_chat_chain()` into single `build_chain()` method. This method takes all parameters with sensible defaults, supporting both production use (`build_chain()` or `build_chain(author="gouges")`) and testing use (`build_chain(retriever=mock, llm=mock, prompt=mock)`). Eliminates API confusion and reduces code duplication. Updated all 25 test call sites. Added 1 new test for injection mode. All 154 tests pass. Single public API is clearer and more maintainable.
     - **Chunk ID isolation (2026-03-11):** Removed chunk IDs from LLM-facing context and prompt instructions. Chunk IDs are internal metadata for debugging (visible only with `--show-chunks` flag) and should never be sent to the LLM or appear in responses. Changes: (1) Updated `src/prompts/voltaire.py` to remove `| chunk_id: xxx` from citation format instruction, (2) Updated `src/chains/chat_chain.py::_format_docs_with_titles()` to format context as `[source: {title}, page {page}]` without chunk IDs, (3) Added unit test `test_prompt_does_not_instruct_chunk_id_citations` to verify prompt doesn't instruct chunk ID citations, (4) Updated existing `test_context_formatting` to assert chunk IDs are NOT in LLM input, (5) Added integration test `test_rag_chain_does_not_expose_chunk_ids_to_llm` to verify end-to-end pipeline isolation. All 184 tests pass.
     - **Prompt refinement (2026-03-15, commit e372784):** Strengthened LLM prompting for better instruction clarity and citation control:
-      1. Rewrote Voltaire prompt from French to English — LLMs follow English instructions more reliably
+      1. Rewrote Voltaire prompt from French to English LLMs follow English instructions more reliably
       2. Enhanced prompt with explicit formatting examples showing correct vs. incorrect citation placement (citations must appear at end of sentences, never at beginning of paragraphs)
       3. Created dedicated test file `tests/unit/prompts/test_voltaire.py` with comprehensive prompt validation tests
       4. Refactored and reorganized tests in `tests/unit/chains/test_chat_chain.py` for better clarity and maintainability
@@ -274,17 +274,17 @@ All test development in this plan follows this workflow:
     - **DB path override removal (2026-03-19):** Removed `persist_dir` parameter from `build_chain()` function. Database location now configured solely via `CHROMA_DB_PATH` environment variable (defaults to "data/chroma_db"). Simplifies API by treating database location as infrastructure concern.
 
 ## ✅ Step 9: Chat CLI script
-- Create `scripts/chat.py` — interactive CLI chat loop; flags: `--author`, `--show-chunks`, `--verbose` (no `--db` flag); calls `check_ollama_available()`; prints deduplicated "Sources:" footer (with page numbers); exits on `quit`, Ctrl+C, EOFError
+- Create `scripts/chat.py` interactive CLI chat loop; flags: `--author`, `--show-chunks`, `--verbose` (no `--db` flag); calls `check_ollama_available()`; prints deduplicated "Sources:" footer (with page numbers); exits on `quit`, Ctrl+C, EOFError
 - **Important:** Import and use `DEFAULT_AUTHOR` from `src.configs.authors` as the default value for `--author` argparse argument
-- **Test:** `tests/unit/test_scripts/test_script_chat.py` — mock `build_chain` and `input()`; assert CLI flags forwarded, chain invoked per question, source footer always printed, chunks only with `--show-chunks`, all exit paths
+- **Test:** `tests/unit/test_scripts/test_script_chat.py` mock `build_chain` and `input()`; assert CLI flags forwarded, chain invoked per question, source footer always printed, chunks only with `--show-chunks`, all exit paths
 - **README:** Add CLI chat section: `scripts/chat.py` command, all flags table; add Example Usage section with French and English chat examples
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
-  - `DEFAULT_AUTHOR` is imported from `src.configs.authors` (not `src.configs.common` as stated in plan) — this matches the actual codebase structure from Step 8
+  - `DEFAULT_AUTHOR` is imported from `src.configs.authors` (not `src.configs.common` as stated in plan) this matches the actual codebase structure from Step 8
   - Created comprehensive test suite with 28 tests (vs. suggested basic mocking) covering:
     - Helper functions: `deduplicate_sources()`, `format_sources_footer()`, `format_chunks_output()` (7 tests)
-    - Interactive chat loop: `run_interactive_chat()` (14 tests) — all flags, exit paths, error handling, multiple questions
-    - Main function: `main()` (7 tests) — argument parsing and forwarding
+    - Interactive chat loop: `run_interactive_chat()` (14 tests) all flags, exit paths, error handling, multiple questions
+    - Main function: `main()` (7 tests) argument parsing and forwarding
   - All tests use proper mocking via `@patch` decorators and assert on behavior, not implementation
   - Logging tests use `caplog` fixture instead of `capsys` for proper log capture
   - Script includes helper functions for formatting output (following SRP)
@@ -296,12 +296,12 @@ All test development in this plan follows this workflow:
 
 ## ✅ Step 10: Web UI
 - Add dependency: `uv add --optional ui streamlit`
-- Create `chat_ui.py` — chat interface with:
+- Create `chat_ui.py` chat interface with:
   - Text input for user questions
   - Response text display with deduplicated sources caption (page-specific)
   - Sidebar: author selector (no DB path input)
-- **Test:** `tests/unit/test_chat_ui.py` — mock Streamlit API; assert title renders, session_state initialised, question forwarded to chain, messages appended, sources caption shown, early return on no input, st.error on ValueError
-- **Verify:** `uv run streamlit run chat_ui.py` — manual browser testing
+- **Test:** `tests/unit/test_chat_ui.py` mock Streamlit API; assert title renders, session_state initialised, question forwarded to chain, messages appended, sources caption shown, early return on no input, st.error on ValueError
+- **Verify:** `uv run streamlit run chat_ui.py` manual browser testing
 - **README:** Add Streamlit UI section: launch command, URL (`http://localhost:8501`), sidebar config description; update project structure diagram to add `chat_ui.py` at root
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
@@ -327,28 +327,28 @@ All test development in this plan follows this workflow:
 - **Goal:** Provide localized user-facing strings for chat interfaces (CLI and web UI) with language-appropriate messages
 - Add dependencies: `pyyaml`, `types-pyyaml` (dev dependency for type checking)
 - Create `locales/` directory at project root with YAML files for each supported language:
-  - `locales/en.yaml` — English strings
-  - `locales/fr.yaml` — French strings
+  - `locales/en.yaml` English strings
+  - `locales/fr.yaml` French strings
   - Structure: nested YAML with categories (chat, status, sources, errors) containing message templates with `{placeholders}` for interpolation
 - Create `src/i18n/` package with:
-  - `messages.py` — core localization module:
-    - `SUPPORTED_LANGUAGES: frozenset[str]` — explicit set of available locales (`"en"`, `"fr"`)
-    - `load_messages(language) -> dict[str, Any]` — loads and caches YAML files; falls back to `DEFAULT_RESPONSE_LANGUAGE` if language unsupported
-    - `get_message(key, language, **kwargs) -> str` — retrieves localized string with optional interpolation; automatically capitalizes author names
-    - `clear_cache() -> None` — testing utility for cache invalidation
+  - `messages.py` core localization module:
+    - `SUPPORTED_LANGUAGES: frozenset[str]` explicit set of available locales (`"en"`, `"fr"`)
+    - `load_messages(language) -> dict[str, Any]` loads and caches YAML files; falls back to `DEFAULT_RESPONSE_LANGUAGE` if language unsupported
+    - `get_message(key, language, **kwargs) -> str` retrieves localized string with optional interpolation; automatically capitalizes author names
+    - `clear_cache() -> None` testing utility for cache invalidation
     - Private helper `_get_nested_value()` for dot-notation key traversal
-  - `keys.py` — type-safe message key constants (e.g., `CHAT_CHATTING_WITH = "chat.chatting_with"`) to prevent typos and enable IDE autocomplete
-  - `key_registry.py` — dynamic registry that collects all keys from `keys.py` into `ALL_REQUIRED_KEYS: frozenset[str]` for validation purposes
-  - `__init__.py` — exports `get_message` and `clear_cache` as public API
-- Create `src/utils/formatting.py` — unified formatting utilities:
-  - `deduplicate_sources(response) -> list[str]` — preserves order of first appearance
-  - `format_sources(response, language) -> str` — markdown-formatted source citations using localized labels; works for both CLI (readable plaintext) and web UI (rendered markdown)
+  - `keys.py` type-safe message key constants (e.g., `CHAT_CHATTING_WITH = "chat.chatting_with"`) to prevent typos and enable IDE autocomplete
+  - `key_registry.py` dynamic registry that collects all keys from `keys.py` into `ALL_REQUIRED_KEYS: frozenset[str]` for validation purposes
+  - `__init__.py` exports `get_message` and `clear_cache` as public API
+- Create `src/utils/formatting.py` unified formatting utilities:
+  - `deduplicate_sources(response) -> list[str]` preserves order of first appearance
+  - `format_sources(response, language) -> str` markdown-formatted source citations using localized labels; works for both CLI (readable plaintext) and web UI (rendered markdown)
 - Modify `scripts/chat.py` and `chat_ui.py`:
   - Import localization functions from `src.i18n` and `src.utils.formatting`
   - Replace hardcoded English strings with `get_message()` calls using constants from `src.i18n.keys`
   - Use `format_sources()` for consistent source citation formatting
   - Messages adapt to detected response language for better user experience
-- **Test:** `tests/unit/i18n/test_messages.py` — comprehensive coverage (241 lines / 42 tests):
+- **Test:** `tests/unit/i18n/test_messages.py` comprehensive coverage (241 lines / 42 tests):
   - Locale file loading with caching
   - Fallback to default language for unsupported locales
   - Nested key traversal with dot notation
@@ -356,11 +356,11 @@ All test development in this plan follows this workflow:
   - Error handling for missing files, invalid keys, malformed YAML, non-string values
   - Cache clearing functionality
   - Integration test validating all registered keys exist in all locale files
-- **Test:** `tests/unit/utils/test_formatting.py` — comprehensive coverage (144 lines / 20 tests):
+- **Test:** `tests/unit/utils/test_formatting.py` comprehensive coverage (144 lines / 20 tests):
   - Source deduplication while preserving order
   - Markdown formatting for both languages
   - Edge cases: empty sources, single source, multiple sources, duplicate sources
-- **Test:** Update `tests/unit/test_scripts/test_script_chat.py` and `tests/unit/test_chat_ui.py` — refactor to use localization (removed ~150 lines of duplicated formatting logic replaced by shared utilities)
+- **Test:** Update `tests/unit/test_scripts/test_script_chat.py` and `tests/unit/test_chat_ui.py` refactor to use localization (removed ~150 lines of duplicated formatting logic replaced by shared utilities)
 - **Test:** Add `tests/conftest.py` fixture: `reset_i18n_cache` for clean test isolation
 - **README:** Update project structure diagram to add `locales/` directory and `src/i18n/` package
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
@@ -380,17 +380,17 @@ All test development in this plan follows this workflow:
 ## ✅ Step 12: Language detection utility
 - **Goal:** Standalone language detection module, decoupled from the chain (chain already has `{language}` placeholder from Step 8)
 - Add dependency: `langdetect` (add via `uv add langdetect`)
-- Create `src/utils/language.py`: `detect_language(text, default="fr", min_length=15) -> str` using `langdetect.detect_langs()` — returns default if text shorter than `min_length` or top language confidence < 0.7; graceful fallback on exception
+- Create `src/utils/language.py`: `detect_language(text, default="fr", min_length=15) -> str` using `langdetect.detect_langs()` returns default if text shorter than `min_length` or top language confidence < 0.7; graceful fallback on exception
 - Wire into CLI/UI: Both `scripts/chat.py` and `chat_ui.py` call `detect_language(question)` before invoking chain; pass detected language to `chain.invoke({"question": ..., "language": ...})`; chain sets `ChatResponse.language` from input
-- **Test:** `tests/unit/utils/test_language.py` — French/English detection, empty/whitespace → default, short text → default, low-confidence → default, exception → default
-- **Test:** `tests/unit/chains/test_chat_chain.py` — add tests verifying chain accepts language parameter and passes it to prompt correctly
+- **Test:** `tests/unit/utils/test_language.py` French/English detection, empty/whitespace → default, short text → default, low-confidence → default, exception → default
+- **Test:** `tests/unit/chains/test_chat_chain.py` add tests verifying chain accepts language parameter and passes it to prompt correctly
 - **README:** Update CLI and UI sections to note auto-detected response language; add note about English responses translating French passages
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 - **Deviations from plan:**
-  - Implementation uses `confidence` parameter (default 0.7) instead of `default` parameter — `detect_language(text, min_length=15, confidence=0.7)` reads default from `DEFAULT_RESPONSE_LANGUAGE` constant for consistency with config system
+  - Implementation uses `confidence` parameter (default 0.7) instead of `default` parameter `detect_language(text, min_length=15, confidence=0.7)` reads default from `DEFAULT_RESPONSE_LANGUAGE` constant for consistency with config system
   - Chain API changes: Added `language` parameter to `chain.invoke(question, language=...)` for explicit language override; detection happens at call site (CLI/UI), not inside `_run()`. Removed `detect_user_language` boolean parameter. This design:
     - Separates detection (caller's concern) from chain logic (LLM invocation)
-    - Makes testing simpler — inject desired language directly
+    - Makes testing simpler inject desired language directly
     - Allows override for use cases where language is known
   - Comprehensive test coverage: 18 unit tests (vs. suggested 6) covering all edge cases: French, English, Spanish, Swahili, empty/whitespace, short text, custom min_length, custom confidence, low/high confidence thresholds, detection failures, exceptions
   - Added 5 integration tests (`tests/integration/test_language_detection_integration.py`) to verify language flows through full chain with FakeChatModel: French detected, English detected, Italian (not in SUPPORTED_LANGUAGES) detected, config overrides detection, detection failure fallback
@@ -407,14 +407,14 @@ All test development in this plan follows this workflow:
 
 ### A. Add Gouges philosopher
 **Goal:** Extend the system to support Olympe de Gouges as a second philosopher
-- Create `src/prompts/gouges.py` — Gouges system prompt (her voice, mandatory citations from her texts, responds in `{language}`, passionate advocacy for women's rights); export `build_gouges_prompt() -> ChatPromptTemplate`
+- Create `src/prompts/gouges.py` Gouges system prompt (her voice, mandatory citations from her texts, responds in `{language}`, passionate advocacy for women's rights); export `build_gouges_prompt() -> ChatPromptTemplate`
 - Register `"gouges": AuthorConfig(prompt_factory=build_gouges_prompt, exit_message=<personalized message>)` in `_AUTHOR_CONFIGS` in `chat_chain.py`
 - Add `GOUGES_DECLARATION` (a `WikisourceCollection` instance) to `src/configs/loader_configs.py`
 - Register `INGEST_CONFIGS["gouges"] = GOUGES_DECLARATION` in `loader_configs.py`
-- **Expand golden dataset:** Update `data/eval/golden_dataset.json` to **v2.0** — add 3-4 Gouges examples covering women's rights, social contracts; ensure both Voltaire and Gouges examples present
-- **Test:** `tests/unit/prompts/test_gouges.py` — assert prompt template has correct placeholders (`{context}`, `{question}`, `{language}`); assert `"gouges"` registered in `_AUTHOR_CONFIGS`
-- **Test:** `tests/unit/chains/test_chat_chain.py` — add test for `author="gouges"` in `build_chain` (mock LLM); assert it selects Gouges prompt
-- **Test:** `tests/unit/configs/test_loader_configs.py` — add tests: validate GOUGES_DECLARATION fields, `INGEST_CONFIGS["gouges"]` points to correct collection specification
+- **Expand golden dataset:** Update `data/eval/golden_dataset.json` to **v2.0** add 3-4 Gouges examples covering women's rights, social contracts; ensure both Voltaire and Gouges examples present
+- **Test:** `tests/unit/prompts/test_gouges.py` assert prompt template has correct placeholders (`{context}`, `{question}`, `{language}`); assert `"gouges"` registered in `_AUTHOR_CONFIGS`
+- **Test:** `tests/unit/chains/test_chat_chain.py` add test for `author="gouges"` in `build_chain` (mock LLM); assert it selects Gouges prompt
+- **Test:** `tests/unit/configs/test_loader_configs.py` add tests: validate GOUGES_DECLARATION fields, `INGEST_CONFIGS["gouges"]` points to correct collection specification
 - **README:** Update Technology table if new deps; update CLI flags docs to show `gouges` as valid `--author` value; note that `scripts/ingest.py --author gouges` populates her corpus
 - **Update this plan:** Mark subsection A `✅`, note any deviations
 
@@ -456,7 +456,7 @@ question → [philosopher_agent(voltaire), philosopher_agent(gouges)] →
 ```
 
 ### Background: chains vs. agents
-Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → prompt → LLM → respond). A LangChain agent lets the LLM decide which tools to call, in what order, and whether to iterate — enabling richer behaviour like follow-up retrieval and self-critique.
+Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → prompt → LLM → respond). A LangChain agent lets the LLM decide which tools to call, in what order, and whether to iterate enabling richer behaviour like follow-up retrieval and self-critique.
 
 ### Implementation
 - Create `src/agents/` directory (with `src/agents/__init__.py`) and `tests/unit/agents/` directory
@@ -471,11 +471,11 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - Instantiates one `philosopher_agent` per author
   - Runs **sequentially** (avoids thread-safety issues with shared ChromaDB)
   - Does **not** synthesize or adjudicate
-- Create `scripts/debate.py` — CLI: `--authors voltaire gouges`, `--show-chunks` (no `--db` flag); prints each philosopher's response under their name header + shared Sources footer
+- Create `scripts/debate.py` CLI: `--authors voltaire gouges`, `--show-chunks` (no `--db` flag); prints each philosopher's response under their name header + shared Sources footer
 - **Note:** `--authors` accepts multiple values; consider using all registered authors from `_AUTHOR_CONFIGS` as default (or a sensible subset)
-- **Test:** `tests/unit/agents/test_philosopher_agent.py` — mock LLM and retriever tool; assert agent calls retrieval, constructs DebateResponse, handles empty retrieval
-- **Test:** `tests/unit/agents/test_debate_orchestrator.py` — mock both agents; assert each called once with same question, responses in declared author order
-- **Test:** `tests/unit/test_script_debate.py` — mock `run_debate` and `input()`; assert flags forwarded, headers per philosopher, source footer, `--show-chunks` behaviour
+- **Test:** `tests/unit/agents/test_philosopher_agent.py` mock LLM and retriever tool; assert agent calls retrieval, constructs DebateResponse, handles empty retrieval
+- **Test:** `tests/unit/agents/test_debate_orchestrator.py` mock both agents; assert each called once with same question, responses in declared author order
+- **Test:** `tests/unit/test_script_debate.py` mock `run_debate` and `input()`; assert flags forwarded, headers per philosopher, source footer, `--show-chunks` behaviour
 - **README:** Add debate CLI section: command with `--authors`, flags table, example question; add debate row to Example Usage table; update project structure to include `src/agents/`
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
@@ -485,7 +485,7 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - Basic eval runner and golden datasets exist from previous steps (potentially including use of LLM in creation of the datasets)
   - This step augments the existing eval harness with an LLM-as-judge capability for subjective quality assessment.
   
-- Create `src/eval/judge.py`: `run_llm_judge(question, response_text, contexts, llm) -> list[MetricResult]` — scores relevance, groundedness, coherence on 0-1 scale; parses structured LLM output; clamps to [0,1]; handles unparseable output gracefully
+- Create `src/eval/judge.py`: `run_llm_judge(question, response_text, contexts, llm) -> list[MetricResult]` scores relevance, groundedness, coherence on 0-1 scale; parses structured LLM output; clamps to [0,1]; handles unparseable output gracefully
 - Modify `src/eval/runner.py`:
   - Add `use_llm_judge: bool = False` parameter to `run_eval()`
   - Add `judge_llm: BaseChatModel | None = None` parameter (defaults to Ollama mistral if None and `use_llm_judge=True`)
@@ -496,9 +496,9 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - When flag set, pass `use_llm_judge=True` to runner
   - Update summary table to show judge metrics when present
   - Add note to output that judge metrics may vary between runs (LLM non-determinism)
-- **Test:** `tests/unit/eval/test_judge.py` — valid scores, clamped bounds, unparseable output, missing dimension, LLM invocation (5 tests)
-- **Test:** `tests/unit/eval/test_runner.py` — add tests for LLM judge integration: judge enabled, judge disabled, judge with mocked LLM (3 new tests; existing tests from Step 13F should continue to pass)
-- **Test:** `tests/unit/test_scripts/test_script_run_eval.py` — add test for `--llm-judge` flag forwarding (1 new test)
+- **Test:** `tests/unit/eval/test_judge.py` valid scores, clamped bounds, unparseable output, missing dimension, LLM invocation (5 tests)
+- **Test:** `tests/unit/eval/test_runner.py` add tests for LLM judge integration: judge enabled, judge disabled, judge with mocked LLM (3 new tests; existing tests from Step 13F should continue to pass)
+- **Test:** `tests/unit/test_scripts/test_script_run_eval.py` add test for `--llm-judge` flag forwarding (1 new test)
 - **README:** Update Evaluation Harness section: explain deterministic vs. LLM-judge metrics, when to use `--llm-judge` flag, note about non-determinism
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
@@ -514,8 +514,8 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - Server: `Chroma(client=chromadb.HttpClient(host, port), ...)`
 - Modify `src/vectorstores/chroma.py` and `src/vectorstores/retriever.py`: detect mode from env and use appropriate client factory
 - Create `tests/unit/configs/` if not already exists
-- **Test:** `tests/unit/configs/test_db_config.py` — default embedded mode, server mode, validation, env var parsing
-- **Test:** `tests/unit/vectorstores/test_chroma_client.py` — embedded uses persist_directory, server uses HttpClient (mock HttpClient)
+- **Test:** `tests/unit/configs/test_db_config.py` default embedded mode, server mode, validation, env var parsing
+- **Test:** `tests/unit/vectorstores/test_chroma_client.py` embedded uses persist_directory, server uses HttpClient (mock HttpClient)
 - **README:** Add ChromaDB configuration section: env vars table (`CHROMA_MODE`, `CHROMA_DB_PATH`, `CHROMA_HOST`, `CHROMA_PORT`), instructions for `chroma run`, verification command
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
@@ -530,23 +530,23 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - `build_embeddings_from_env() -> Embeddings`: reads `EMBEDDING_PROVIDER` env var
   - Add `langchain-anthropic` and `langchain-openai` as optional dependency groups
 - Modify `src/chains/chat_chain.py`: `build_default_chain` uses `build_llm_from_env()` and `build_embeddings_from_env()` when env vars are set; falls back to Ollama defaults otherwise
-- **Test:** existing unit tests require no changes (they mock LLM and embeddings); add `tests/unit/configs/test_provider_config.py` — mock env vars, assert correct provider classes returned, assert fallback to Ollama
+- **Test:** existing unit tests require no changes (they mock LLM and embeddings); add `tests/unit/configs/test_provider_config.py` mock env vars, assert correct provider classes returned, assert fallback to Ollama
 - **README:** Add "Deploying to Heroku" section: required env vars, `heroku config:set` commands, note to pre-populate ChromaDB; update project structure diagram to add `Procfile`, `runtime.txt` at root
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
 ---
 
 ## Verification (end-to-end)
-1. `uv run pytest` — all unit + integration tests pass (external excluded)
-2. `uv run mypy src scripts` — type checker clean
-3. `uv run python scripts/ingest.py --author voltaire` — scrape + embed Voltaire
+1. `uv run pytest` all unit + integration tests pass (external excluded)
+2. `uv run mypy src scripts` type checker clean
+3. `uv run python scripts/ingest.py --author voltaire` scrape + embed Voltaire
 4. `uv run python scripts/chat.py --show-chunks` → ask "Que pensez-vous de la tolérance?" → Voltaire-style French response with page-specific citations
 5. `uv run python scripts/chat.py` → ask "What do you think about tolerance?" → English response with language detection
 6. `uv run python scripts/run_eval.py --author voltaire --language fr` → eval report for Voltaire (after Step 13F)
    - Review scores, identify metrics < 0.8
    - Implement improvements (Step 13G)
    - Re-run eval to verify improvements
-7. `uv run python scripts/ingest.py --author gouges` — scrape + embed Gouges
+7. `uv run python scripts/ingest.py --author gouges` scrape + embed Gouges
 8. `uv run python scripts/chat.py --author gouges` → ask about rights → Gouges-style response
 9. `uv run python scripts/run_eval.py --author gouges --language fr` → eval report for Gouges (after Step 14B)
    - Compare with Voltaire scores

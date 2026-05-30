@@ -1,4 +1,4 @@
-"""Tests for ChromaDB vectorstore operations."""
+"""Unit tests for ChromaDB vectorstore operations"""
 
 from pathlib import Path
 

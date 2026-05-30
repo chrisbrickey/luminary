@@ -1,4 +1,4 @@
-"""Tests for src/utils/cli_helpers.py - common CLI utilities."""
+"""Unit tests for common CLI utilities"""
 
 import logging
 from unittest.mock import MagicMock, patch

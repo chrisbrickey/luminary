@@ -1,4 +1,4 @@
-"""Tests for src/eval/metrics/retrieval.py — retrieval_relevance metric."""
+"""Unit tests for retrieval_relevance metric"""
 
 import pytest
 

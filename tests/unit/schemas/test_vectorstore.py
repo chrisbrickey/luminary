@@ -1,4 +1,4 @@
-"""Tests for src/schemas/vectorstore.py - vector store and ingestion schemas"""
+"""Unit tests for vector store and ingestion schemas"""
 
 from typing import Any
 

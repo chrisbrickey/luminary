@@ -1,4 +1,4 @@
-"""Tests for formatting utilities."""
+"""Unit tests for formatting utilities"""
 
 import pytest
 

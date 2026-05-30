@@ -1,4 +1,4 @@
-"""Shared test fixtures and configuration."""
+"""Shared test fixtures and configuration"""
 
 import os
 from pathlib import Path

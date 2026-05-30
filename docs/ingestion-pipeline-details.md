@@ -6,7 +6,7 @@ This file includes supplementary information.
 
 This section contains information on the individual scripts for scraping and embedding that are both used by the single, unified command in the Setup section of top-level `README.md`.
 
-**Script 1 of 2 — Scrape:** fetches data from designated 3rd party sources, parses the data, formulates LangChain documents, and persists json files
+**Script 1 of 2: Scrape** fetches data from designated 3rd party sources, parses the data, formulates LangChain documents, and persists json files
 
 ```
 uv run python scripts/scrape_wikisource.py
@@ -26,11 +26,11 @@ Documents are saved to `data/raw/<document_id>/` as `page_NN.json` files contain
 - `page_content`: The extracted text content
 - `metadata`: Document metadata including `document_id`, `document_title`, `author`, `source` URL, and `page_number`
 
-**Script 2 of 2 — Embed and Store:** loads JSON files from disk that were persisted in Step 1,
+**Script 2 of 2: Embed and Store** loads JSON files from disk that were persisted in Step 1,
 splits each letter into overlapping chunks,
 converts each chunk into a vector using Ollama nomic-embed-text (a small neural network that captures the meaning of text as a list of numbers),
 and stores both the vectors and the original text in the vector database (at `data/chroma_db/` in local env).
-Once stored, chunks can be retrieved by semantic similarity — the basis for RAG.
+Once stored, chunks can be retrieved by semantic similarity, the basis for RAG.
 
 ```
 uv run python scripts/embed_and_store.py

@@ -13,7 +13,7 @@ Luminary provides two interfaces for interacting with the philosophes. Both inte
 ## Key Features
 
 - **Grounded citations:** All responses include source references with page numbers in the text response. Additionally, a sources footer shows each unique source only once.
-- **Local-first execution:** Runs entirely locally with Ollama—no external API calls, no data sharing, no usage costs.
+- **Local-first execution:** Runs entirely locally with Ollama. No external API calls. No data sharing. No usage costs.
 - **Semantic search over historical corpus:** Uses vector similarity to find relevant passages across all texts, not just keyword matching.
 - **Transparent retrieval:** Optional debug mode shows exact text chunks and similarity scores used for each response.
 - **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. _Local LLMs are not deterministic. So adherence to the detected language depends on the training data available to the selected model._ 

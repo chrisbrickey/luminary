@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 
 FAKE_ARTIFACT_PATH = "evals/runs/2025-05-15T12-25-34.json" # created before triggering eval report
-FROZEN_ISO_TIMESTAMP = "2025-05-16T10:32:55"  # ISO 8601 — returned by datetime.now().isoformat()
-FROZEN_TIMESTAMP = "2025-05-16T10-32-55"      # filename-safe — returned by format_timestamp(FROZEN_ISO_TIMESTAMP)
+FROZEN_ISO_TIMESTAMP = "2025-05-16T10:32:55"  # ISO 8601, returned by datetime.now().isoformat()
+FROZEN_TIMESTAMP = "2025-05-16T10-32-55"      # filename-safe, returned by format_timestamp(FROZEN_ISO_TIMESTAMP)
 FAKE_MARKDOWN_CONTENT = f"# Eval Report {FROZEN_TIMESTAMP}\nsome content"
 EXPECTED_FILENAME = f"eval_report_{FROZEN_TIMESTAMP}.md"
 EXPECTED_OUTPUT_DIR = Path("docs/eval_reports")

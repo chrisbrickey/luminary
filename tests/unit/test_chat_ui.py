@@ -1,4 +1,4 @@
-"""Unit tests for Streamlit chat UI."""
+"""Unit tests for Streamlit chat UI"""
 
 from unittest.mock import MagicMock, Mock, patch
 

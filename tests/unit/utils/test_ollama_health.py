@@ -1,4 +1,4 @@
-"""Tests for Ollama health check utility."""
+"""Unit tests for Ollama health check utility"""
 
 from unittest.mock import patch, MagicMock
 from urllib.error import URLError

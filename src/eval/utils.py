@@ -259,7 +259,7 @@ def format_eval_report_stub(artifact_path: Path, stub_created_at: str) -> str:
         f"- **Eval Run Artifact:** `{artifact_path}`\n- **Dataset Identifier:** `{eval_run.golden_dataset.identifier}`",
     )
 
-    # Auto-fill System Snapshot section — skip any field absent in the artifact for backwards compatibility
+    # Auto-fill System Snapshot section. Skip any field absent in the artifact for backwards compatibility.
     sv = eval_run.system_snapshot
     for field_name, field_info in SystemSnapshot.model_fields.items():
         value = getattr(sv, field_name)

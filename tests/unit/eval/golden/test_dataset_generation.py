@@ -1,4 +1,4 @@
-"""Tests for golden dataset generation infrastructure.
+"""Unit tests for golden dataset generation infrastructure.
 
 This module tests the LLM-based golden dataset generation system that creates
 high-quality evaluation examples by auto-discovering required fields and using

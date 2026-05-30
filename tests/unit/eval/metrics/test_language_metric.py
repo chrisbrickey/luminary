@@ -1,4 +1,4 @@
-"""Tests for src/eval/metrics/language.py"""
+"""Unit tests for language metrics"""
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.language import (

@@ -56,7 +56,7 @@ OVERALL_PASS_RATE = 0.5   # 1 of 2 examples passes
 OVERALL_AVERAGE = 0.575   # (METRIC_SCORE + METRIC_SCORE_FAIL) / 2
 
 RUN_TIMESTAMP = "2029-01-15T08:00:00+00:00"
-STUB_CREATED_AT = "2029-01-16T09:00:00"  # ISO 8601 — format_eval_report_stub calls format_timestamp internally
+STUB_CREATED_AT = "2029-01-16T09:00:00"  # ISO 8601, format_eval_report_stub calls format_timestamp internally
 SNAPSHOT_COMMIT = "abc1234"
 SNAPSHOT_CHAT_MODEL = "test-chat-model"
 SNAPSHOT_EMBEDDING_MODEL = "test-embedding-model"

@@ -72,7 +72,7 @@ INVALID_EVAL_RUN_SCHEMA_JSON = {
 }
 
 MALFORMED_JSON_CONTENT = '{"version": "1.0", "created_date": "2024-05-15"'  # Missing closing brace
-STUB_CREATED_AT = "2025-06-16T09:00:00"  # ISO 8601 — format_eval_report_stub calls format_timestamp internally
+STUB_CREATED_AT = "2025-06-16T09:00:00"  # ISO 8601, format_eval_report_stub calls format_timestamp internally
 
 # Test data for save_eval_run
 VALID_EVAL_RUN_DICT = {
@@ -680,8 +680,8 @@ def test_format_eval_report_stub_includes_metrics_table(tmp_path: Path) -> None:
 def test_format_eval_report_stub_skips_missing_system_snapshot_fields(tmp_path: Path) -> None:
     """Test that format_eval_report_stub leaves placeholders intact for absent system_snapshot fields.
 
-    Simulates a legacy artifact that only contains chat_model and commit — the three
-    fields added later (embedding_model, retrieval_chunk_count, retrieval_chunk_size) are absent from the JSON.
+    Simulates a legacy artifact that only contains chat_model and commit. The three files added
+    later (embedding_model, retrieval_chunk_count, retrieval_chunk_size) are absent from the JSON.
     """
     legacy_run = {**VALID_EVAL_RUN_DICT, "system_snapshot": {"chat_model": "legacy-model", "commit": "old123"}}
     artifact_path = tmp_path / "legacy_artifact.json"
