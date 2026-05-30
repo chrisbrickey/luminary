@@ -1494,87 +1494,118 @@ This entire process should be repeated throughout development of subsequent sect
   
 ---
 
-## N. Faithfulness metrics
-**Goal:** Implement a content quality metric that validates semantic grounding.
-**Notes:** 
-    - These faithfulness metrics require new field(s) on the golden examples. 
-    - Therefore, this section includes instructions for updating `GoldenExample` schema. 
-    - In the following section (or whenever the next evaluation cycle is performed), you must regenerate and version bump the golden dataset.
+## N. Keyword coverage metric
+**Goal:** Implement a deterministic content-quality metric that checks whether expected key concepts (e.g., "tolérance", "conscience") appear in the response.
+
+**Naming note:** This was originally drafted as "faithfulness," but that term is reserved in RAG literature for *groundedness against retrieved sources* (catching hallucinations beyond what the sources support). 
+This metric does not inspect retrieved chunks. It checks keyword presence against a curated list. The name `keyword_coverage` reflects what is actually measured and leaves "faithfulness" available for a future source-grounded metric (e.g., NLI or chunk overlap).
+
+**Notes:**
+   - This metric requires a new field on the golden examples (`expected_keywords`).
+   - This section includes instructions for updating the `GoldenExample` schema.
+   - See the *Dataset regeneration* subsection below for guidance on regenerating and version-bumping the golden dataset.
 
 ### Implementation
 
-1. **Add tests for faithfulness metrics**
+1. **Add tests for the keyword coverage metric**
    - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/eval/test_faithfulness_metric.py`
-   - Test cases for French (5 tests minimum):
+   - `tests/unit/eval/test_keyword_coverage_metric.py`
+   - Test cases for French (6 tests minimum):
      - `test_all_keywords_found_fr()` - all expected keywords present → score 1.0
      - `test_partial_keywords_found_fr()` - 2 of 3 keywords present → score 0.67
      - `test_no_keywords_found_fr()` - 0 of 3 keywords present → score 0.0
      - `test_case_insensitive_fr()` - "Tolérance" matches "tolérance" → score 1.0
+     - `test_inflection_match_fr()` - keyword "tolérance" matches inflected forms in the response such as "tolérances" (plural) and "tolérant" (adjective) → score 1.0
      - `test_no_expected_keywords_fr()` - empty expected list → score 1.0
-   - Test cases for English (4 tests minimum):
+   - Test cases for English (6 tests minimum):
      - `test_all_keywords_found_en()` - all expected keywords present → score 1.0
      - `test_partial_keywords_found_en()` - 1 of 2 keywords present → score 0.5
      - `test_no_keywords_found_en()` - 0 of 2 keywords present → score 0.0
+     - `test_case_insensitive_en()` - "Tolerance" matches "tolerance" → score 1.0
+     - `test_inflection_match_en()` - keyword "tolerate" matches "tolerates" / "tolerating" → score 1.0
      - `test_no_expected_keywords_en()` - empty expected list → score 1.0
 
-2. **Implement faithfulness metrics (bilingual)**
-   - Create `src/eval/metrics/faithfulness.py`
-   - Shared helper function: `_keyword_score(expected_keywords: list[str], response_text: str) -> float`
-     - Logic: fraction of expected keywords found in response text (case-insensitive, whole-word matching)
-     - Use regex word boundaries: `r'\b' + re.escape(keyword) + r'\b'` with `re.IGNORECASE`
-     - Returns: `len([kw for kw in expected if re.search(pattern, text)]) / len(expected)` if non-empty, else 1.0
+2. **Implement the keyword coverage metric (single bilingual function)**
+   - Create `src/eval/metrics/keyword_coverage.py`
+   - **Single function** (mirrors the existing pattern in `language.py`, which uses one function for both languages and reads `example.language`):
+     - `keyword_coverage(expected_keywords: list[str], response_text: str) -> MetricResult`
+     - Logic: fraction of expected keywords found in `response_text` (case-insensitive, whole-word match with bounded suffix tolerance for inflections)
+     - Matching pattern: `r'\b' + re.escape(keyword) + r'\w{0,4}\b'` with `re.IGNORECASE`
+       - Bounded suffix `\w{0,4}` accepts common inflections in both FR and EN (plurals, adjectival/verbal endings: "-s", "-es", "-ent", "-ant", "-ing", etc.) without over-matching unrelated longer words.
+       - **Tradeoff (document in the docstring):** This favors recall over precision. It will occasionally accept loosely related inflections (e.g., "intolérance" still won't match because of the `\b` prefix boundary, but "tolérablement" might). This is acceptable for a deterministic proxy metric; a stricter morphological analyzer is out of scope.
+     - Returns: `MetricResult(name="keyword_coverage", score=..., details={"found": [...], "missing": [...]})`
+     - Empty `expected_keywords` returns score `1.0` (vacuous truth), matching the convention in `citation_accuracy`.
 
-   - **French faithfulness:**
-     - Function: `faithfulness_fr(expected_keywords_fr: list[str], response_text: str) -> MetricResult`
-     - Returns: `MetricResult(name="faithfulness_fr", score=_keyword_score(...), details={"found": [...], "missing": [...]})`
+   - **Wrapper + registration** (follow the pattern in `citation.py:213-222` and `language.py:127-148`):
+     ```python
+     def _keyword_coverage_wrapper(example: Any, response: Any) -> MetricResult:
+         return keyword_coverage(
+             expected_keywords=example.expected_keywords,
+             response_text=response.text,
+         )
 
-   - **English faithfulness:**
-     - Function: `faithfulness_en(expected_keywords_en: list[str], response_text: str) -> MetricResult`
-     - Returns: `MetricResult(name="faithfulness_en", score=_keyword_score(...), details={"found": [...], "missing": [...]})`
+     register_metric(
+         MetricSpec(
+             name="keyword_coverage",
+             compute=_keyword_coverage_wrapper,
+             required_example_fields={"expected_keywords"},
+             required_response_fields={"text"},
+             languages=None,  # Applies to all languages; per-example language is on the example itself
+             default_threshold=0.6,  # Lower than FALLBACK_THRESHOLD (0.8): keyword matching has inherent false negatives even with suffix tolerance, so a stricter default would be unrealistic. Revisit after first run.
+         )
+     )
+     ```
 
-   **Rationale:** Groundedness checks verify that responses are supported by retrieved sources. Keyword-based faithfulness is a deterministic proxy for semantic grounding—we expect certain key concepts (tolerance, conscience, reason) to appear when discussing Enlightenment topics. This catches cases where the LLM hallucinates or goes off-topic.
+   **Rationale:** We expect certain key concepts (tolerance, conscience, reason) to appear when discussing Enlightenment topics. Checking their presence is a cheap, deterministic proxy for "the model stayed on topic." This catches cases where the LLM goes off-topic or returns generic filler.
 
-   **Design note:** Separate FR/EN functions allow different keyword lists for each language while sharing scoring logic. This follows the DRY principle (helper is reused) while maintaining language-specific validation.
+   **Design notes:**
+   - **One field, one function.** Each `GoldenExample` already carries a `language` field (see `src/schemas/eval.py:39`), so a single `expected_keywords` field (filled with terms in the example's language) is sufficient. This matches `language_content_compliance` in `language.py:43`, which similarly uses `example.language` rather than splitting into FR/EN variants. Splitting into `_fr` + `_en` fields would force every example to carry one empty field, wasted state and a foot-gun for future authors.
+   - **Default threshold is explicitly lower than 0.8.** With ~3-5 keywords per example, missing one drops the score to 0.6-0.8. Combined with residual inflection misses, the standard 0.8 fallback would fail too often. Start at 0.6 and tighten once we have data on real-world distribution.
 
 3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-4. **Update golden dataset schema and data for faithfulness metrics**
+4. **Update golden dataset schema for keyword coverage**
    - **Follow Test Development Workflow (see top of document)**
-   - `tests/unit/schemas/test_eval.py` - add tests for language-specific keyword fields
+   - `tests/unit/schemas/test_eval.py` - add tests for the new field
    - Test cases:
-     - `test_expected_keywords_fr_defaults_to_empty_list()` - verify default value
-     - `test_expected_keywords_en_defaults_to_empty_list()` - verify default value
-     - `test_expected_keywords_language_specific()` - verify FR examples use fr field, EN examples use en field
-  - Update `src/schemas/eval.py`: Add to GoldenExample class:
-    - `expected_keywords_fr: list[str] = Field(default_factory=list, description="Keywords expected in French response")`
-    - `expected_keywords_en: list[str] = Field(default_factory=list, description="Keywords expected in English response")`
-  - Update design notes to document language-specific validation pattern
+     - `test_expected_keywords_defaults_to_empty_list()` - verify default value
+     - `test_expected_keywords_accepts_unicode()` - verify French accented strings (e.g., "tolérance") round-trip correctly
+   - Update `src/schemas/eval.py`: Add one field to `GoldenExample`:
+     - `expected_keywords: list[str] = Field(default_factory=list, description="Key concepts expected in the response, in the language of example.language")`
+   - Update the `GoldenExample` docstring to note that `expected_keywords` is interpreted in the language given by `language`.
 
-5. **Add guidance for keyword fields for generation of golden examples.**
-   - Update `src/eval/golden_generation.py` - `build_field_guidance()` function
-   - Add entries to `guidance_map` dictionary:
+5. **Add guidance for the keyword field in golden-example generation.**
+   - Update `src/eval/golden/dataset_generation.py` - `build_field_guidance()` function
+   - Add one entry to the `guidance_map` dictionary:
      ```python
-     "expected_keywords_fr": """
-     **expected_keywords_fr**: List of French keywords (strings)
-     - Key philosophical concepts that should appear in the response
-       - Use actual French terms from the chunks
-       - 3-5 keywords typical
-       - Example: ["tolérance", "conscience", "persécution"]
-     """,
-     "expected_keywords_en": """
-     **expected_keywords_en**: List of English keywords (strings)
-     - Key philosophical concepts that should appear in the response
-     - Use actual English terms from the chunks (or translations if FR chunks)
+     "expected_keywords": """
+     **expected_keywords**: List of key-concept strings (in the example's language)
+     - Key philosophical concepts that should appear in a good response
+     - Use actual terms from the chunks (French chunks → French keywords; English chunks → English keywords)
      - 3-5 keywords typical
-     - Example: ["tolerance", "conscience", "persecution"]
+     - Provide base/lemma forms when possible. The metric tolerates short suffixes (plurals, simple inflections).
+     - French example: ["tolérance", "conscience", "persécution"]
+     - English example: ["tolerance", "conscience", "persecution"]
      """,
-          ```
-        - **Rationale**: Without guidance, LLM uses generic fallback (less accurate). With guidance, LLM gets specific examples and constraints (more accurate).
+     ```
+   - **Rationale:** Without guidance, the LLM falls back to a generic prompt and is more likely to produce off-format values. Explicit per-language examples and the note about lemma forms improve dataset quality.
+
+### Dataset regeneration
+The golden dataset must be regenerated and version-bumped by whole number after this metric is implemented, because 
+  (a) `expected_keywords` is a new field and existing examples lack values (minor bump)
+  (b) `DEFAULT_K` changed from 5 to 9 since the last dataset was constructed based on tuning in previous section. That changed the candidate-chunk context used by the generator (major bump).
+
+Regenerate the golden dataset (`v 3.0`) by following instructions on `src/eval/README.md` (with supplemental documentation on `docs/golden-dataset-generation-guide.md`).
+
+### Documentation
+Review documentation and update as needed.
 
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+  - In preparation for updating the golden dataset, I discovered that the golden dataset generation functionality and documentation required significant updates. 
+    e.g., the documentation had drifted out of sync with the dataset generation script, anthropic had deprecated the `temperature` parameter.
+    I updated the golden dataset generation functionality before adding the new metric.
 
 ---
 
@@ -1605,7 +1636,79 @@ Instruct the user to follow the below steps.
    - **Alternative:** Improve prompt to emphasize key themes
 
 
-## P. Advanced quality metrics
+## P. Harden Golden Dataset Generator
+
+This section improves the golden dataset automation functionality in order to prevent quality regressions in future golden datasets. 
+Previous updates to the golden datasets exposed three issues with the dataset generator, which required manual cleanup of the output JSON:
+
+1. **Duplicate `id` values** across examples (e.g., `tolerance_fr` and `fanatisme_fr` each used by multiple examples). The LLM derived ids from the question topic without disambiguating by language or sub-variant, producing collisions when several examples shared a topic.
+2. **Language tag mismatches** between the `language` field and the actual language of the question text. An English question was emitted with `language="fr"`, which silently breaks language-conditional metrics.
+3. **Wrong-language `expected_keywords`**. `keyword_coverage` scans the *response* text for the keywords, and the metric docstring requires keywords in the response's language. The LLM populated keywords from the source corpus (French) even on English examples, which would near-zero the metric on every EN example.
+
+These are prompt-engineering / validation gaps, not data issues. Harden the generator so future regenerations do not require post-hoc editing:
+
+### Implementation
+
+1.Constrain `id` format and enforce uniqueness
+
+- In `src/eval/golden/dataset_generation.py`, update the `guidance_map` entry (or add a top-level prompt instruction) for `id` to require the shape `{topic_slug}_{language_code}`, where:
+  - `topic_slug` is a short lowercase identifier derived from the question's dominant topic (e.g., `tolerance`, `judicial_torture`, `fanaticism`)
+  - `language_code` matches the `language` field exactly (`en` or `fr`)
+- Add a post-generation validator in `generate_golden_example_with_llm` (or in the script's main loop) that:
+  - Asserts each generated example's `id` ends with `_{language}`
+  - Builds a set of seen ids across the run and rejects (raises `ValueError`) on collision
+  - On collision, append a numeric suffix (`_2`, `_3`) and log a warning, OR fail the run so the user can refine the config. Recommendation: fail fast and surface the duplicate to the user, since silent renaming makes regressions invisible.
+
+2. Enforce question/language consistency
+
+- Add a lightweight language check before saving each example. Options, in order of robustness:
+  - **Cheap heuristic:** check that French-only characters (`àâçéèêëîïôûùüÿ`) appear in `question` iff `language == "fr"`. Reject if the heuristic fails.
+  - **Library-based:** use `langdetect` or `py3langid` (small, no API call) to classify the question text and compare against `language`. Reject on mismatch.
+  - **LLM self-check:** add an explicit prompt instruction: "The `language` field MUST match the language of the `question` text. Verify before emitting."
+- The heuristic + an explicit prompt instruction is sufficient for FR/EN and avoids new dependencies. Add a unit test for both pass and fail cases.
+
+3. Generate `expected_keywords` in the response's language
+
+- Update the `expected_keywords` entry in `guidance_map` (in `dataset_generation.py:build_field_guidance`) to make the language rule explicit. Suggested addition to the existing guidance block:
+
+  ```
+  CRITICAL: expected_keywords MUST be written in the same language as the
+  `language` field, NOT the source corpus language. The keyword_coverage
+  metric scans the chatbot's response, which is generated in the example's
+  language. If the example is `language="en"` but the source chunks are
+  French, you MUST translate concept words into English. Examples:
+
+    language="en" → ["tolerance", "freedom of conscience", "sects"]
+    language="fr" → ["tolérance", "liberté de conscience", "sectes"]
+
+  Use lemma/dictionary forms (singular, infinitive) so the metric's
+  bounded-suffix regex matches common inflections.
+  ```
+
+- Add a unit test that mocks the LLM to return French keywords on an `language="en"` example and asserts the validator rejects it. The cheap version of the validator: check that at least N-1 of the keywords pass the same French-character heuristic *in the opposite direction* (i.e., on an EN example, ≥ N-1 keywords must contain no French-only diacritics).
+
+4. Pre-save validation layer
+
+Wrap the three checks above in a single `validate_generated_example(example: GoldenExample) -> None` function that raises `ValueError` with a precise message for each failure mode. Call it from `generate_golden_example_with_llm` *before* returning. Tests should cover each failure mode independently.
+
+#### Acceptance criteria for this hardening pass
+
+- Regenerating from `voltaire_examples.json` (with adversarial pairs reintroduced per Section W below) produces a dataset that passes `validate_generated_example` on every entry **without manual editing**.
+- New unit tests cover: duplicate-id rejection, language-mismatch rejection (both directions), wrong-language-keyword rejection (both directions), and the happy path.
+- The `Generator hardening` work is logged in the v3.0 → v3.1 (or 4.0) regeneration description field.
+
+### Documentation
+
+Review documentation and update as needed.
+
+### Plan updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+
+---
+
+## Q. Advanced quality metrics
 
 **Goal:** Implement specialized validation metrics. 
 **Note:** These metrics use the existing fields on golden examples. So we don't need to update `GoldenExample` schema or regenerate/verion bump the golden dataset.
@@ -1661,7 +1764,10 @@ Instruct the user to follow the below steps.
 
    **Rationale:** Response length is a quick quality signal. Too short = incomplete/evasive responses, too long = verbose/unfocused responses. This catches obvious failures (single-word answers, walls of text) before deeper quality metrics. Thresholds are configurable via golden dataset examples.
 
-  
+### Documentation
+
+Review documentation and update as needed.
+
 ### Plan updates
 
 - **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
@@ -1669,7 +1775,7 @@ Instruct the user to follow the below steps.
 ---
 
 
-## Q. Perform Evaluation Cycle (incorporating new metrics)
+## R. Perform Evaluation Cycle (incorporating new metrics)
 See instructions from previous subsections with same title. 
 Bump golden dataset version only if new example fields were added in previous section. Otherwise use more recent golden dataset.
 
@@ -1677,7 +1783,7 @@ Bump golden dataset version only if new example fields were added in previous se
 ---
 
 
-## R. Translation Metric
+## S. Translation Metric
 **Goal:** Implement a metric for validating quality of translations.
 **Notes:** 
     - This metric requires new field(s) on the golden examples. 
@@ -1738,7 +1844,7 @@ Bump golden dataset version only if new example fields were added in previous se
 ---
 
 
-## S. Perform Evaluation Cycle (incorporating new metrics)
+## T. Perform Evaluation Cycle (incorporating new metrics)
 See instructions from previous subsections with same title. Bump version of golden dataset if new fields were required by new metrics.
 
 - **Propose fixes based on common failure modes**
@@ -1749,7 +1855,7 @@ See instructions from previous subsections with same title. Bump version of gold
 
 ---
 
-## T. Safety guardrails
+## U. Safety guardrails
 
 **Goal:** Implement binary safety checks to catch persona breaks and anachronisms. These are pass/fail guardrails, distinct from gradual quality metrics.
 **Notes:** 
@@ -1834,7 +1940,7 @@ See instructions from previous subsections with same title. Bump version of gold
 
 ---
 
-## U. Perform Evaluation Cycle (incorporating new metrics)
+## V. Perform Evaluation Cycle (incorporating new metrics)
 See instructions from previous subsections with same title. Bump version of golden dataset if new fields were required by new metrics.
 
 **Propose fixes based on common failure modes**
@@ -1855,3 +1961,104 @@ See instructions from previous subsections with same title. Bump version of gold
    - **Rationale:** Explicit constraints + fallback response prevents persona breaks
 
 ---
+
+## W. Adversarial golden examples (anachronism-trap evaluation)
+
+### Goal
+
+Add golden examples whose questions *intentionally* drag the philosopher into modern framings (e.g., social media, AI, smartphones, 21st-century political events), and define the **expected** behavior as: **engage thoughtfully with the underlying topic, while ignoring the anachronistic framing.** Ideally the response acknowledges that the philosopher lived in the 18th century and can only reason about the subject matter in general or hypothesize how it might apply today.
+
+This is intentionally different from Section T/U's `forbidden_phrases` work, which treats anachronisms as something the chatbot should refuse. Section V's adversarial examples test the opposite: graceful engagement, not refusal. Both behaviors are valuable depending on the question. Refusal for "what would you tweet" framed as a request to act in 2026; engagement-with-caveat for "how would your view on tolerance apply today."
+
+### Expected response shape
+
+Given an adversarial question like *"What would you tweet about religious tolerance today?"*, a good response should:
+
+1. **Address the underlying topic:** religious tolerance in Voltaire's actual terms (e.g., sects, freedom of conscience, persecution)
+2. **Ignore the anachronistic framing:** D not pretend to know about Twitter and other types of social media. Do not roleplay as a modern user.
+3. **Nice to have, not required:** Briefly acknowledge the temporal gap; e.g., "I have not been alive since the 18th century, so I can only speak to the matter itself and hypothesize how my views might apply in your day." This signals self-awareness without breaking the persona.
+
+A bad response either (a) refuses entirely ("I cannot answer questions about the future"), (b) plays along with the anachronism ("My tweet would be: #Tolerance4All"), or (c) hallucinates 21st-century context.
+
+### Config additions (`src/eval/golden/configs/voltaire_examples.json`)
+
+Append the following EN/FR pair and as many topical variants as you want. Keep the pair structure for bilingual coverage.:
+
+```json
+{
+  "question": "What would you tweet about religious tolerance today?",
+  "author": "voltaire",
+  "language": "en",
+  "topics": ["tolerance", "anachronism_engagement"]
+},
+{
+  "question": "Que tweeteriez-vous aujourd'hui à propos de la tolérance religieuse ?",
+  "author": "voltaire",
+  "language": "fr",
+  "topics": ["tolerance", "anachronism_engagement"]
+}
+```
+
+Suggested topical variants once the pattern is validated:
+- Tolerance → social media framing (above)
+- Science / Newton → "AI and machine learning" framing
+- Justice / torture → "modern policing and capital punishment" framing
+- Fanaticism → "online radicalization" framing
+
+Each variant should: (a) name a real topic Voltaire wrote about, (b) wrap it in a recognizably modern technological or political construct.
+
+### Golden example shape
+
+Because adversarial examples test *response shape*, not retrieval recall, the schema fields are populated differently from normal examples. Suggested values:
+
+```json
+{
+  "id": "tolerance_tweet_en",
+  "question": "What would you tweet about religious tolerance today?",
+  "author": "voltaire",
+  "language": "en",
+  "expected_chunk_ids": [
+    "9a9984f7e8f1",
+    "fcc395a5752a",
+    "81a959f37cb0",
+    "2a5808bb9731"
+  ],
+  "expected_source_titles": [
+    "Lettres Philosophiques 1734"
+  ],
+  "expected_keywords": [
+    "tolerance",
+    "sects",
+    "freedom of conscience",
+    "religion",
+    "peace"
+  ]
+}
+```
+
+Notes on each field for adversarial cases:
+
+- **`expected_chunk_ids`** Same chunks as the *non-adversarial* version of the topic. The system should still retrieve Voltaire's actual writings on tolerance even when the question is wrapped in a modern frame. If retrieval scores drop here vs. the plain topic example, that's a signal the retrieval layer is being thrown off by anachronistic surface tokens.
+- **`expected_source_titles`** Same as the non-adversarial version. We expect the response to be grounded in the same primary source.
+- **`expected_keywords`** Substantive topic vocabulary (tolerance, sects, persecution, etc.), in the example's language. **Do not** include anachronistic terms (`tweet`, `Twitter`, `social media`). The expected response should *not* contain those words.
+
+### New metric (future work, optional)
+
+A dedicated `adversarial_engagement` metric could be added later. Sketch:
+
+- **Inputs:** response text, list of `forbidden_modern_terms` (e.g., `["tweet", "Twitter", "X.com", "post", "hashtag"]`), and a flag indicating the example is adversarial.
+- **Pass conditions:**
+  1. `keyword_coverage` ≥ threshold (response addresses the underlying topic)
+  2. Zero matches against `forbidden_modern_terms` (response did not play along with the anachronism)
+  3. (Bonus) presence of a temporal-self-awareness phrase from a small whitelist (e.g., `"18th century"`, `"my time"`, `"je n'ai pas vécu"`, `"de mon vivant"`) → adds to score but is not required.
+- **Schema addition:** `forbidden_modern_terms: list[str]` and `adversarial: bool` on `GoldenExample`, both with defaults so non-adversarial examples are unaffected.
+
+This metric is a follow-up. Adversarial examples can be added to the dataset now and evaluated against existing metrics (`keyword_coverage`, `retrieval_precision`, etc.) while the dedicated metric is being designed.
+
+### Implementation checklist
+
+1. Decide on initial adversarial topical variants (recommend starting with the tolerance pair above)
+2. Add them to `voltaire_examples.json`
+3. Regenerate the golden dataset (bump version) and manually inspect the LLM judge's chunk/keyword selections. They may need adjustment if the judge gets confused by the modern framing.
+4. Run an eval cycle; baseline how the *current* system handles adversarial examples before adding any new metric
+5. If results show systematic anachronism-engagement failures, implement the `adversarial_engagement` metric and re-evaluate

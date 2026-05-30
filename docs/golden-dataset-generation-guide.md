@@ -9,7 +9,7 @@ This guide explains how to generate high-quality golden datasets for the evaluat
 - Golden dataset = snapshot of current system's output
 - Eval = comparing current system against that snapshot
 - Perfect scores = system matches its own baseline ✓
-- **Limitation**: Perfect scores don't validate absolute quality—they only show the system hasn't changed since baseline creation
+- **Limitation**: Perfect scores don't validate absolute quality. They only show the system hasn't changed since baseline creation.
 
 **What this means:**
 - ✓ Useful for regression testing (detect if future changes break retrieval)
@@ -26,7 +26,7 @@ This guide explains how to generate high-quality golden datasets for the evaluat
 1. **Non-circular evaluation**: LLM judges actual quality, not just current system behavior
 2. **Standardized approach**: Same prompt template for all metrics
 3. **Automatic adaptation**: Adding new metrics = update schema + guidance, no prompt rewriting
-4. **Reproducible**: Deterministic LLM (temperature=0) produces consistent judgments
+4. **Reproducible**: Low-variance LLM sampling (temperature=0 where supported) produces consistent judgments
 5. **Traceable**: Version golden datasets as requirements evolve
 6. **Scalable**: Easy to generate datasets for new authors or languages
 
@@ -274,7 +274,7 @@ def generate_golden_example_with_llm(
     author: str,
     language: str,
     topics: list[str],
-    model: str = "mistral",  # Use same model as production for consistency
+    model: str = "claude-opus-4-7",  # Default: Anthropic Opus (best JSON adherence)
 ) -> GoldenExample:
     """Generate a golden example using LLM judgment.
 
@@ -292,7 +292,7 @@ def generate_golden_example_with_llm(
     prompt = build_prompt(question, author, language, chunks, topics)
 
     # Step 3: Get LLM judgment
-    llm = ChatOllama(model=model, temperature=0.0)  # Deterministic
+    llm = ChatAnthropic(model=model)  # Opus 4.7 has deprecated `temperature`; sampling controlled by Anthropic
     response = llm.invoke(prompt)
 
     # Step 4: Parse and validate
@@ -342,11 +342,28 @@ Create a JSON file defining the questions and topics you want to evaluate:
 ### 2. Generate Golden Dataset
 
 ```bash
-# Generate golden dataset using LLM judgment
-uv run python src/eval/golden/scripts/generate_dataset_using_LLM_judgement.py \
+# Generate golden dataset using LLM judgment (defaults: provider=anthropic, model=claude-opus-4-7)
+uv run python src/eval/golden/scripts/generate_golden_dataset.py \
   --config src/eval/golden/configs/voltaire_examples.json \
-  --output evals/golden/persona_voltaire_v2.0_{current_date}.json \
+  --output evals/golden \
+  --version 2.0 \
+  --verbose
+```
+
+Notes on the flags:
+- `--output` is the **directory** to write into; the filename is derived from `GoldenDataset.identifier` (`{scope}_{authors}_v{version}_{date}.json`).
+- `--provider` defaults to `anthropic` and `--model` defaults to `claude-opus-4-7`. Omit both to use the defaults.
+- `--version` skips the interactive version prompt. Omit it to be prompted at run time.
+
+**Alternative provider (local Ollama)** is slower and may struggle with complex JSON, but does not require an API key:
+
+```bash
+uv run python src/eval/golden/scripts/generate_golden_dataset.py \
+  --config src/eval/golden/configs/voltaire_examples.json \
+  --output evals/golden \
+  --provider ollama \
   --model mistral \
+  --version 2.0 \
   --verbose
 ```
 
@@ -514,10 +531,13 @@ def test_generate_golden_example_returns_valid_schema(mock_llm):
 
 ## Design Decisions
 
-### Why Deterministic LLM (temperature=0)?
-- Ensures reproducible judgments across runs
-- Makes generated datasets stable and traceable
+### Why Low-Variance LLM Sampling?
+- Reproducible judgments across runs make generated datasets stable and traceable
 - Reduces variance in quality assessments
+- Ollama is invoked with `temperature=0`
+- Anthropic deprecated `temperature` on newer models (e.g. Opus 4.7) and now
+  controls sampling internally. Outputs are not byte-identical across runs 
+  but remain semantically stable in practice.
 
 ### Why Retrieve More Chunks Than Production (k=15 vs k=5)?
 - Gives LLM broader context to judge relevance
@@ -563,7 +583,7 @@ def test_generate_golden_example_returns_valid_schema(mock_llm):
 ## Future Enhancements
 
 1. **Iterative Refinement**: If LLM output fails validation, automatically retry with error messages as additional context
-2. **Multi-Model Consensus**: Generate examples with multiple LLMs (mistral, llama3, etc.) and merge judgments
+2. **Multi-Model Consensus**: Generate examples with multiple LLMs (e.g., Claude Opus + Claude Sonnet, optionally with local models like mistral/llama3) and merge judgments
 3. **Human-in-the-Loop**: Allow manual review/editing of generated examples before finalizing dataset
 4. **Automated Expansion**: Given a base set of questions, automatically generate variations (different phrasings, languages, difficulty levels)
 5. **Quality Metrics for Generators**: Track LLM agreement rates, validation success rates, and human approval rates to optimize prompt templates

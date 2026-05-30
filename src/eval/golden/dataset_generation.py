@@ -5,10 +5,11 @@ for evaluating the RAG system. It auto-discovers required fields from the schema
 and metric registry, then uses an LLM to make judgments about chunk relevance,
 expected sources, and other validation criteria.
 
-Why Deterministic LLM (temperature=0)?
-- Ensures reproducible judgments across runs
-- Makes generated datasets stable and traceable
-- Reduces variance in quality assessments
+Why Low-Variance Sampling?
+- Reproducible judgments make generated datasets stable and traceable
+- Local providers (Ollama) are invoked with temperature=0
+- Newer Anthropic models (e.g. Opus 4.7) no longer expose temperature;
+  Anthropic controls sampling internally
 
 Why Retrieve More Chunks Than Production (k=15 vs k=5)?
 - Gives LLM broader context to judge relevance
@@ -249,8 +250,9 @@ def generate_golden_example_with_llm(
 ) -> GoldenExample:
     """Core function returning validated GoldenExample from LLM.
 
-    Uses an LLM with temperature=0 (deterministic) to generate golden examples
-    by analyzing candidate chunks and making judgments about expected values.
+    Uses a low-variance LLM (Ollama at temperature=0; Opus 4.7 with provider-
+    controlled sampling) to generate golden examples by analyzing candidate
+    chunks and making judgments about expected values.
 
     Process:
     1. Auto-discover required fields from schema and metrics
@@ -263,7 +265,8 @@ def generate_golden_example_with_llm(
         question: Philosophical question to evaluate
         author: Author who should answer (must be in AUTHOR_CONFIGS)
         language: ISO 639-1 language code ("fr" or "en")
-        llm: LLM instance (should use temperature=0 for reproducibility)
+        llm: LLM instance (use temperature=0 where supported; newer Anthropic
+            models such as Opus 4.7 have deprecated the parameter)
         retriever: Vector store retriever for fetching candidate chunks
 
     Returns:
@@ -289,7 +292,7 @@ def generate_golden_example_with_llm(
 
     full_prompt = prompt_text + chunks_section
 
-    # Step 4: Invoke LLM with system message (deterministic, temperature=0)
+    # Step 4: Invoke LLM with system message
     system_msg = SystemMessage(content="""You are a JSON generator for a RAG evaluation system.
 You MUST return ONLY valid JSON matching the exact schema provided.
 Do NOT add explanations, analysis, or commentary.
