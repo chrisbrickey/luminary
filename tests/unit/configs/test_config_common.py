@@ -12,6 +12,8 @@ from pathlib import Path
 from src.configs.common import (
     DEFAULT_CHAT_MODEL,
     DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_LLM_SEED,
+    DEFAULT_TEMPERATURE,
     VECTOR_DB_PATH,
 )
 
@@ -46,3 +48,23 @@ def test_default_embedding_model_is_string() -> None:
 def test_default_embedding_model_is_nomic_embed_text() -> None:
     """Test that DEFAULT_EMBEDDING_MODEL is set to 'nomic-embed-text'."""
     assert DEFAULT_EMBEDDING_MODEL == "nomic-embed-text"
+
+
+def test_default_temperature_is_float() -> None:
+    """Test that DEFAULT_TEMPERATURE is a float."""
+    assert isinstance(DEFAULT_TEMPERATURE, float)
+
+
+def test_default_temperature_is_zero() -> None:
+    """Test that DEFAULT_TEMPERATURE is set to 0.0 for deterministic generation."""
+    assert DEFAULT_TEMPERATURE == 0.0
+
+
+def test_default_llm_seed_is_int() -> None:
+    """Test that DEFAULT_LLM_SEED is an int."""
+    assert isinstance(DEFAULT_LLM_SEED, int)
+
+
+def test_default_llm_seed_is_fixed_value() -> None:
+    """Test that DEFAULT_LLM_SEED is a fixed value for reproducibility."""
+    assert DEFAULT_LLM_SEED == 42

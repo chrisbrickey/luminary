@@ -13,6 +13,10 @@ VECTOR_DB_PATH = Path(os.getenv("CHROMA_DB_PATH", "data/chroma_db"))
 # Default LLM for chat chain
 DEFAULT_CHAT_MODEL = "mistral"
 
+# Determinism settings for chat LLM
+DEFAULT_TEMPERATURE: float = 0.0
+DEFAULT_LLM_SEED: int = 42
+
 # Default embedding model for vector store operations
 DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
 

@@ -135,6 +135,11 @@ Verify it's running at http://localhost:11434 or with:
 ollama list
 ```
 
+To restart ollama:
+```
+pkill ollama && open -a Ollama
+```
+
 ### 4. Run the ingestion pipeline
 Ingestion is automated with scripts. Ingestion components are designed to be idempotent so re-running scripts will update existing data rather than creating duplicates.
 

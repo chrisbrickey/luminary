@@ -7,7 +7,13 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 
 from src.chains.chat_chain import build_chain
-from src.configs.common import DEFAULT_CHAT_MODEL, DEFAULT_RESPONSE_LANGUAGE, GERMAN_ISO_CODE
+from src.configs.common import (
+    DEFAULT_CHAT_MODEL,
+    DEFAULT_LLM_SEED,
+    DEFAULT_RESPONSE_LANGUAGE,
+    DEFAULT_TEMPERATURE,
+    GERMAN_ISO_CODE,
+)
 
 # Test constants
 SAMPLE_QUESTION = "What do you think is the most important question in philosophy?"
@@ -259,7 +265,11 @@ class TestBuildChain:
             # Verify all default components (author, retriever, llm, language) were recorded or instantiated.
             call_kwargs = mock_build_retriever.call_args[1]
             assert call_kwargs["author"] == "voltaire"
-            mock_chat_ollama.assert_called_once_with(model=DEFAULT_CHAT_MODEL)
+            mock_chat_ollama.assert_called_once_with(
+                model=DEFAULT_CHAT_MODEL,
+                temperature=DEFAULT_TEMPERATURE,
+                seed=DEFAULT_LLM_SEED,
+            )
             assert response.language == DEFAULT_RESPONSE_LANGUAGE
 
         def test_build_chain_accepts_custom_components(
