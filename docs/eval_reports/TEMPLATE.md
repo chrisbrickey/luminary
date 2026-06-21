@@ -12,7 +12,7 @@ The pair of eval run and golden dataset that were used as the input to this repo
 ## System Snapshot
 - **Commit:** [git-hash]
 - **Chat Model:** [mistral|other]
-- **Embedding Model:** [nomic-embed-text|other]
+- **Embedding Model:** [bge-m3|other]
 - **Retrieval Chunk Count (k):** [value]
 - **Retrieval Chunk Size:** [value]
 

@@ -125,7 +125,7 @@ Ollama runs the LLMs locally. It must be installed and running before you start 
 ```
 brew install ollama
 ollama pull mistral
-ollama pull nomic-embed-text
+ollama pull bge-m3
 ollama serve
 ```
 
@@ -146,7 +146,7 @@ Ingestion is automated with scripts. Ingestion components are designed to be ide
 The unified `ingest.py` script runs the entire ingestion pipeline:
 - **Scrape phase:** Fetches source data from online sources, parses HTML, and saves documents as JSON files to target (at `data/raw/<document_id>/` in local env)
 - **Embed phase:** Loads documents from storage, splits them into overlapping chunks with added metadata, embeds the chunks, and stores in a vector database (at `data/chroma_db/` in local env)
-_If you only need to run a portion of the pipeline, see the Troubleshooting section for lower-level scripts._
+_If you only need to run a portion of the pipeline, see `docs/ingestion-pipeline-details.md` for lower-level scripts._
 
 ```
 # run everything - all parts of ingestion pipeline for all sources and all authors
@@ -183,7 +183,7 @@ Ask Voltaire anything grounded in their writings. Here are some questions to get
 
 ### Prerequisites
 - Ollama must be running.
-- Both models must be pulled: nomic-embed-text (for embedding queries), mistral (for LLM responses).
+- Both models must be pulled: bge-m3 (multilingual embedding model for queries), mistral (for LLM responses).
 - Vector database (chromaDB) must be populated by the ingestion script.
 
 ### Chat via CLI

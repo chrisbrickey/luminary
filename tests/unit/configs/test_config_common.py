@@ -45,9 +45,9 @@ def test_default_embedding_model_is_string() -> None:
     assert isinstance(DEFAULT_EMBEDDING_MODEL, str)
 
 
-def test_default_embedding_model_is_nomic_embed_text() -> None:
-    """Test that DEFAULT_EMBEDDING_MODEL is set to 'nomic-embed-text'."""
-    assert DEFAULT_EMBEDDING_MODEL == "nomic-embed-text"
+def test_default_embedding_model_is_bge_m3() -> None:
+    """Test that DEFAULT_EMBEDDING_MODEL defaults to 'bge-m3' (multilingual)."""
+    assert DEFAULT_EMBEDDING_MODEL == "bge-m3"
 
 
 def test_default_temperature_is_float() -> None:

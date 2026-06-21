@@ -24,7 +24,7 @@ def test_default_k_is_nine() -> None:
 
 def test_default_embedding_model_imported_correctly() -> None:
     """Test that DEFAULT_EMBEDDING_MODEL is re-exported from common config."""
-    assert DEFAULT_EMBEDDING_MODEL == "nomic-embed-text"
+    assert DEFAULT_EMBEDDING_MODEL == "bge-m3"
     assert isinstance(DEFAULT_EMBEDDING_MODEL, str)
 
 def test_vector_db_path_imported_correctly() -> None:
