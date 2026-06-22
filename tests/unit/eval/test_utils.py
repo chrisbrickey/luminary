@@ -694,7 +694,7 @@ def test_format_eval_report_stub_skips_missing_system_snapshot_fields(tmp_path: 
     assert "old123" in result, "commit should be pre-populated"
 
     # Absent fields should leave the template placeholder unchanged
-    assert "[nomic-embed-text|other]" in result, "embedding_model placeholder should remain"
+    assert "[bge-m3|other]" in result, "embedding_model placeholder should remain"
     assert "**Retrieval Chunk Count (k):** [value]" in result, "retrieval_chunk_count placeholder should remain"
     assert "**Retrieval Chunk Size:** [value]" in result, "retrieval_chunk_size placeholder should remain"
 
@@ -711,7 +711,7 @@ def test_format_eval_report_stub_all_system_snapshot_fields_absent(tmp_path: Pat
 
     # All placeholders should remain unchanged
     assert "[mistral|other]" in result, "chat_model placeholder should remain"
-    assert "[nomic-embed-text|other]" in result, "embedding_model placeholder should remain"
+    assert "[bge-m3|other]" in result, "embedding_model placeholder should remain"
     assert "**Retrieval Chunk Count (k):** [value]" in result, "retrieval_chunk_count placeholder should remain"
     assert "**Retrieval Chunk Size:** [value]" in result, "retrieval_chunk_size placeholder should remain"
     assert "[git-hash]" in result, "commit placeholder should remain"

@@ -28,7 +28,7 @@ Documents are saved to `data/raw/<document_id>/` as `page_NN.json` files contain
 
 **Script 2 of 2: Embed and Store** loads JSON files from disk that were persisted in Step 1,
 splits each letter into overlapping chunks,
-converts each chunk into a vector using Ollama nomic-embed-text (a small neural network that captures the meaning of text as a list of numbers),
+converts each chunk into a vector using Ollama bge-m3 (a multilingual neural network that captures the meaning of text as a list of numbers),
 and stores both the vectors and the original text in the vector database (at `data/chroma_db/` in local env).
 Once stored, chunks can be retrieved by semantic similarity, the basis for RAG.
 

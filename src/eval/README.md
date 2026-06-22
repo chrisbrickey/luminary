@@ -34,7 +34,18 @@
 - Corpus ingested (`uv run python scripts/ingest.py`)
 - Golden dataset created (in `evals/golden/` with naming pattern `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`)
 
-**Run evaluation:**
+**Consider the state of the model:**
+As of June 2026, eval runs are almost entirely reproduceable despite the non-deterministic nature of the LLM due to seeding and low default temperature.
+However, greater variation is observed depending on how much the model has been exercised previously (e.g. previous eval runs). 
+So consider restarting ollama before every eval run to increase determinism between eval runs.
+
+To restart ollama:
+```
+pkill ollama && open -a Ollama
+```
+
+
+**Run evaluation harness:**
 ```
 # Auto-discover latest golden dataset for default author
 uv run python scripts/run_eval.py

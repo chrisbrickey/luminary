@@ -18,13 +18,13 @@ def test_collection_name_is_philosophes() -> None:
     assert isinstance(COLLECTION_NAME, str)
 
 def test_default_k_is_nine() -> None:
-    """Test that DEFAULT_K is set to 9."""
-    assert DEFAULT_K == 9
+    """Test that DEFAULT_K is set as expected; prevents accidental regression."""
+    assert DEFAULT_K == 10
     assert isinstance(DEFAULT_K, int)
 
 def test_default_embedding_model_imported_correctly() -> None:
     """Test that DEFAULT_EMBEDDING_MODEL is re-exported from common config."""
-    assert DEFAULT_EMBEDDING_MODEL == "nomic-embed-text"
+    assert DEFAULT_EMBEDDING_MODEL == "bge-m3"
     assert isinstance(DEFAULT_EMBEDDING_MODEL, str)
 
 def test_vector_db_path_imported_correctly() -> None:
