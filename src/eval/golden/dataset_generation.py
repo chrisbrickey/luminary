@@ -33,13 +33,17 @@ from langchain_core.retrievers import BaseRetriever
 
 from src.vectorstores.retriever import build_retriever
 from src.eval.metrics.base import METRIC_REGISTRY
-from src.schemas.eval import GoldenExample
+from src.schemas.eval import GoldenExample, KeywordEntry
 
 logger = logging.getLogger(__name__)
 
 
 # Core fields that are inputs to the generation process, not LLM judgments
 _CORE_FIELDS = {"id", "question", "author", "language"}
+
+# Synonym-pass tuning
+_MIN_SYNONYMS_PER_PRIMARY = 2
+_MAX_SYNONYMS_PER_PRIMARY = 4
 
 
 def discover_required_fields() -> set[str]:
@@ -114,13 +118,17 @@ def build_field_guidance(field_name: str) -> str:
 - Example: ["Lettres philosophiques", "Traité sur la tolérance"]
 """,
         "expected_keywords": """
-**expected_keywords**: List of key-concept strings (in the example's language)
-- Key philosophical concepts that should appear in a good response
+**expected_keywords**: List of keyword entry objects (in the example's language)
+- Each entry is an object with a single field at this stage:
+    - `primary` (str, required): canonical keyword stem in the example's language
+- Do NOT include a `synonyms` field. Synonyms should be generated in a separate downstream pass.
+- The keyword_coverage metric will later credit a match if the primary OR any synonym appears in the response.
 - Use actual terms from the chunks (French chunks → French keywords; English chunks → English keywords)
-- 3-5 keywords typical
-- Provide base/lemma forms when possible; the metric tolerates short suffixes (plurals, simple inflections)
-- French example: ["tolérance", "conscience", "persécution"]
-- English example: ["tolerance", "conscience", "persecution"]
+- 3-5 entries per example is typical
+- Provide base/lemma forms in `primary` as a SINGLE word; the metric tolerates short suffixes (plurals, simple inflections)
+- Multi-word phrases are NOT permitted in `primary`; pick the most distinctive single word
+- French example: [{"primary": "tolérance"}, {"primary": "conscience"}]
+- English example: [{"primary": "tolerance"}, {"primary": "conscience"}]
 """,
     }
 
@@ -169,6 +177,8 @@ def build_prompt(question: str, author: str, required_fields: set[str]) -> str:
             example_fields.append('  "expected_chunk_ids": ["abc123def456", "xyz789uvw012", "mno345pqr678"]')
         elif field == "expected_source_titles":
             example_fields.append('  "expected_source_titles": ["Lettres philosophiques", "Traité sur la tolérance"]')
+        elif field == "expected_keywords":
+            example_fields.append('  "expected_keywords": [{"primary": "tolerance"}, {"primary": "conscience"}, {"primary": "peace"}]')
         else:
             example_fields.append(f'  "{field}": []')
 
@@ -250,6 +260,148 @@ def retrieve_candidate_chunks(
     return chunks
 
 
+def _extract_json_object(content: str) -> str:
+    """Strip optional markdown fence and return the JSON-bearing substring."""
+    json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
+    return json_match.group(1).strip() if json_match else content.strip()
+
+
+def build_synonyms_prompt(
+    primaries: list[str],
+    language: str,
+    chunks: list[dict[str, Any]],
+) -> str:
+    """Assemble the second-pass prompt: synonyms for each just-generated primary.
+    This does not tune synonym stem length to optimize capture of word variations.
+    That should be done manually after the initial list of synonyms is generated.
+
+    Args:
+        primaries: Canonical keyword stems produced by the first pass.
+        language: ISO 639-1 language code ("fr" or "en"); Synonyms must match this language.
+        chunks: Same candidate chunks used by the first pass (for grounding).
+
+    Returns:
+        A prompt instructing the LLM to emit a JSON object mapping each primary keyword
+        to a list of 2-4 single-word synonyms, drawn preferentially from the chunks.
+
+    """
+    chunks_section = ""
+    for i, chunk in enumerate(chunks, 1):
+        chunks_section += f"\n{i}. [ID: {chunk['chunk_id']}] [Source: {chunk['source']}]\n{chunk['text']}\n"
+
+    primaries_json = json.dumps(primaries, ensure_ascii=False)
+
+    example_object_fields = ",\n".join(
+        f'  "{p}": ["...", "...", "..."]' for p in primaries
+    ) or '  "<primary>": ["...", "..."]'
+
+    return f"""You are augmenting a golden evaluation example for a RAG system.
+
+**Task**: For each primary keyword below, produce {_MIN_SYNONYMS_PER_PRIMARY}-{_MAX_SYNONYMS_PER_PRIMARY} acceptable single-word synonyms in the same language.
+
+**Language**: {language}
+**Primaries**: {primaries_json}
+
+**Synonym requirements**:
+- Each synonym must be a SINGLE word (no spaces, no hyphenated multi-word compounds).
+- Each synonym must be in the same language as the primary ({language}).
+- Prefer words that actually appear in the candidate chunks below; only use other on-topic single-word variants when the chunks lack a usable variant.
+- Do NOT repeat the primary itself in its synonym list.
+- Do NOT include grammatical inflections of the primary (the metric tolerates short suffixes automatically). Each synonym must be a distinct word.
+- Provide base/lemma. Downstream regex tolerates short suffixes to these.
+
+**Output format**: Return ONLY a JSON object whose keys are the primaries (verbatim)
+and whose values are arrays of {_MIN_SYNONYMS_PER_PRIMARY}-{_MAX_SYNONYMS_PER_PRIMARY} synonym strings. No prose, no markdown.
+
+**EXACT OUTPUT FORMAT**:
+{{
+{example_object_fields}
+}}
+
+**Candidate Chunks**:
+{chunks_section}
+"""
+
+
+def generate_synonyms_with_llm(
+    primaries: list[str],
+    language: str,
+    chunks: list[dict[str, Any]],
+    llm: BaseChatModel,
+) -> dict[str, list[str]]:
+    """Second LLM pass: produce 2-4 single-word synonyms per primary.
+
+    Args:
+        primaries: Canonical keyword stems produced by the first pass.
+        language: ISO 639-1 language code ("fr" or "en").
+        chunks: Same candidate chunks used by the first pass; grounds the LLM
+            in actual vocabulary from the source corpus.
+        llm: Low-variance LLM instance (shared with the first pass).
+
+    Returns:
+        Dict mapping each primary string to a list of synonym strings.
+        Primaries omitted by the LLM are returned with an empty list, so the
+        caller can always build a complete KeywordEntry per primary.
+
+    Raises:
+        ValueError: If the LLM response is not valid JSON.
+    """
+    if not primaries:
+        return {}
+
+    prompt = build_synonyms_prompt(primaries, language, chunks)
+
+    system_msg = SystemMessage(content="""You are a JSON generator for a RAG evaluation system.
+You MUST return ONLY a valid JSON object mapping primary keywords to synonym arrays.
+Do NOT add explanations, analysis, or commentary.
+Each synonym MUST be a single word in the requested language.""")
+    human_msg = HumanMessage(content=prompt)
+
+    response = llm.invoke([system_msg, human_msg])
+    raw_content = response.content if hasattr(response, "content") else response
+    content = str(raw_content)
+    logger.debug(f"Synonyms LLM raw response:\n{content}")
+
+    json_str = _extract_json_object(content)
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse synonyms JSON. Raw content:\n{content}")
+        raise ValueError(
+            f"Synonyms LLM returned invalid JSON: {e}\n"
+            f"First 200 chars of response: {content[:200]}"
+        ) from e
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Synonyms LLM returned non-object JSON of type {type(data).__name__}; "
+            "expected an object mapping primaries to synonym arrays."
+        )
+
+    result: dict[str, list[str]] = {}
+    for primary in primaries:
+        raw_synonyms = data.get(primary, [])
+        if not isinstance(raw_synonyms, list):
+            logger.warning(
+                f"Synonyms for primary {primary!r} were not a list; dropping. Got: {raw_synonyms!r}"
+            )
+            result[primary] = []
+            continue
+        # Filter to single-word strings and de-duplicate against the primary.
+        cleaned: list[str] = []
+        for syn in raw_synonyms:
+            if not isinstance(syn, str):
+                continue
+            syn = syn.strip()
+            if not syn or " " in syn or syn.lower() == primary.lower():
+                continue
+            if syn not in cleaned:
+                cleaned.append(syn)
+        result[primary] = cleaned[:_MAX_SYNONYMS_PER_PRIMARY]
+
+    return result
+
+
 def generate_golden_example_with_llm(
     question: str,
     author: str,
@@ -267,19 +419,21 @@ def generate_golden_example_with_llm(
     1. Auto-discover required fields from schema and metrics
     2. Retrieve k=15 candidate chunks for LLM to analyze
     3. Build comprehensive prompt with field guidance
-    4. Invoke LLM to generate JSON
+    4. First LLM pass: Invoke LLM to generate JSON (Populate only primary key words - no synonyms yet.)
     5. Parse and validate against GoldenExample schema
+    6. Second LLM pass: Generate 2-4 synonyms per primary, grounded in the same
+       candidate chunks, and inject them into the validated example.
 
     Args:
         question: Philosophical question to evaluate
         author: Author who should answer (must be in AUTHOR_CONFIGS)
         language: ISO 639-1 language code ("fr" or "en")
-        llm: LLM instance (use temperature=0 where supported; newer Anthropic
-            models such as Opus 4.7 have deprecated the parameter)
+        llm: LLM instance (Use temperature=0 where supported.; Newer Anthropic
+            models deprecated the parameter.)
         retriever: Vector store retriever for fetching candidate chunks
 
     Returns:
-        Validated GoldenExample instance
+        Validated GoldenExample instance with primary keywords from pass 1 and synonyms from pass 2.
 
     Raises:
         ValidationError: If LLM output doesn't match GoldenExample schema
@@ -288,20 +442,19 @@ def generate_golden_example_with_llm(
     # Step 1: Auto-discover required fields
     required_fields = discover_required_fields()
 
-    # Step 2: Retrieve candidate chunks
+    # Step 2: Retrieve candidate chunks (shared across both passes)
     chunks = retrieve_candidate_chunks(question, author, k=15)
 
-    # Step 3: Build prompt with field guidance
+    # Step 3: Build pass-1 prompt with field guidance
     prompt_text = build_prompt(question, author, required_fields)
 
-    # Add candidate chunks to prompt
     chunks_section = "\n\n**Candidate Chunks**:\n"
     for i, chunk in enumerate(chunks, 1):
         chunks_section += f"\n{i}. [ID: {chunk['chunk_id']}] [Source: {chunk['source']}]\n{chunk['text']}\n"
 
     full_prompt = prompt_text + chunks_section
 
-    # Step 4: Invoke LLM with system message
+    # Step 4: Invoke LLM (pass 1) with system message
     system_msg = SystemMessage(content="""You are a JSON generator for a RAG evaluation system.
 You MUST return ONLY valid JSON matching the exact schema provided.
 Do NOT add explanations, analysis, or commentary.
@@ -318,17 +471,11 @@ Return ONLY the JSON object with the exact fields specified.""")
     content = str(raw_content)
 
     # Log the raw response for debugging
-    logger.debug(f"LLM raw response:\n{content}")
+    logger.debug(f"LLM raw response (pass 1):\n{content}")
 
-    # Step 5: Parse JSON (handle markdown code blocks if present)
-    # Try to extract JSON from markdown code blocks first
-    json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
-    if json_match:
-        json_str = json_match.group(1).strip()
-    else:
-        json_str = content.strip()
+    # Step 5: Parse pass-1 JSON (handle markdown code blocks if present)
+    json_str = _extract_json_object(content)
 
-    # Parse JSON with better error handling
     try:
         data = json.loads(json_str)
     except json.JSONDecodeError as e:
@@ -339,7 +486,24 @@ Return ONLY the JSON object with the exact fields specified.""")
             f"First 200 chars of response: {content[:200]}"
         ) from e
 
-    # Step 6: Validate against GoldenExample schema
+    # Validate against GoldenExample schema (synonyms default to [] at this stage)
     example = GoldenExample(**data)
+
+    # Step 6: Second pass: List of synonyms per primary keyword, grounded in the same chunks
+    primaries = [entry.primary for entry in example.expected_keywords]
+    if primaries:
+        synonyms_by_primary = generate_synonyms_with_llm(
+            primaries=primaries,
+            language=language,
+            chunks=chunks,
+            llm=llm,
+        )
+        example.expected_keywords = [
+            KeywordEntry(
+                primary=entry.primary,
+                synonyms=synonyms_by_primary.get(entry.primary, []),
+            )
+            for entry in example.expected_keywords
+        ]
 
     return example
