@@ -27,6 +27,21 @@ class MetricResult(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict, description="Additional details about the metric result")
 
 
+class KeywordEntry(BaseModel):
+    """A single expected keyword stem with optional synonym stem variants.
+
+    The metric counts the entry as 'found' if the primary stem OR any synonym stem
+    appears in the response within the bounded-suffix regex (<= some character allowance).
+    The primary keyword stem is the canonical label reported in metric details.
+    """
+
+    primary: str = Field(..., description="Canonical keyword stem in the example's language")
+    synonyms: list[str] = Field(
+        default_factory=list,
+        description="Acceptable variant terms; an entry matches if ANY variant is found"
+    )
+
+
 class GoldenExample(BaseModel):
     """A single eval case in the golden dataset.
 
@@ -54,9 +69,9 @@ class GoldenExample(BaseModel):
     )
 
     # keyword coverage metric
-    expected_keywords: list[str] = Field(
+    expected_keywords: list[KeywordEntry] = Field(
         default_factory=list,
-        description="Key concepts expected in the response, in the language of example.language"
+        description="Key concepts expected in the response, each as a KeywordEntry with primary stem and optional synonyms"
     )
 
     @field_validator('author')

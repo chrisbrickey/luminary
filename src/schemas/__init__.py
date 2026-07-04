@@ -9,13 +9,14 @@ Schemas are organized by domain in submodules:
 """
 
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import MetricResult
+from src.schemas.eval import KeywordEntry, MetricResult
 from src.schemas.ingestion import WikisourceCollection
 from src.schemas.vectorstore import ChunkInfo
 
 __all__ = [
     "ChatResponse",
     "ChunkInfo",
+    "KeywordEntry",
     "MetricResult",
     "WikisourceCollection",
 ]

@@ -9,7 +9,7 @@ from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.eval.metrics.base import FALLBACK_THRESHOLD
 from src.schemas.chat import ChatResponse
-from src.schemas.eval import AggregateScores, EvalRun, ExampleResult, GoldenDataset, GoldenExample, MetricResult, SystemSnapshot
+from src.schemas.eval import AggregateScores, EvalRun, ExampleResult, GoldenDataset, GoldenExample, KeywordEntry, MetricResult, SystemSnapshot
 
 # --- Pytest fixtures ---
 
@@ -213,6 +213,50 @@ class TestMetricResult:
         assert metric.details == {}
 
 
+class TestKeywordEntry:
+    """Unit tests for the KeywordEntry Pydantic model."""
+
+    def test_primary_required(self) -> None:
+        """Missing primary field raises ValidationError."""
+        with pytest.raises(ValidationError):
+            KeywordEntry(synonyms=[])  # type: ignore[call-arg]
+
+    def test_synonyms_defaults_to_empty_list(self) -> None:
+        """synonyms defaults to [] when not provided."""
+        entry = KeywordEntry(primary="widget")
+        assert entry.synonyms == []
+
+    def test_synonyms_accepts_list_of_strings(self) -> None:
+        """synonyms accepts a list of strings."""
+        entry = KeywordEntry(primary="widget", synonyms=["gadget", "gizmo"])
+        assert entry.synonyms == ["gadget", "gizmo"]
+
+    def test_primary_unicode_round_trips(self) -> None:
+        """Accented characters in primary survive round-trip serialization."""
+        entry = KeywordEntry(primary="élément")
+        assert entry.primary == "élément"
+        assert entry.model_dump()["primary"] == "élément"
+
+    def test_synonyms_unicode_round_trips(self) -> None:
+        """Accented characters in synonyms survive round-trip serialization."""
+        entry = KeywordEntry(primary="élément", synonyms=["modèle"])
+        assert entry.synonyms == ["modèle"]
+        assert entry.model_dump()["synonyms"] == ["modèle"]
+
+    def test_both_fields_unicode_round_trips(self) -> None:
+        """Both primary and synonyms handle accented FR terms correctly."""
+        entry = KeywordEntry(primary="élément", synonyms=["modèle", "système"])
+        dumped = entry.model_dump()
+        assert dumped["primary"] == "élément"
+        assert dumped["synonyms"] == ["modèle", "système"]
+
+    def test_extra_fields_ignored(self) -> None:
+        """Extra fields are silently ignored (consistent with GoldenExample policy)."""
+        entry = KeywordEntry(primary="widget", unknown_field="boom")  # type: ignore[call-arg]
+        assert entry.primary == "widget"
+        assert "unknown_field" not in entry.model_dump()
+
+
 class TestGoldenExample:
     def test_construction_with_required_fields(self) -> None:
         example = GoldenExample(**_golden_example_kwargs())
@@ -277,15 +321,19 @@ class TestGoldenExample:
         assert example.expected_source_titles == source_titles
 
     def test_expected_keywords_defaults_to_empty_list(self) -> None:
-        """expected_keywords defaults to empty list when not provided."""
+        """expected_keywords defaults to empty list of KeywordEntry when not provided."""
         example = GoldenExample(**_golden_example_kwargs())
         assert example.expected_keywords == []
 
     def test_expected_keywords_accepts_unicode(self) -> None:
-        """expected_keywords round-trips accented (unicode) strings correctly."""
-        keywords = ["élément", "modèle", "système"]
+        """expected_keywords round-trips KeywordEntry with accented (unicode) strings correctly."""
+        keywords = [
+            KeywordEntry(primary="élément", synonyms=["modèle"]),
+        ]
         example = GoldenExample(**_golden_example_kwargs(expected_keywords=keywords))
-        assert example.expected_keywords == keywords
+        assert len(example.expected_keywords) == 1
+        assert example.expected_keywords[0].primary == "élément"
+        assert example.expected_keywords[0].synonyms == ["modèle"]
 
 
 class TestGoldenDataset:
