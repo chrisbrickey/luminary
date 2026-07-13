@@ -1611,7 +1611,7 @@ Review documentation and update as needed.
 
 ---
 
-## O. Perform Evaluation Cycle (incorporating new metrics)
+## ✅ O. Perform Evaluation Cycle (incorporating new metrics)
 
 Instruct the user to follow the below steps.
 
@@ -1629,14 +1629,11 @@ Instruct the user to follow the below steps.
     - Include delta table showing improvements
     - Commit report to `docs/eval_reports/`
 
-**Propose fixes based on common failure modes**
-
-   **Low faithfulness:**
-   - **Root cause:** Keywords too specific, or LLM paraphrasing concepts
-   - **Fix (manual):** Relax keywords in golden dataset, or add synonyms
-   - **Example:** Replace `["tolérance religieuse"]` with `["tolérance", "religion"]` (more flexible)
-   - **Alternative:** Improve prompt to emphasize key themes
-
+### Plan updates
+See documentation of eval runs and updates:
+- `eval_report_2026-06-09T14-40-29.md`
+- `eval_report_2026-06-22T16-45-03.md`
+- `eval_report_2026-07-13T13-07-25.md`
 
 ## P. Harden Golden Dataset Generator
 

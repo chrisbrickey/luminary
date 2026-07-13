@@ -15,6 +15,10 @@ The pair of eval run and golden dataset that were used as the input to this repo
 - **Embedding Model:** [bge-m3|other]
 - **Retrieval Chunk Count (k):** [value]
 - **Retrieval Chunk Size:** [value]
+- **Ollama PID:** [value]
+- **Ollama Uptime (seconds):** [value]
+- **Ollama Version:** [value]
+- **Ollama Loaded Models:** [value]
 
 
 ## Eval Run Summary

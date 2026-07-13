@@ -133,11 +133,15 @@ def _eval_run_kwargs(**overrides: Any) -> dict[str, Any]:
 class TestSystemSnapshot:
     def test_construction_with_all_fields(self) -> None:
         kwargs = {
+            "commit": "abc123",
             "chat_model": "test-model",
             "embedding_model": "test-embedding",
             "retrieval_chunk_count": "5",
             "retrieval_chunk_size": "1200",
-            "commit": "abc123",
+            "ollama_pid": "4242",
+            "ollama_uptime_seconds": "3600",
+            "ollama_version": "0.1.42",
+            "ollama_loaded_models": '{"models":[]}',
         }
         sv = SystemSnapshot(**kwargs)
         assert sv.model_dump() == kwargs

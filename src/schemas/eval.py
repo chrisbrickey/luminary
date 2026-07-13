@@ -210,6 +210,10 @@ class SystemSnapshot(BaseModel):
     embedding_model: str | None = Field(default=None, title="Embedding Model", description="Name of the embedding model used")
     retrieval_chunk_count: str | None = Field(default=None, title="Retrieval Chunk Count (k)", description="Number of chunks retrieved per query")
     retrieval_chunk_size: str | None = Field(default=None, title="Retrieval Chunk Size", description="Maximum chunk size in characters")
+    ollama_pid: str | None = Field(default=None, title="Ollama PID", description="Process ID of the Ollama server listening on the default port at run time")
+    ollama_uptime_seconds: str | None = Field(default=None, title="Ollama Uptime (seconds)", description="Elapsed seconds since the Ollama server process started")
+    ollama_version: str | None = Field(default=None, title="Ollama Version", description="Version string reported by the Ollama server at run time")
+    ollama_loaded_models: str | None = Field(default=None, title="Ollama Loaded Models", description="JSON-serialized snapshot of models currently resident in Ollama at run time; captures warm-state context")
 
 
 class AggregateScores(BaseModel):
