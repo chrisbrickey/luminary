@@ -154,7 +154,15 @@ def _assert_valid_eval_run(saved_run: EvalRun) -> None:
 
     # Verify nested SystemSnapshot fields
     assert isinstance(saved_run.system_snapshot, SystemSnapshot)
+    _ollama_best_effort_fields = {
+        "ollama_pid",
+        "ollama_uptime_seconds",
+        "ollama_version",
+        "ollama_loaded_models",
+    }
     for field_name in SystemSnapshot.model_fields:
+        if field_name in _ollama_best_effort_fields:
+            continue
         assert getattr(saved_run.system_snapshot, field_name), (
             f"Expected system_snapshot.{field_name} to be set"
         )
@@ -411,15 +419,40 @@ def test_get_system_snapshot_returns_all_fields() -> None:
     """Integration test: get_system_snapshot() wires all constants correctly.
 
     The unit runner test mocks get_system_snapshot, so this is the only test
-    that exercises the real function and verifies every field is populated.
+    that exercises the real function and verifies every deterministic field is
+    populated. Ollama-derived fields are best-effort and may be None when the
+    test environment has no local Ollama server running.
     """
     result = get_system_snapshot()
 
     assert isinstance(result, SystemSnapshot)
 
-    for field_name in SystemSnapshot.model_fields:
+    always_populated_fields = {
+        "commit",
+        "chat_model",
+        "embedding_model",
+        "retrieval_chunk_count",
+        "retrieval_chunk_size",
+    }
+    ollama_best_effort_fields = {
+        "ollama_pid",
+        "ollama_uptime_seconds",
+        "ollama_version",
+        "ollama_loaded_models",
+    }
+    assert always_populated_fields | ollama_best_effort_fields == set(SystemSnapshot.model_fields), (
+        "SystemSnapshot has fields not classified by this test; update the classification."
+    )
+
+    for field_name in always_populated_fields:
         assert getattr(result, field_name), (
             f"Expected system_snapshot.{field_name} to be set"
+        )
+
+    for field_name in ollama_best_effort_fields:
+        value = getattr(result, field_name)
+        assert value is None or isinstance(value, str), (
+            f"Expected system_snapshot.{field_name} to be None or str, got {type(value)}"
         )
 
 

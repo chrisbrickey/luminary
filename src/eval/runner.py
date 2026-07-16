@@ -18,6 +18,7 @@ from src.eval.metrics.base import METRIC_REGISTRY, is_metric_applicable
 from src.schemas.chat import ChatResponse
 from src.schemas.eval import AggregateScores, EvalRun, ExampleResult, GoldenDataset, MetricResult, SystemSnapshot
 from src.utils.chunker import DEFAULT_CHUNK_SIZE
+from src.utils.ollama_health import capture_ollama_state
 
 # Auto-register all metrics; Skip unused import warning
 import src.eval.metrics  # noqa: F401
@@ -38,12 +39,17 @@ def get_system_snapshot() -> SystemSnapshot:
     except (subprocess.CalledProcessError, FileNotFoundError):
         commit = "unknown"
 
+    ollama_state = capture_ollama_state()
     return SystemSnapshot(
         commit=commit,
         chat_model=DEFAULT_CHAT_MODEL,
         embedding_model=DEFAULT_EMBEDDING_MODEL,
         retrieval_chunk_count=str(DEFAULT_K),
         retrieval_chunk_size=str(DEFAULT_CHUNK_SIZE),
+        ollama_pid=ollama_state.pid,
+        ollama_uptime_seconds=ollama_state.uptime_seconds,
+        ollama_version=ollama_state.version,
+        ollama_loaded_models=ollama_state.loaded_models,
     )
 
 
