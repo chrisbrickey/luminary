@@ -12,7 +12,7 @@ from chat_ui import (
     initialize_or_rebuild_chain,
 )
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
-from src.schemas import ChatResponse
+from src.schemas import ChatResponse, SourceReference
 
 
 # --- Test constants ---
@@ -544,6 +544,7 @@ def test_main_processes_user_input(
         retrieved_passage_ids=["id1"],
         retrieved_contexts=["context1"],
         retrieved_source_titles=["Source A"],
+        retrieved_sources=[SourceReference(title="Source A")],
         language=FRENCH_ISO_CODE,
     )
     mock_chain.invoke.return_value = mock_response
@@ -615,6 +616,7 @@ def test_main_shows_sources_caption(
         retrieved_passage_ids=["id1", "id2"],
         retrieved_contexts=["context1", "context2"],
         retrieved_source_titles=["Source A", "Source B"],
+        retrieved_sources=[SourceReference(title="Source A"), SourceReference(title="Source B")],
         language=FRENCH_ISO_CODE,
     )
     mock_chain.invoke.return_value = mock_response
@@ -651,6 +653,85 @@ def test_main_shows_sources_caption(
 
     # Uses response.language (fr), so space before colon (French punctuation)
     assert sources_calls[0] == "**Sources :**\n- Source A\n- Source B"
+
+
+@patch("chat_ui.detect_language")
+@patch("chat_ui.initialize_or_rebuild_chain")
+@patch("chat_ui.initialize_session_state")
+@patch("chat_ui.st")
+def test_main_stores_and_replays_collapsed_sources_footer(
+    mock_st: Mock, mock_init: Mock, mock_rebuild: Mock, mock_detect: Mock
+) -> None:
+    """Test that the collapsed multi-page footer is stored in session state and replayed as a caption."""
+    mock_detect.return_value = ENGLISH_ISO_CODE
+    mock_chain = Mock()
+    mock_response = ChatResponse(
+        text="Test response",
+        retrieved_passage_ids=["id1", "id2", "id3", "id4"],
+        retrieved_contexts=["context1", "context2", "context3", "context4"],
+        retrieved_source_titles=[
+            "Some Work, page 12",
+            "Some Work, page 9",
+            "Some Work, page 13",
+            "Some Work, page 12",
+        ],
+        retrieved_sources=[
+            SourceReference(title="Some Work", page_number=12),
+            SourceReference(title="Some Work", page_number=9),
+            SourceReference(title="Some Work", page_number=13),
+            SourceReference(title="Some Work", page_number=12),  # duplicate
+        ],
+        language=ENGLISH_ISO_CODE,
+    )
+    mock_chain.invoke.return_value = mock_response
+
+    mock_st.session_state = SessionStateMock(
+        {
+            "messages": [],
+            "chain": mock_chain,
+            "current_author": DEFAULT_TEST_AUTHOR,
+            "show_exit_message": None,
+        }
+    )
+    mock_st.chat_input.return_value = "Test question"
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
+    mock_st.button.return_value = False
+
+    mock_chat_message = MagicMock()
+    mock_st.chat_message.return_value.__enter__ = Mock(return_value=mock_chat_message)
+    mock_st.chat_message.return_value.__exit__ = Mock(return_value=False)
+
+    mock_spinner = MagicMock()
+    mock_st.spinner.return_value.__enter__ = Mock(return_value=mock_spinner)
+    mock_st.spinner.return_value.__exit__ = Mock(return_value=False)
+
+    main()
+
+    # Dedup + ascending pages + range collapse: 12, 9, 13, 12 -> "9, 12-13"
+    expected_footer = "**Sources:**\n- Some Work (pages: 9, 12-13)"
+    stored_message = mock_st.session_state["messages"][-1]
+    assert stored_message["role"] == "assistant"
+    assert stored_message["sources"] == expected_footer
+
+    # Replay: a fresh main() call with this message already in history should
+    # display the already-collapsed footer via st.caption (chat_ui.py:132-133),
+    # not recompute it.
+    mock_st.session_state = SessionStateMock(
+        {
+            "messages": [stored_message],
+            "chain": mock_chain,
+            "current_author": DEFAULT_TEST_AUTHOR,
+            "show_exit_message": None,
+        }
+    )
+    mock_st.chat_input.return_value = None
+    mock_st.selectbox.return_value = DEFAULT_TEST_AUTHOR
+    mock_st.button.return_value = False
+
+    main()
+
+    caption_calls = [call[0][0] for call in mock_st.caption.call_args_list]
+    assert expected_footer in caption_calls
 
 
 @patch("chat_ui.initialize_or_rebuild_chain")

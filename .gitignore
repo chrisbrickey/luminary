@@ -5,6 +5,7 @@ evals/
 # python
 __pycache__/
 .venv/
+.coverage
 
 # environment variables
 .env
@@ -12,8 +13,14 @@ __pycache__/
 # ide
 .idea/
 
-# coding agents
-.claude/
-CLAUDE.md
+# macOS
+.DS_Store
 
-.coverage
+# development workflow
+BACKLOG.md
+
+# agentic platforms
+AGENTS.md
+.claude/
+.codex/
+.vibe/

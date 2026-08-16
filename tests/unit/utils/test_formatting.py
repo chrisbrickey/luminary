@@ -4,142 +4,210 @@ import pytest
 
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
-from src.utils.formatting import deduplicate_sources, format_sources
+from src.schemas.chat import SourceReference
+from src.utils.formatting import format_page_ranges, format_sources, group_sources
+
+# --- Shared test constants ---
+
+TITLE_MULTI_PAGE = "Sample Work A"
+TITLE_SOME_WORK = "Sample Work B"
+TITLE_SOURCE_A = "Source A"
+TITLE_SOURCE_B = "Source B"
+URL_FALLBACK_TITLE = "https://example.com/doc3"
+
+EXPECTED_NONE_EN = "**Sources:** none"
+EXPECTED_NONE_FR = "**Sources :** aucune"
+
+
+def _make_response(
+    sources: list[SourceReference],
+    titles: list[str] | None = None,
+    language: str = ENGLISH_ISO_CODE,
+) -> ChatResponse:
+    """Build a ChatResponse with the given structured sources (and optional legacy titles)."""
+    return ChatResponse(
+        text="Answer text",
+        retrieved_contexts=["Context"] * len(sources),
+        retrieved_passage_ids=[f"id{i}" for i in range(len(sources))],
+        retrieved_source_titles=titles if titles is not None else [],
+        retrieved_sources=sources,
+        language=language,
+    )
 
 
 @pytest.fixture
 def response_no_sources() -> ChatResponse:
     """ChatResponse with no sources."""
-    return ChatResponse(
-        text="Answer text",
-        retrieved_contexts=[],
-        retrieved_passage_ids=[],
-        retrieved_source_titles=[],
-        language=ENGLISH_ISO_CODE,
-    )
+    return _make_response(sources=[])
 
 
 @pytest.fixture
 def response_with_sources() -> ChatResponse:
-    """ChatResponse with multiple sources."""
-    return ChatResponse(
-        text="Answer text",
-        retrieved_contexts=["Context A", "Context B", "Context C"],
-        retrieved_passage_ids=["id1", "id2", "id3"],
-        retrieved_source_titles=["Source A", "Source B", "Source C"],
-        language=ENGLISH_ISO_CODE,
+    """ChatResponse with multiple distinct single-page sources, titles populated too."""
+    return _make_response(
+        sources=[
+            SourceReference(title=TITLE_SOURCE_A, page_number=1),
+            SourceReference(title=TITLE_SOURCE_B, page_number=2),
+        ],
+        titles=[f"{TITLE_SOURCE_A}, page 1", f"{TITLE_SOURCE_B}, page 2"],
     )
 
 
-@pytest.fixture
-def response_with_duplicate_sources() -> ChatResponse:
-    """ChatResponse with duplicate source titles."""
-    return ChatResponse(
-        text="Answer text",
-        retrieved_contexts=["Context A", "Context B", "Context C", "Context D"],
-        retrieved_passage_ids=["id1", "id2", "id3", "id4"],
-        retrieved_source_titles=["Source A", "Source B", "Source A", "Source C"],
-        language=ENGLISH_ISO_CODE,
+class TestGroupSources:
+    """Tests for group_sources function."""
+
+    def test_empty_sources(self) -> None:
+        assert group_sources([]) == []
+
+    def test_single_title_pages_deduped_and_sorted(self) -> None:
+        sources = [
+            SourceReference(title=TITLE_MULTI_PAGE, page_number=18),
+            SourceReference(title=TITLE_MULTI_PAGE, page_number=13),
+            SourceReference(title=TITLE_MULTI_PAGE, page_number=23),
+            SourceReference(title=TITLE_MULTI_PAGE, page_number=1),
+        ]
+        assert group_sources(sources) == [(TITLE_MULTI_PAGE, [1, 13, 18, 23])]
+
+    def test_duplicate_pages_deduped(self) -> None:
+        sources = [
+            SourceReference(title=TITLE_MULTI_PAGE, page_number=13),
+            SourceReference(title=TITLE_MULTI_PAGE, page_number=13),
+        ]
+        assert group_sources(sources) == [(TITLE_MULTI_PAGE, [13])]
+
+    def test_page_less_only_title(self) -> None:
+        sources = [SourceReference(title=TITLE_SOME_WORK)]
+        assert group_sources(sources) == [(TITLE_SOME_WORK, [])]
+
+    def test_page_less_and_paged_entries_for_same_title_merge(self) -> None:
+        sources = [
+            SourceReference(title=TITLE_SOME_WORK, page_number=None),
+            SourceReference(title=TITLE_SOME_WORK, page_number=5),
+        ]
+        assert group_sources(sources) == [(TITLE_SOME_WORK, [5])]
+
+    def test_multiple_titles_ordered_by_first_appearance(self) -> None:
+        sources = [
+            SourceReference(title=TITLE_SOURCE_B, page_number=1),
+            SourceReference(title=TITLE_SOURCE_A, page_number=2),
+            SourceReference(title=TITLE_SOURCE_B, page_number=3),
+        ]
+        assert group_sources(sources) == [
+            (TITLE_SOURCE_B, [1, 3]),
+            (TITLE_SOURCE_A, [2]),
+        ]
+
+
+class TestFormatPageRanges:
+    """Tests for format_page_ranges function. Input is assumed pre-sorted and deduped."""
+
+    @pytest.mark.parametrize(
+        "pages, expected",
+        [
+            ([], ""),
+            ([18], "18"),
+            ([1, 18], "1, 18"),
+            ([11, 12], "11-12"),
+            ([11, 12, 13], "11-13"),
+            ([1, 11, 12, 13, 18], "1, 11-13, 18"),
+            ([1, 2, 3, 7, 8, 20], "1-3, 7-8, 20"),
+            ([0, 1], "0-1"),
+        ],
     )
-
-
-class TestDeduplicateSources:
-    """Tests for deduplicate_sources function."""
-
-    def test_empty_sources(self, response_no_sources: ChatResponse) -> None:
-        """Test deduplication with no sources."""
-        result = deduplicate_sources(response_no_sources)
-        assert result == []
-
-    def test_unique_sources(self, response_with_sources: ChatResponse) -> None:
-        """Test deduplication with all unique sources."""
-        result = deduplicate_sources(response_with_sources)
-        assert result == ["Source A", "Source B", "Source C"]
-
-    def test_duplicate_sources(
-        self, response_with_duplicate_sources: ChatResponse
-    ) -> None:
-        """Test deduplication removes duplicates and preserves order."""
-        result = deduplicate_sources(response_with_duplicate_sources)
-        assert result == ["Source A", "Source B", "Source C"]
-
-    def test_preserves_first_occurrence(self) -> None:
-        """Test that first occurrence is preserved when deduplicating."""
-        response = ChatResponse(
-            text="Answer",
-            retrieved_contexts=["A", "B", "C"],
-            retrieved_passage_ids=["1", "2", "3"],
-            retrieved_source_titles=["First", "Second", "First"],
-            language=ENGLISH_ISO_CODE,
-        )
-        result = deduplicate_sources(response)
-        # First occurrence of "First" should be at index 0
-        assert result == ["First", "Second"]
+    def test_format_page_ranges(self, pages: list[int], expected: str) -> None:
+        assert format_page_ranges(pages) == expected
 
 
 class TestFormatSources:
     """Tests for format_sources function."""
 
     def test_no_sources_english(self, response_no_sources: ChatResponse) -> None:
-        """Test format with no sources in English."""
         result = format_sources(response_no_sources, ENGLISH_ISO_CODE)
-        assert result == "**Sources:** none"
+        assert result == EXPECTED_NONE_EN
 
     def test_no_sources_french(self, response_no_sources: ChatResponse) -> None:
-        """Test format with no sources in French."""
         result = format_sources(response_no_sources, FRENCH_ISO_CODE)
-        assert result == "**Sources :** aucune"
+        assert result == EXPECTED_NONE_FR
 
-    def test_with_sources_english(self, response_with_sources: ChatResponse) -> None:
-        """Test format with sources in English."""
-        result = format_sources(response_with_sources, ENGLISH_ISO_CODE)
-        expected = "**Sources:**\n- Source A\n- Source B\n- Source C"
-        assert result == expected
-
-    def test_with_sources_french(self, response_with_sources: ChatResponse) -> None:
-        """Test format with sources in French."""
-        result = format_sources(response_with_sources, FRENCH_ISO_CODE)
-        expected = "**Sources :**\n- Source A\n- Source B\n- Source C"
-        assert result == expected
-
-    def test_deduplicates_sources(
-        self, response_with_duplicate_sources: ChatResponse
-    ) -> None:
-        """Test that format_sources deduplicates before formatting."""
-        result = format_sources(response_with_duplicate_sources, ENGLISH_ISO_CODE)
-        # Should only show unique sources: A, B, C (not A twice)
-        expected = "**Sources:**\n- Source A\n- Source B\n- Source C"
-        assert result == expected
-
-    def test_uses_default_language(self, response_with_sources: ChatResponse) -> None:
-        """Test that default language parameter works."""
-        # Not passing language should use DEFAULT_RESPONSE_LANGUAGE (en)
-        result = format_sources(response_with_sources)
-        expected = "**Sources:**\n- Source A\n- Source B\n- Source C"
-        assert result == expected
-
-    def test_with_single_source_english(self) -> None:
-        """Test format with exactly one source in English."""
-        response = ChatResponse(
-            text="Answer",
-            retrieved_contexts=["Context"],
-            retrieved_passage_ids=["id1"],
-            retrieved_source_titles=["Only Source"],
-            language=ENGLISH_ISO_CODE,
+    def test_one_page_english_is_singular(self) -> None:
+        response = _make_response(
+            sources=[SourceReference(title=TITLE_MULTI_PAGE, page_number=18)]
         )
         result = format_sources(response, ENGLISH_ISO_CODE)
-        expected = "**Sources:**\n- Only Source"
+        expected = f"**Sources:**\n- {TITLE_MULTI_PAGE} (page: 18)"
         assert result == expected
 
-    def test_with_single_source_french(self) -> None:
-        """Test format with exactly one source in French."""
-        response = ChatResponse(
-            text="Réponse",
-            retrieved_contexts=["Contexte"],
-            retrieved_passage_ids=["id1"],
-            retrieved_source_titles=["Seule Source"],
+    def test_pages_out_of_order_are_sorted_deduped_and_ranged_english(self) -> None:
+        response = _make_response(
+            sources=[
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=18),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=13),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=1),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=12),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=11),
+            ]
+        )
+        result = format_sources(response, ENGLISH_ISO_CODE)
+        expected = f"**Sources:**\n- {TITLE_MULTI_PAGE} (pages: 1, 11-13, 18)"
+        assert result == expected
+
+    def test_pages_out_of_order_are_sorted_deduped_and_ranged_french(self) -> None:
+        response = _make_response(
+            sources=[
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=18),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=13),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=1),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=12),
+                SourceReference(title=TITLE_MULTI_PAGE, page_number=11),
+            ],
             language=FRENCH_ISO_CODE,
         )
         result = format_sources(response, FRENCH_ISO_CODE)
-        expected = "**Sources :**\n- Seule Source"
+        expected = f"**Sources :**\n- {TITLE_MULTI_PAGE} (pages : 1, 11-13, 18)"
         assert result == expected
+
+    def test_two_page_run_is_plural(self) -> None:
+        response = _make_response(
+            sources=[
+                SourceReference(title=TITLE_SOME_WORK, page_number=11),
+                SourceReference(title=TITLE_SOME_WORK, page_number=12),
+            ]
+        )
+        result = format_sources(response, ENGLISH_ISO_CODE)
+        expected = f"**Sources:**\n- {TITLE_SOME_WORK} (pages: 11-12)"
+        assert result == expected
+
+    def test_page_less_source_has_no_parenthetical(self) -> None:
+        response = _make_response(sources=[SourceReference(title=TITLE_SOME_WORK)])
+        result = format_sources(response, ENGLISH_ISO_CODE)
+        expected = f"**Sources:**\n- {TITLE_SOME_WORK}"
+        assert result == expected
+
+    def test_url_fallback_title_renders_bare_url(self) -> None:
+        response = _make_response(sources=[SourceReference(title=URL_FALLBACK_TITLE)])
+        result = format_sources(response, ENGLISH_ISO_CODE)
+        expected = f"**Sources:**\n- {URL_FALLBACK_TITLE}"
+        assert result == expected
+
+    def test_two_titles_appear_in_first_appearance_order(self) -> None:
+        response = _make_response(
+            sources=[
+                SourceReference(title=TITLE_SOURCE_B, page_number=1),
+                SourceReference(title=TITLE_SOURCE_A, page_number=2),
+            ]
+        )
+        result = format_sources(response, ENGLISH_ISO_CODE)
+        expected = f"**Sources:**\n- {TITLE_SOURCE_B} (page: 1)\n- {TITLE_SOURCE_A} (page: 2)"
+        assert result == expected
+
+    def test_uses_default_language(self, response_with_sources: ChatResponse) -> None:
+        """Not passing language should use DEFAULT_RESPONSE_LANGUAGE (en)."""
+        result = format_sources(response_with_sources)
+        expected = f"**Sources:**\n- {TITLE_SOURCE_A} (page: 1)\n- {TITLE_SOURCE_B} (page: 2)"
+        assert result == expected
+
+    def test_footer_reads_only_structured_sources_not_legacy_titles(self) -> None:
+        """Contract: an empty retrieved_sources renders 'none' even if legacy titles are present."""
+        response = _make_response(sources=[], titles=[TITLE_SOURCE_A])
+        result = format_sources(response, ENGLISH_ISO_CODE)
+        assert result == EXPECTED_NONE_EN

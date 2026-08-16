@@ -18,6 +18,8 @@ from src.i18n.keys import (
     ERROR_GENERIC,
     SOURCES_LABEL,
     SOURCES_NONE,
+    SOURCES_PAGE_PLURAL,
+    SOURCES_PAGE_SINGULAR,
     STATUS_REFLECTING,
 )
 
@@ -223,9 +225,22 @@ class TestGetMessage:
         result5 = get_message(STATUS_REFLECTING, DEFAULT_RESPONSE_LANGUAGE)
         assert result5 == "Reflecting... (response time varies with the amount of data retrieved and the connection)"
 
+        result6 = get_message(SOURCES_PAGE_SINGULAR, DEFAULT_RESPONSE_LANGUAGE, pages="18")
+        assert result6 == "(page: 18)"
+
+        result7 = get_message(SOURCES_PAGE_PLURAL, DEFAULT_RESPONSE_LANGUAGE, pages="1, 11-13")
+        assert result7 == "(pages: 1, 11-13)"
+
     def test_parses_non_default_language(self) -> None:
         result = get_message(STATUS_REFLECTING, FRENCH_ISO_CODE)
         assert result == "Réflexion... (le délai dépend de la taille des données et la connexion)"
+
+    def test_parses_source_page_messages_in_french(self) -> None:
+        result_singular = get_message(SOURCES_PAGE_SINGULAR, FRENCH_ISO_CODE, pages="18")
+        assert result_singular == "(page : 18)"
+
+        result_plural = get_message(SOURCES_PAGE_PLURAL, FRENCH_ISO_CODE, pages="1, 11-13")
+        assert result_plural == "(pages : 1, 11-13)"
 
     def test_interpolates_variables(self) -> None:
         result = get_message(CHAT_CHATTING_WITH, DEFAULT_RESPONSE_LANGUAGE, author="Voltaire")

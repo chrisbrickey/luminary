@@ -15,6 +15,7 @@ Instructions for callers:
   2. Then call runnable.invoke(user_input, detected_language) repeatedly with different questions
 """
 
+from collections.abc import Mapping
 from typing import Any
 
 from langchain_core.documents import Document
@@ -30,7 +31,7 @@ from src.configs.common import (
     DEFAULT_RESPONSE_LANGUAGE,
     DEFAULT_TEMPERATURE,
 )
-from src.schemas import ChatResponse
+from src.schemas import ChatResponse, SourceReference
 from src.vectorstores.retriever import build_retriever
 
 def build_chain(
@@ -112,12 +113,14 @@ def build_chain(
         chunk_ids = _extract_chunk_ids(docs)
         contexts = [doc.page_content for doc in docs]
         source_titles = _extract_source_titles(docs)
+        source_references = _extract_source_references(docs)
 
         return ChatResponse(
             text=response_text,
             retrieved_passage_ids=chunk_ids,
             retrieved_contexts=contexts,
             retrieved_source_titles=source_titles,
+            retrieved_sources=source_references,
             language=language,
         )
 
@@ -205,6 +208,20 @@ def _extract_chunk_ids(docs: list[Document]) -> list[str]:
     return [doc.metadata.get("chunk_id", "unknown") for doc in docs]
 
 
+def _resolve_source_parts(metadata: Mapping[str, Any]) -> tuple[str, Any]:
+    """Resolve a chunk's display title and raw page number from its metadata."""
+    document_title = metadata.get("document_title")
+    page_number = metadata.get("page_number")
+
+    if document_title and page_number is not None:
+        return str(document_title), page_number
+    if document_title:
+        return str(document_title), None
+    if "source" in metadata:
+        return str(metadata["source"]), None
+    return "unknown", None
+
+
 def _extract_source_titles(docs: list[Document]) -> list[str]:
     """Extract human-readable source titles from documents.
 
@@ -219,17 +236,20 @@ def _extract_source_titles(docs: list[Document]) -> list[str]:
     """
     titles = []
     for doc in docs:
-        metadata = doc.metadata
-        document_title = metadata.get("document_title")
-        page_number = metadata.get("page_number")
+        title, raw_page = _resolve_source_parts(doc.metadata)
 
-        if document_title and page_number is not None:
-            titles.append(f"{document_title}, page {page_number}")
-        elif document_title:
-            titles.append(document_title)
-        elif "source" in metadata:
-            titles.append(metadata["source"])
+        if raw_page is not None:
+            titles.append(f"{title}, page {raw_page}")
         else:
-            titles.append("unknown")
+            titles.append(title)
 
     return titles
+
+
+def _extract_source_references(docs: list[Document]) -> list[SourceReference]:
+    """Build structured (title, page_number) references from documents' metadata."""
+    references = []
+    for doc in docs:
+        title, raw_page = _resolve_source_parts(doc.metadata)
+        references.append(SourceReference(title=title, page_number=raw_page))
+    return references

@@ -15,6 +15,8 @@ STATUS_REFLECTING = "status.reflecting"
 # Source citation formatting
 SOURCES_NONE = "sources.none"
 SOURCES_LABEL = "sources.label"
+SOURCES_PAGE_SINGULAR = "sources.page_singular"
+SOURCES_PAGE_PLURAL = "sources.page_plural"
 
 # Error messages
 ERROR_GENERIC = "errors.generic_error"
