@@ -3,6 +3,8 @@
 A RAG application where Enlightenment writers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts with sources cited. 
 Available as both a web UI and interactive CLI.
 
+![Luminary web UI](docs/images/web-ui-compressed.jpg)
+
 ## Interfaces
 
 Luminary provides two interfaces for interacting with the philosophes. Both interfaces support the same core features and personas.
