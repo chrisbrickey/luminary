@@ -4,11 +4,11 @@ This module re-exports all schemas for backward compatibility.
 Schemas are organized by domain in submodules:
 - ingestion: WikisourceCollection
 - vectorstore: ChunkInfo
-- chat: ChatResponse
+- chat: ChatResponse, SourceReference
 - eval: MetricResult
 """
 
-from src.schemas.chat import ChatResponse
+from src.schemas.chat import ChatResponse, SourceReference
 from src.schemas.eval import KeywordEntry, MetricResult
 from src.schemas.ingestion import WikisourceCollection
 from src.schemas.vectorstore import ChunkInfo
@@ -18,5 +18,6 @@ __all__ = [
     "ChunkInfo",
     "KeywordEntry",
     "MetricResult",
+    "SourceReference",
     "WikisourceCollection",
 ]

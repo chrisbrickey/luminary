@@ -14,6 +14,7 @@ from src.configs.common import (
     DEFAULT_TEMPERATURE,
     GERMAN_ISO_CODE,
 )
+from src.schemas import SourceReference
 
 # Test constants
 SAMPLE_QUESTION = "What do you think is the most important question in philosophy?"
@@ -35,6 +36,9 @@ CONTENT_FULL = "Sample text content for testing"
 CONTENT_NO_PAGE = "More sample text"
 CONTENT_NO_TITLE = "Additional sample text"
 CONTENT_MINIMAL = "Minimal test content"
+CHUNK_ID_5 = "test_chunk_005"
+CONTENT_NON_INT_PAGE = "Sample text with a roman-numeral page"
+NON_INT_PAGE_NUMBER = "xii"
 
 
 @pytest.fixture
@@ -74,6 +78,16 @@ def sample_docs() -> dict[str, Document]:
                 "chunk_id": CHUNK_ID_4,
             },
         ),
+        "non_int_page": Document(
+            page_content=CONTENT_NON_INT_PAGE,
+            metadata={
+                "chunk_id": CHUNK_ID_5,
+                "document_title": DOC_TITLE_FULL,
+                "page_number": NON_INT_PAGE_NUMBER,
+                "author": AUTHOR,
+                "source": SOURCE_URL_FULL,
+            },
+        ),
     }
 
 
@@ -84,18 +98,40 @@ class TestBuildChain:
         """Tests for extracting metadata from documents."""
 
         @pytest.mark.parametrize(
-            "doc_key,expected_title",
+            "doc_key,expected_title,expected_reference",
             [
-                ("full", f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}"),
-                ("no_page", DOC_TITLE_NO_PAGE),
-                ("no_title", SOURCE_URL_NO_TITLE),
-                ("minimal", "unknown"),
+                (
+                    "full",
+                    f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}",
+                    SourceReference(title=DOC_TITLE_FULL, page_number=PAGE_NUMBER),
+                ),
+                (
+                    "no_page",
+                    DOC_TITLE_NO_PAGE,
+                    SourceReference(title=DOC_TITLE_NO_PAGE, page_number=None),
+                ),
+                (
+                    "no_title",
+                    SOURCE_URL_NO_TITLE,
+                    SourceReference(title=SOURCE_URL_NO_TITLE, page_number=None),
+                ),
+                (
+                    "minimal",
+                    "unknown",
+                    SourceReference(title="unknown", page_number=None),
+                ),
             ],
         )
         def test_source_title_extraction(
-            self, sample_docs, doc_key, expected_title, mock_retriever_with_docs, mock_llm_with_response
+            self,
+            sample_docs,
+            doc_key,
+            expected_title,
+            expected_reference,
+            mock_retriever_with_docs,
+            mock_llm_with_response,
         ) -> None:
-            """Should extract source titles correctly with various metadata levels."""
+            """Should extract source titles and source references correctly with various metadata levels."""
             chain = build_chain(
                 author=AUTHOR,
                 retriever=mock_retriever_with_docs([sample_docs[doc_key]]),
@@ -104,6 +140,21 @@ class TestBuildChain:
 
             response = chain.invoke(SAMPLE_QUESTION)
             assert response.retrieved_source_titles == [expected_title]
+            assert response.retrieved_sources == [expected_reference]
+
+        def test_non_int_page_number_preserves_legacy_title_but_drops_from_reference(
+            self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
+        ) -> None:
+            """Should keep the raw non-int page in the legacy title string while coercing it to None in the reference."""
+            chain = build_chain(
+                author=AUTHOR,
+                retriever=mock_retriever_with_docs([sample_docs["non_int_page"]]),
+                llm=mock_llm_with_response(),
+            )
+
+            response = chain.invoke(SAMPLE_QUESTION)
+            assert response.retrieved_source_titles == [f"{DOC_TITLE_FULL}, page {NON_INT_PAGE_NUMBER}"]
+            assert response.retrieved_sources == [SourceReference(title=DOC_TITLE_FULL, page_number=None)]
 
         def test_multiple_documents_with_varying_metadata(
             self, sample_docs, mock_retriever_with_docs, mock_llm_with_response
@@ -121,6 +172,11 @@ class TestBuildChain:
                 f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}",
                 DOC_TITLE_NO_PAGE,
                 SOURCE_URL_NO_TITLE,
+            ]
+            assert response.retrieved_sources == [
+                SourceReference(title=DOC_TITLE_FULL, page_number=PAGE_NUMBER),
+                SourceReference(title=DOC_TITLE_NO_PAGE, page_number=None),
+                SourceReference(title=SOURCE_URL_NO_TITLE, page_number=None),
             ]
             assert response.retrieved_passage_ids == [CHUNK_ID_1, CHUNK_ID_2, CHUNK_ID_3]
             assert len(response.retrieved_contexts) == 3
@@ -311,6 +367,7 @@ class TestBuildChain:
             assert response.text == SAMPLE_RESPONSE
             assert response.retrieved_passage_ids == [CHUNK_ID_1]
             assert response.retrieved_source_titles == [f"{DOC_TITLE_FULL}, page {PAGE_NUMBER}"]
+            assert response.retrieved_sources == [SourceReference(title=DOC_TITLE_FULL, page_number=PAGE_NUMBER)]
             assert response.retrieved_contexts == [CONTENT_FULL]
             assert len(response.retrieved_contexts) == 1
 
@@ -329,6 +386,7 @@ class TestBuildChain:
             assert response.text == "No relevant sources found"
             assert response.retrieved_passage_ids == []
             assert response.retrieved_source_titles == []
+            assert response.retrieved_sources == []
             assert response.retrieved_contexts == []
 
         def test_unsupported_author_raises_error(self) -> None:

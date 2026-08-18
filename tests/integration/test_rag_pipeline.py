@@ -15,6 +15,7 @@ from src.chains.chat_chain import build_chain
 from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
+from src.utils.formatting import format_sources
 from src.vectorstores.chroma import embed_and_store
 from src.vectorstores.retriever import build_retriever
 from tests.conftest import FakeChatModel
@@ -313,6 +314,16 @@ def test_full_rag_chain_with_retrieval(
     assert "Lettres philosophiques, page 6" in response.retrieved_source_titles
     assert "Lettres philosophiques, page 7" in response.retrieved_source_titles
 
+    # Verify structured source references (retrieval order is not deterministic, so compare as a set)
+    assert {(s.title, s.page_number) for s in response.retrieved_sources} == {
+        ("Lettres philosophiques", 5),
+        ("Lettres philosophiques", 6),
+        ("Lettres philosophiques", 7),
+    }
+
+    # End-to-end proof: consecutive pages 5, 6, 7 collapse into one ranged bullet
+    assert format_sources(response, FRENCH_ISO_CODE) == "**Sources :**\n- Lettres philosophiques (pages : 5-7)"
+
     # Verify language
     assert response.language == FRENCH_ISO_CODE
 
@@ -376,6 +387,14 @@ def test_rag_chain_handles_missing_metadata(
     assert "Partial Document" in response.retrieved_source_titles
     # Empty title should fall back to source URL
     assert "https://example.com/doc3" in response.retrieved_source_titles
+
+    # Verify structured source references mirror the same fallbacks, including the
+    # empty-title -> URL fallback dropping its page_number (retrieval order not deterministic)
+    assert {(s.title, s.page_number) for s in response.retrieved_sources} == {
+        ("Complete Document", 10),
+        ("Partial Document", None),
+        ("https://example.com/doc3", None),
+    }
 
     # Verify language
     assert response.language == ENGLISH_ISO_CODE

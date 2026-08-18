@@ -11,6 +11,8 @@ status:
 sources:
   none: "aucune"
   label: "**Sources :**"
+  page_singular: "(page : {pages})"
+  page_plural: "(pages : {pages})"
 
 errors:
   generic_error: "Erreur : {error}"

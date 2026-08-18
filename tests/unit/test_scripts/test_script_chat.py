@@ -8,7 +8,7 @@ import pytest
 from tests.fake_authors import FAKE_AUTHOR_A
 from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
-from src.schemas import ChatResponse
+from src.schemas import ChatResponse, SourceReference
 
 # Use centralized fake author constant from conftest
 TEST_AUTHOR = FAKE_AUTHOR_A
@@ -20,10 +20,17 @@ TEST_CONTEXTS = [
     "Context from first chunk about scientific advancement.",
     "Context from second chunk about women's rights.",
 ]
+TEST_SOURCE_TITLE = "Esquisse d'un tableau historique"
 TEST_SOURCE_TITLES = [
-    "Esquisse d'un tableau historique, Page 12",
-    "Esquisse d'un tableau historique, Page 9",
-    "Esquisse d'un tableau historique, Page 12" # duplicate
+    f"{TEST_SOURCE_TITLE}, Page 12",
+    f"{TEST_SOURCE_TITLE}, Page 9",
+    f"{TEST_SOURCE_TITLE}, Page 12",  # duplicate
+]
+TEST_SOURCE_REFERENCES = [
+    SourceReference(title=TEST_SOURCE_TITLE, page_number=12),
+    SourceReference(title=TEST_SOURCE_TITLE, page_number=9),
+    SourceReference(title=TEST_SOURCE_TITLE, page_number=13),
+    SourceReference(title=TEST_SOURCE_TITLE, page_number=12),  # duplicate
 ]
 
 
@@ -32,6 +39,7 @@ def create_mock_response(
     chunk_ids: list[str] | None = None,
     contexts: list[str] | None = None,
     source_titles: list[str] | None = None,
+    source_refs: list[SourceReference] | None = None,
     language: str = FRENCH_ISO_CODE,
 ) -> ChatResponse:
     """Create a mock ChatResponse for testing.
@@ -41,6 +49,7 @@ def create_mock_response(
         chunk_ids: List of chunk IDs (None = use defaults)
         contexts: List of retrieved contexts (None = use defaults)
         source_titles: List of source titles (None = use defaults)
+        source_refs: List of structured source references (None = use defaults)
         language: Response language
 
     Returns:
@@ -51,6 +60,7 @@ def create_mock_response(
         retrieved_passage_ids=TEST_CHUNK_IDS if chunk_ids is None else chunk_ids,
         retrieved_contexts=TEST_CONTEXTS if contexts is None else contexts,
         retrieved_source_titles=TEST_SOURCE_TITLES if source_titles is None else source_titles,
+        retrieved_sources=TEST_SOURCE_REFERENCES if source_refs is None else source_refs,
         language=language,
     )
 
@@ -398,13 +408,14 @@ class TestRunInteractiveChat:
 
         # Verify sources are displayed with English formatting (detected language)
         assert "**Sources:**" in captured.out  # English label (from response.language="en")
-        assert "- Esquisse d'un tableau historique, Page 12" in captured.out  # Bullet format
-        assert "- Esquisse d'un tableau historique, Page 9" in captured.out   # Bullet format
 
-        # Verify deduplication: Page 12 appears in sources only once (duplicate removed)
-        # Count appearances of "Page 12" in the sources section after "**Sources"
+        # Single collapsed bullet exercises sorting (9 before 12), dedup (12 appears once),
+        # and range collapsing (12, 13 -> "12-13") through the real CLI path
+        assert f"- {TEST_SOURCE_TITLE} (pages: 9, 12-13)" in captured.out
+
+        # Verify deduplication: the title appears in the sources section only once
         sources_section = captured.out.split("**Sources")[1] if "**Sources" in captured.out else ""
-        assert sources_section.count("Page 12") == 1, "Duplicate source should be removed"
+        assert sources_section.count(TEST_SOURCE_TITLE) == 1, "Duplicate source should be collapsed into one bullet"
 
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
