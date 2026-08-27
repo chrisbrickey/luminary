@@ -1635,20 +1635,163 @@ See documentation of eval runs and updates:
 - `eval_report_2026-06-22T16-45-03.md`
 - `eval_report_2026-07-13T13-07-25.md`
 
-## P. Harden Golden Dataset Generator
+## P. Eval Foundation Improvements
 
-This section improves the golden dataset automation functionality in order to prevent quality regressions in future golden datasets. 
-Previous updates to the golden datasets exposed three issues with the dataset generator, which required manual cleanup of the output JSON:
+**Goal:** Address issues uncovered (and not yet addressed) in previous eval runs. Ideally, these items should be implemented prior to subsequent eval cycles.
 
-1. **Duplicate `id` values** across examples (e.g., `tolerance_fr` and `fanatisme_fr` each used by multiple examples). The LLM derived ids from the question topic without disambiguating by language or sub-variant, producing collisions when several examples shared a topic.
-2. **Language tag mismatches** between the `language` field and the actual language of the question text. An English question was emitted with `language="fr"`, which silently breaks language-conditional metrics.
-3. **Wrong-language `expected_keywords`**. `keyword_coverage` scans the *response* text for the keywords, and the metric docstring requires keywords in the response's language. The LLM populated keywords from the source corpus (French) even on English examples, which would near-zero the metric on every EN example.
+Subsection order rationale:
+- P.1 every later eval run is scored by this metric and P.2 needs the corrected metric to measure noise
+- P.2 lands before any dataset regeneration so that regenerated datasets benefit from the lower-noise judge
+- P.3 implemented before a subsequent re-ingestion so that any corpus changes can be attributed cleanly
 
-These are prompt-engineering / validation gaps, not data issues. Harden the generator so future regenerations do not require post-hoc editing:
+### ✅ P.1 Remove the `retrieval_relevance` metric ceiling
 
-### Implementation
+**Goal and rationale:** 
+- Make the retrieval metric meaningful: perfect retrieval results in score 1.0 and pass/fail is a real signal at the configured threshold. 
+- The combination of the following make it almost impossible for an example to pass: 
+  - retrieval_relevance score is calculated as F1: a combination of precision and recall
+  - K=10: the chat chain always retrieves 10 chunks
+  - golden dataset: golden examples expect 3-7 chunks (not 10)
+- Based on the current configuration, the maximum achievable F1 score is 0.46-0.82 per example (0.70-0.75 in aggregate). So the 0.80 threshold is unreachable. 
+- This makes pass/fail meaningless and relative deltas hard to trust.
 
-1.Constrain `id` format and enforce uniqueness
+1. **Add tests for the replacement retrieval scores**
+   - Update `tests/unit/eval/test_retrieval_metric.py`
+   - Test cases should cover at minimum:
+     - Perfect retrieval (all expected chunks retrieved) → recall@K = 1.0, precision@N = 1.0, and the reported metric score = 1.0
+     - All expected chunks retrieved but ranked at the bottom of the top-K → recall@K = 1.0, rank-aware score < 1.0
+     - Partial retrieval → each component score reflects the miss proportionally
+     - Empty retrieval with non-empty expected list → all scores 0.0
+     - Empty expected list → score 1.0 (vacuous truth, consistent with current behavior)
+
+2. **Implement the replacement metric**
+   - Update `src/eval/metrics/retrieval.py`
+   - Replace plain set-F1 with three component scores:
+     - **recall@K** (K = retrieved count, currently 10): unbounded by the expected/retrieved size mismatch, directly answers "did the retriever find the right passages"
+     - **a rank-aware score** (nDCG@10 or MRR): captures whether the right chunks landed near the top, which is what matters to the downstream LLM
+     - **precision@N**, where N is the example's expected chunk count: keeps a precision signal without penalizing the retriever for returning the 10 chunks the chat chain asked for
+   - Report **recall@K** as the metric score, since it is the component the threshold is meant to test and the one with no arithmetic ceiling
+   - Keep all component scores in `MetricResult.details` for auditability. The rank-aware score and precision@N inform analysis but do not drive pass/fail.
+
+3. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+4. **Verify eval artifact compatibility**
+   - Older eval artifacts either still load or the break is documented, consistent with how the `keyword_coverage` details change was handled.
+
+5. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+#### Acceptance criteria
+
+A score of 1.0 must be attainable though it is not expected in practice.
+
+#### Documentation
+
+- **`src/eval/README.md`:** Update as needed.
+
+#### Plan updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Record the new metric definitions and note any deviations below this line.
+  - See `eval_report_2026-08-28T22-11-55.md`.
+  
+---
+
+### P.2 Reduce LLM-judge noise when selecting expected chunks
+
+**Goal and rationale:** 
+- Quantify and reduce the noise the LLM judge injects into `expected_chunk_ids`, so future experiment deltas can be compared against a known noise floor.
+- Expected chunk selection is probabilistic, producing roughly plus or minus 0.05 aggregate noise and plus or minus 0.3 to 0.5 per-example noise. It has also produced catastrophic outcomes: an empty `expected_chunk_ids` list at chunk size 1400 (example skipped) and a zero-overlap selection at chunk size 1000 (F1 0.00). Without a known noise floor, no experiment result can be called a real gain.
+- The variable "3-7" expected chunk count is a second source of the same kind of noise: it moves the threshold's meaning between examples and between trials. Fixing it is step 2 below, moved here from P.1 because it changes golden dataset generation rather than the metric, and because it should land in the same dataset regeneration as the other judge changes.
+
+1. **Add tests for the fixed chunk count, widened pool, voting, and candidate persistence**
+   - **Follow Test Development Workflow (see top of document)**
+   - Test cases should cover: both judge prompts stating the single expected chunk count, the configurable candidate pool size, multi-pass voting (majority or intersection), rejection of empty and zero-overlap selections, and persistence of the candidate list on the golden example.
+
+2. **Fix the expected chunk count to a single constant in both judge prompts**
+   - Update `src/eval/golden/dataset_generation.py` and `src/eval/golden/rechunk.py` so both prompts reference one shared constant instead of the "3-7" range
+   - **Rationale:** A variable expected count moves the metric ceiling between trials, which injects noise that looks like a performance change. This is judge noise in the same family as the rest of P.2, which is why it moved here from P.1.
+   - **Use 5.** Recall is quantized to `1/n`, so the threshold reads as "how many expected chunks may be missed". At n=3 or n=4 nothing falls between 0.67 and 1.0, so a 0.8 threshold would silently demand a perfect score. At n=5 it means "miss at most one" exactly.
+   - **Placement:** define the constant in `dataset_generation.py`; `rechunk.py` already imports from that module, so no new module is needed.
+   - **Note:** this has no effect on scores until a dataset is regenerated or rechunked, since existing datasets keep whatever counts they were labeled with. The metric derives n per example, so mixed-count datasets still score correctly in the meantime.
+
+3. **Widen the judge candidate pool**
+   - Increase the pool from k=15 to k=30 or more in both the dataset generation and rechunk paths.
+   - **Caution:** the judge selects from this pool while eval runs retrieve only the top 10, so every candidate beyond rank 10 that the judge picks is unreachable recall. Widening the pool lowers achievable recall unless the eval K moves with it. Decide deliberately whether to raise K, and expect a recall drop attributable to this change rather than to the retriever.
+
+4. **Run the judge multiple times per example and vote**
+   - Take a majority or intersection vote across passes to smooth single-shot randomness and add a second guard against the empty-list failure.
+   - **Interaction with step 2:** an intersection vote can return fewer than the fixed count, and a majority vote can return more. Decide whether the fixed count is a hard post-vote truncation or guidance to each pass, since a vote that changes n reintroduces the drifting bar that step 2 removes.
+
+5. **Persist the full candidate list into the golden dataset**
+   - Log the candidates each judge pass saw, so a reader can audit both the retriever and the judge.
+
+6. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+7. **Measure the noise floor**
+   - Generate several golden datasets at the baseline chunk size, run the eval against each, and document the resulting score range as the noise floor.
+
+8. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+#### Acceptance criteria
+
+- No empty or zero-overlap expected chunk lists across a full dataset regeneration.
+- The measured noise floor is documented and future reports compare deltas against it.
+- Candidate chunks are persisted so a reader can audit both the retriever and the judge.
+- Expected chunk count is a single constant (5) in both judge prompts, so the 0.8 threshold means "miss at most one expected chunk" on every example and the bar does not move between trials.
+
+#### Plan updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+---
+
+### P.3 Pin the raw source corpus and stamp a corpus version
+
+**Goal and rationale:** 
+- Make corpus drift impossible to miss and every eval artifact traceable to the exact corpus it measured.
+- `data/` is gitignored so a silent re-fetch can shift embedding vectors and shift the retrieval baseline with no audit trail. Diagnosing this can consume a lot of resources.
+
+1. **Add tests for manifest verification**
+   - **Follow Test Development Workflow (see top of document)**
+   - Test cases should cover: manifest matches on-disk files → ingestion proceeds; a differing document → ingestion fails loudly and the differing document is named; a missing manifest → clear error message.
+
+2. **Pin the corpus**
+   - Commit the raw scraped pages (about 268 KB across 24 files) or, at minimum, a checksum manifest of them.
+
+3. **Verify at ingestion time**
+   - Update `scripts/ingest.py` to verify on-disk files against the manifest before chunking, failing loudly with the differing document listed.
+
+4. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+5. **Stamp a corpus version on eval artifacts**
+   - Add a `corpus_version` field to eval run artifacts that changes when the corpus changes.
+
+6. **Make manifest refresh deliberate**
+   - `scripts/scrape_wikisource.py` refreshes the manifest deliberately (an explicit action), not as a side effect of scraping.
+
+7. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
+
+#### Acceptance criteria
+
+- Ingestion fails loudly, with the differing document listed, when on-disk content does not match the manifest.
+- Eval artifacts carry a corpus version that changes when the corpus changes.
+- `scripts/scrape_wikisource.py` refreshes the manifest deliberately, not as a side effect.
+
+#### Plan updates
+
+- **Update this plan:** Mark this subsection `✅` on the title line. Note any deviations below this line.
+
+---
+
+## Q. Harden Golden Dataset Generator
+
+**Goal and rationale:** 
+- Improve the golden dataset automation functionality in order to prevent quality regressions in future golden datasets. 
+- Previous updates to the golden datasets exposed three issues with the dataset generator, which required manual cleanup of the output JSON:
+  - Duplicate `id` values across examples (e.g., `tolerance_fr` and `fanatisme_fr` each used by multiple examples). The LLM derived ids from the question topic without disambiguating by language or sub-variant, producing collisions when several examples shared a topic.
+  - Language tag mismatches between the `language` field and the actual language of the question text. An English question was emitted with `language="fr"`, which silently breaks language-conditional metrics.
+  - Wrong-language `expected_keywords`. `keyword_coverage` scans the response text for the keywords, and the metric docstring requires keywords in the response's language. The LLM populated keywords from the source corpus (French) even on English examples, which would near-zero the metric on every EN example.
+
+1. Constrain `id` format and enforce uniqueness
 
 - In `src/eval/golden/dataset_generation.py`, update the `guidance_map` entry (or add a top-level prompt instruction) for `id` to require the shape `{topic_slug}_{language_code}`, where:
   - `topic_slug` is a short lowercase identifier derived from the question's dominant topic (e.g., `tolerance`, `judicial_torture`, `fanaticism`)
@@ -1690,11 +1833,13 @@ These are prompt-engineering / validation gaps, not data issues. Harden the gene
 
 Wrap the three checks above in a single `validate_generated_example(example: GoldenExample) -> None` function that raises `ValueError` with a precise message for each failure mode. Call it from `generate_golden_example_with_llm` *before* returning. Tests should cover each failure mode independently.
 
-#### Acceptance criteria for this hardening pass
+5. **Check In:** Stop and ask the user to confirm that the implementation of the above steps is satisfactory before moving to subsequent steps.
 
-- Regenerating from `voltaire_examples.json` (with adversarial pairs reintroduced per Section W below) produces a dataset that passes `validate_generated_example` on every entry **without manual editing**.
+### Acceptance criteria for this hardening pass
+
+- Regenerating from `voltaire_examples.json` (with adversarial pairs reintroduced per Section X below) produces a dataset that passes `validate_generated_example` on every entry **without manual editing**.
 - New unit tests cover: duplicate-id rejection, language-mismatch rejection (both directions), wrong-language-keyword rejection (both directions), and the happy path.
-- The `Generator hardening` work is logged in the v3.0 → v3.1 (or 4.0) regeneration description field.
+- The `Generator hardening` work is logged in the latest golden dataset description field.
 
 ### Documentation
 
@@ -1707,7 +1852,7 @@ Review documentation and update as needed.
 
 ---
 
-## Q. Advanced quality metrics
+## R. Advanced quality metrics
 
 **Goal:** Implement specialized validation metrics. 
 **Note:** These metrics use the existing fields on golden examples. So we don't need to update `GoldenExample` schema or regenerate/verion bump the golden dataset.
@@ -1774,7 +1919,7 @@ Review documentation and update as needed.
 ---
 
 
-## R. Perform Evaluation Cycle (incorporating new metrics)
+## S. Perform Evaluation Cycle (incorporating new metrics)
 See instructions from previous subsections with same title. 
 Bump golden dataset version only if new example fields were added in previous section. Otherwise use more recent golden dataset.
 
@@ -1782,7 +1927,7 @@ Bump golden dataset version only if new example fields were added in previous se
 ---
 
 
-## S. Translation Metric
+## T. Translation Metric
 **Goal:** Implement a metric for validating quality of translations.
 **Notes:** 
     - This metric requires new field(s) on the golden examples. 
@@ -1843,7 +1988,7 @@ Bump golden dataset version only if new example fields were added in previous se
 ---
 
 
-## T. Perform Evaluation Cycle (incorporating new metrics)
+## U. Perform Evaluation Cycle (incorporating new metrics)
 See instructions from previous subsections with same title. Bump version of golden dataset if new fields were required by new metrics.
 
 - **Propose fixes based on common failure modes**
@@ -1854,7 +1999,7 @@ See instructions from previous subsections with same title. Bump version of gold
 
 ---
 
-## U. Safety guardrails
+## V. Safety guardrails
 
 **Goal:** Implement binary safety checks to catch persona breaks and anachronisms. These are pass/fail guardrails, distinct from gradual quality metrics.
 **Notes:** 
@@ -1939,7 +2084,7 @@ See instructions from previous subsections with same title. Bump version of gold
 
 ---
 
-## V. Perform Evaluation Cycle (incorporating new metrics)
+## W. Perform Evaluation Cycle (incorporating new metrics)
 See instructions from previous subsections with same title. Bump version of golden dataset if new fields were required by new metrics.
 
 **Propose fixes based on common failure modes**
@@ -1961,13 +2106,13 @@ See instructions from previous subsections with same title. Bump version of gold
 
 ---
 
-## W. Adversarial golden examples (anachronism-trap evaluation)
+## X. Adversarial golden examples (anachronism-trap evaluation)
 
 ### Goal
 
 Add golden examples whose questions *intentionally* drag the philosopher into modern framings (e.g., social media, AI, smartphones, 21st-century political events), and define the **expected** behavior as: **engage thoughtfully with the underlying topic, while ignoring the anachronistic framing.** Ideally the response acknowledges that the philosopher lived in the 18th century and can only reason about the subject matter in general or hypothesize how it might apply today.
 
-This is intentionally different from Section T/U's `forbidden_phrases` work, which treats anachronisms as something the chatbot should refuse. Section V's adversarial examples test the opposite: graceful engagement, not refusal. Both behaviors are valuable depending on the question. Refusal for "what would you tweet" framed as a request to act in 2026; engagement-with-caveat for "how would your view on tolerance apply today."
+This is intentionally different from the `forbidden_phrases` work, which treats anachronisms as something the chatbot should refuse. This section's adversarial examples test the opposite: graceful engagement, not refusal. Both behaviors are valuable depending on the question: We want the app to refuse requests like "what would you tweet". We want the app to engage with caveat for questions like "how would your view on tolerance apply today".
 
 ### Expected response shape
 
@@ -2053,11 +2198,3 @@ A dedicated `adversarial_engagement` metric could be added later. Sketch:
 - **Schema addition:** `forbidden_modern_terms: list[str]` and `adversarial: bool` on `GoldenExample`, both with defaults so non-adversarial examples are unaffected.
 
 This metric is a follow-up. Adversarial examples can be added to the dataset now and evaluated against existing metrics (`keyword_coverage`, `retrieval_precision`, etc.) while the dedicated metric is being designed.
-
-### Implementation checklist
-
-1. Decide on initial adversarial topical variants (recommend starting with the tolerance pair above)
-2. Add them to `voltaire_examples.json`
-3. Regenerate the golden dataset (bump version) and manually inspect the LLM judge's chunk/keyword selections. They may need adjustment if the judge gets confused by the modern framing.
-4. Run an eval cycle; baseline how the *current* system handles adversarial examples before adding any new metric
-5. If results show systematic anachronism-engagement failures, implement the `adversarial_engagement` metric and re-evaluate

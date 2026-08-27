@@ -521,8 +521,11 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
 
 ## Step 18: Heroku deployment
 - **Goal:** Make the app deployable to Heroku with configurable LLM/embedding providers
-- Create `Procfile`: `web: streamlit run chat_ui.py --server.port=$PORT --server.address=0.0.0.0`
-- Create `runtime.txt`: pin Python 3.14
+- **Note:** The provider configuration portion of this step was moved here from `eval-harness-plan_v3.md`. It is a prerequisite for the OpenAI embedding experiment that is still listed in the `BACKLOG.md`. So we may need to implement the provider configuration earlier if we run that experiment before hosting the app.
+
+### Step 18A: Provider configuration by environment
+- **Why:** Ollama cannot run on a hosted platform, so both the public deployment and the OpenAI embedding experiment are blocked until provider selection is a configuration concern rather than a hardcoded default. Doing this first keeps local development on Ollama untouched.
+- **Test (write first, verify red):** add `tests/unit/configs/test_provider_config.py`; cases should cover: each supported provider (Ollama, Anthropic, OpenAI) selected by env var for both chat and embeddings; no provider variables set → current defaults (Ollama, mistral, bge-m3); unknown provider value → clear error; API keys read from the environment only. Existing unit tests require no changes (they mock LLM and embeddings).
 - Create `src/configs/provider_config.py`:
   - `LLMProvider` enum: `OLLAMA`, `ANTHROPIC`, `OPENAI`
   - `EmbeddingProvider` enum: `OLLAMA`, `OPENAI`
@@ -530,7 +533,19 @@ Steps 1–9 implement a RAG chain: a fixed pipeline (retrieve → format → pro
   - `build_embeddings_from_env() -> Embeddings`: reads `EMBEDDING_PROVIDER` env var
   - Add `langchain-anthropic` and `langchain-openai` as optional dependency groups
 - Modify `src/chains/chat_chain.py`: `build_default_chain` uses `build_llm_from_env()` and `build_embeddings_from_env()` when env vars are set; falls back to Ollama defaults otherwise
-- **Test:** existing unit tests require no changes (they mock LLM and embeddings); add `tests/unit/configs/test_provider_config.py` mock env vars, assert correct provider classes returned, assert fallback to Ollama
+- **Check In:** Stop and ask the user to confirm the provider builders and chain wiring are satisfactory before moving to subsequent steps.
+- Record the active provider in eval artifacts: eval `SystemSnapshot` records the active provider for each of chat and embeddings so artifacts stay traceable.
+- **Check In:** Stop and ask the user to confirm before moving to Step 18B.
+- **Acceptance criteria:**
+  - Provider and model are selectable by environment variable for both chat and embeddings.
+  - With no provider variables set, behavior is identical to today (Ollama, mistral, bge-m3).
+  - API keys are read from the environment only and never committed.
+  - Eval `SystemSnapshot` records the active provider for each of chat and embeddings so artifacts stay traceable.
+- **README:** Document the provider environment variables and the local default.
+
+### Step 18B: Deployment mechanics
+- Create `Procfile`: `web: streamlit run chat_ui.py --server.port=$PORT --server.address=0.0.0.0`
+- Create `runtime.txt`: pin Python 3.14
 - **README:** Add "Deploying to Heroku" section: required env vars, `heroku config:set` commands, note to pre-populate ChromaDB; update project structure diagram to add `Procfile`, `runtime.txt` at root
 - **Update this plan:** After implementing, mark step `✅`, note deviations, update project structure.
 
