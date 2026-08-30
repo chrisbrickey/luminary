@@ -15,6 +15,11 @@
 - Cross-language metrics: translation consistency (FR/EN retrieval overlap)
 - LLM-as-judge metrics: relevance, groundedness, coherence
 
+**Metrics Thresholds:**
+- Every metric scores 0.0 to 1.0 and passes when its score meets its threshold.
+- Metrics declare a `default_threshold` on their `MetricSpec`. If that is not declared, then the threshold will fall back to `FALLBACK_THRESHOLD`.
+- The `--threshold` flag overrides every metric at once, which is useful for investigation and exploration, but should generally not be used for an eval cycle.
+
 **Golden datasets:**
 - Golden datasets are versioned collections of test cases that validate system behavior. Versioning allows comparing results across time and referencing the correct snapshot of data when creating eval reports. 
 - They live in `evals/golden/` (gitignored) with naming convention: `{scope}_{authors}_v{version}_{YYYY-MM-DD}.json`
@@ -217,3 +222,20 @@ Recommendations:
 - **Cause**: LLM output doesn't match GoldenExample schema constraints
 - **Fix**: Review validation errors, update prompt guidance for that field
 - **Debug**: Print raw LLM output before JSON parsing to see what it's generating
+
+## Notes
+
+### Details on `retrieval_relevance` metric
+
+When this metric was first implemented, it used an **F1 score**. However, this could never achieve `1.0` because it was capped by the gap between K and the number of expected chunks.
+Specifically, the F1 score penalized the retriever for returning the 10 chunks requested by the chat chain (K=10) even when the golden dataset oly expected 3-7 chunks. This capped the achievable score at 0.46 to 0.82, which meant that it was impossible to meet the threshold in most cases.
+So the reported score was updated to **recall@K**: Of the chunks the judge marked as expected, the fraction that appear anywhere in the K chunks retrieved.
+
+The scoring in the eval report only reflects the recall@K score, but other components are persisted in `MetricResult.details` for auditing.
+
+| Component        | Meaning                                                                                             |
+|------------------|-----------------------------------------------------------------------------------------------------|
+| `recall_at_k`    | **the reported score** that impacts pass/fail; expected chunks found anywhere in the top-K          |
+| `ndcg_at_k`      | whether those chunks landed near the top (more likely for LLM to read)                              |
+| `precision_at_n` | relevant share of the top-N slice where N is the expected chunk count                               |
+| `f1_score`       | legacy F1 score; retained to compare against eval artifacts generated before the metric was updated |
