@@ -10,7 +10,7 @@ status:
 
 sources:
   none: "aucune"
-  label: "**Sources :**"
+  label: "Références :"
   page_singular: "(page : {pages})"
   page_plural: "(pages : {pages})"
 

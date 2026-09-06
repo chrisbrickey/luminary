@@ -17,7 +17,7 @@ from src.i18n.keys import (
     STATUS_REFLECTING,
 )
 from src.schemas import ChatResponse
-from src.utils.formatting import format_sources
+from src.utils.formatting import bold_label, format_sources
 from src.utils.language import detect_language
 from src.utils.ollama_health import check_ollama_available
 
@@ -163,8 +163,8 @@ def main() -> None:
                     st.markdown(response.text)
 
                     # Format sources including some hard-coded strings localized by detected language
-                    sources_caption = format_sources(response, detected_lang)
-                    st.markdown(sources_caption)
+                    sources_caption = format_sources(response, detected_lang, bold_label)
+                    st.caption(sources_caption)
 
                     # Add assistant message to history
                     st.session_state.messages.append(

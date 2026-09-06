@@ -322,7 +322,7 @@ def test_full_rag_chain_with_retrieval(
     }
 
     # End-to-end proof: consecutive pages 5, 6, 7 collapse into one ranged bullet
-    assert format_sources(response, FRENCH_ISO_CODE) == "**Sources :**\n- Lettres philosophiques (pages : 5-7)"
+    assert format_sources(response, FRENCH_ISO_CODE) == "Références :\n- Lettres philosophiques (pages : 5-7)"
 
     # Verify language
     assert response.language == FRENCH_ISO_CODE

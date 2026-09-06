@@ -5,7 +5,7 @@ import pytest
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
 from src.schemas import ChatResponse
 from src.schemas.chat import SourceReference
-from src.utils.formatting import format_page_ranges, format_sources, group_sources
+from src.utils.formatting import bold_label, format_page_ranges, format_sources, group_sources
 
 # --- Shared test constants ---
 
@@ -15,8 +15,11 @@ TITLE_SOURCE_A = "Source A"
 TITLE_SOURCE_B = "Source B"
 URL_FALLBACK_TITLE = "https://example.com/doc3"
 
-EXPECTED_NONE_EN = "**Sources:** none"
-EXPECTED_NONE_FR = "**Sources :** aucune"
+LABEL_EN = "References:"
+LABEL_FR = "Références :"
+
+EXPECTED_NONE_EN = f"{LABEL_EN} none"
+EXPECTED_NONE_FR = f"{LABEL_FR} aucune"
 
 
 def _make_response(
@@ -134,7 +137,7 @@ class TestFormatSources:
             sources=[SourceReference(title=TITLE_MULTI_PAGE, page_number=18)]
         )
         result = format_sources(response, ENGLISH_ISO_CODE)
-        expected = f"**Sources:**\n- {TITLE_MULTI_PAGE} (page: 18)"
+        expected = f"{LABEL_EN}\n- {TITLE_MULTI_PAGE} (page: 18)"
         assert result == expected
 
     def test_pages_out_of_order_are_sorted_deduped_and_ranged_english(self) -> None:
@@ -148,7 +151,7 @@ class TestFormatSources:
             ]
         )
         result = format_sources(response, ENGLISH_ISO_CODE)
-        expected = f"**Sources:**\n- {TITLE_MULTI_PAGE} (pages: 1, 11-13, 18)"
+        expected = f"{LABEL_EN}\n- {TITLE_MULTI_PAGE} (pages: 1, 11-13, 18)"
         assert result == expected
 
     def test_pages_out_of_order_are_sorted_deduped_and_ranged_french(self) -> None:
@@ -163,7 +166,7 @@ class TestFormatSources:
             language=FRENCH_ISO_CODE,
         )
         result = format_sources(response, FRENCH_ISO_CODE)
-        expected = f"**Sources :**\n- {TITLE_MULTI_PAGE} (pages : 1, 11-13, 18)"
+        expected = f"{LABEL_FR}\n- {TITLE_MULTI_PAGE} (pages : 1, 11-13, 18)"
         assert result == expected
 
     def test_two_page_run_is_plural(self) -> None:
@@ -174,19 +177,19 @@ class TestFormatSources:
             ]
         )
         result = format_sources(response, ENGLISH_ISO_CODE)
-        expected = f"**Sources:**\n- {TITLE_SOME_WORK} (pages: 11-12)"
+        expected = f"{LABEL_EN}\n- {TITLE_SOME_WORK} (pages: 11-12)"
         assert result == expected
 
     def test_page_less_source_has_no_parenthetical(self) -> None:
         response = _make_response(sources=[SourceReference(title=TITLE_SOME_WORK)])
         result = format_sources(response, ENGLISH_ISO_CODE)
-        expected = f"**Sources:**\n- {TITLE_SOME_WORK}"
+        expected = f"{LABEL_EN}\n- {TITLE_SOME_WORK}"
         assert result == expected
 
     def test_url_fallback_title_renders_bare_url(self) -> None:
         response = _make_response(sources=[SourceReference(title=URL_FALLBACK_TITLE)])
         result = format_sources(response, ENGLISH_ISO_CODE)
-        expected = f"**Sources:**\n- {URL_FALLBACK_TITLE}"
+        expected = f"{LABEL_EN}\n- {URL_FALLBACK_TITLE}"
         assert result == expected
 
     def test_two_titles_appear_in_first_appearance_order(self) -> None:
@@ -197,14 +200,33 @@ class TestFormatSources:
             ]
         )
         result = format_sources(response, ENGLISH_ISO_CODE)
-        expected = f"**Sources:**\n- {TITLE_SOURCE_B} (page: 1)\n- {TITLE_SOURCE_A} (page: 2)"
+        expected = f"{LABEL_EN}\n- {TITLE_SOURCE_B} (page: 1)\n- {TITLE_SOURCE_A} (page: 2)"
         assert result == expected
 
     def test_uses_default_language(self, response_with_sources: ChatResponse) -> None:
         """Not passing language should use DEFAULT_RESPONSE_LANGUAGE (en)."""
         result = format_sources(response_with_sources)
-        expected = f"**Sources:**\n- {TITLE_SOURCE_A} (page: 1)\n- {TITLE_SOURCE_B} (page: 2)"
+        expected = f"{LABEL_EN}\n- {TITLE_SOURCE_A} (page: 1)\n- {TITLE_SOURCE_B} (page: 2)"
         assert result == expected
+
+    def test_default_style_omits_markdown_emphasis(self) -> None:
+        """Terminal surfaces get a bare label, with no markdown markers to display literally."""
+        response = _make_response(sources=[SourceReference(title=TITLE_SOURCE_A)])
+        result = format_sources(response, ENGLISH_ISO_CODE)
+        assert result == f"{LABEL_EN}\n- {TITLE_SOURCE_A}"
+        assert "**" not in result
+
+    def test_bold_label_style_emphasizes_only_the_label(self) -> None:
+        """Markdown surfaces opt into bold; the bullets stay unstyled."""
+        response = _make_response(sources=[SourceReference(title=TITLE_SOURCE_A)])
+        result = format_sources(response, ENGLISH_ISO_CODE, bold_label)
+        assert result == f"**{LABEL_EN}**\n- {TITLE_SOURCE_A}"
+
+    def test_bold_label_style_applies_when_there_are_no_sources(
+        self, response_no_sources: ChatResponse
+    ) -> None:
+        result = format_sources(response_no_sources, ENGLISH_ISO_CODE, bold_label)
+        assert result == f"**{LABEL_EN}** none"
 
     def test_footer_reads_only_structured_sources_not_legacy_titles(self) -> None:
         """Contract: an empty retrieved_sources renders 'none' even if legacy titles are present."""

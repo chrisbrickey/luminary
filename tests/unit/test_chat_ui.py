@@ -21,6 +21,9 @@ from src.schemas import ChatResponse, SourceReference
 DEFAULT_TEST_AUTHOR = FAKE_AUTHOR_A
 SECOND_TEST_AUTHOR = FAKE_AUTHOR_B
 
+SOURCES_LABEL_EN = "**References:**"
+SOURCES_LABEL_FR = "**Références :**"
+
 
 # --- Test fixtures ---
 
@@ -468,7 +471,7 @@ def test_main_displays_existing_messages(
                 {
                     "role": "assistant",
                     "content": "Answer 1",
-                    "sources": "*Sources: Source A*",
+                    "sources": "*References: Source A*",
                 },
             ],
             "chain": Mock(),
@@ -644,15 +647,17 @@ def test_main_shows_sources_caption(
 
     main()
 
-    # Verify markdown was called with properly formatted sources
+    # Footer renders through st.caption path on first display (same path as replay)
+    caption_calls = [call[0][0] for call in mock_st.caption.call_args_list]
+    sources_calls = [call for call in caption_calls if SOURCES_LABEL_FR in call]
+    assert len(sources_calls) == 1, f"Expected 1 sources caption, got {len(sources_calls)}"
+
+    # Uses detected language to form the label of the references correctly (e.g. french punctuation if fr)
+    assert sources_calls[0] == f"{SOURCES_LABEL_FR}\n- Source A\n- Source B"
+
+    # Footer does not use the st.markdown path
     markdown_calls = [call[0][0] for call in mock_st.markdown.call_args_list]
-
-    # Find the sources call (should contain bold markers and bullets)
-    sources_calls = [call for call in markdown_calls if "**Sources" in call]
-    assert len(sources_calls) == 1, f"Expected 1 sources call, got {len(sources_calls)}"
-
-    # Uses response.language (fr), so space before colon (French punctuation)
-    assert sources_calls[0] == "**Sources :**\n- Source A\n- Source B"
+    assert not [call for call in markdown_calls if SOURCES_LABEL_FR in call]
 
 
 @patch("chat_ui.detect_language")
@@ -708,7 +713,7 @@ def test_main_stores_and_replays_collapsed_sources_footer(
     main()
 
     # Dedup + ascending pages + range collapse: 12, 9, 13, 12 -> "9, 12-13"
-    expected_footer = "**Sources:**\n- Some Work (pages: 9, 12-13)"
+    expected_footer = f"{SOURCES_LABEL_EN}\n- Some Work (pages: 9, 12-13)"
     stored_message = mock_st.session_state["messages"][-1]
     assert stored_message["role"] == "assistant"
     assert stored_message["sources"] == expected_footer
