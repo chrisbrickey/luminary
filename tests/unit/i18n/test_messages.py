@@ -220,7 +220,7 @@ class TestGetMessage:
         assert result3 == "none"
 
         result4 = get_message(SOURCES_LABEL, DEFAULT_RESPONSE_LANGUAGE)
-        assert result4 == "**Sources:**"
+        assert result4 == "References:"
 
         result5 = get_message(STATUS_REFLECTING, DEFAULT_RESPONSE_LANGUAGE)
         assert result5 == "Reflecting... (response time varies with the amount of data retrieved and the connection)"

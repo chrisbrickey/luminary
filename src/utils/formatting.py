@@ -1,12 +1,26 @@
 """Formatting utilities for chat responses."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from src.configs.common import DEFAULT_RESPONSE_LANGUAGE
 from src.i18n import get_message
 from src.i18n.keys import SOURCES_LABEL, SOURCES_NONE, SOURCES_PAGE_PLURAL, SOURCES_PAGE_SINGULAR
 from src.schemas import ChatResponse
 from src.schemas.chat import SourceReference
+
+
+# How a frontend surfaces label styles
+LabelStyle = Callable[[str], str]
+
+
+def plain_label(label: str) -> str:
+    """Leave the label bare, for surfaces that print raw text (CLI)."""
+    return label
+
+
+def bold_label(label: str) -> str:
+    """Wrap the label in markdown bold, for surfaces that render markdown (Streamlit)."""
+    return f"**{label}**"
 
 
 def group_sources(sources: Sequence[SourceReference]) -> list[tuple[str, list[int]]]:
@@ -52,16 +66,14 @@ def _format_source_entry(title: str, pages: list[int], language: str) -> str:
 def format_sources(
     response: ChatResponse,
     language: str = DEFAULT_RESPONSE_LANGUAGE,
+    style_label: LabelStyle = plain_label,
 ) -> str:
-    """Format source citations as a markdown bullet list, one bullet per title.
-
-    Uses a unified markdown format that works for both CLI and web UI.
-    In Streamlit, the label renders as bold and items as a bullet list.
-    In CLI, the markdown characters display as-is but remain readable.
+    """Format source citations as a bullet list, one bullet per title.
 
     Args:
         response: ChatResponse with retrieved_sources
         language: ISO 639-1 language code (defaults to DEFAULT_RESPONSE_LANGUAGE)
+        style_label: frontend-specific formatting for the label on summarized sources (defaults to none)
 
     Returns:
         Formatted sources string
@@ -69,14 +81,14 @@ def format_sources(
     Example:
         format_sources(response, "en")
         # Returns:
-        # "**Sources:**
+        # "References:
         # - Lettres Philosophiques 1734 (pages: 1, 11-13, 18)"
         #
         # Or if no sources:
-        # "**Sources:** none"
+        # "References: none"
     """
     grouped = group_sources(response.retrieved_sources)
-    label = get_message(SOURCES_LABEL, language)
+    label = style_label(get_message(SOURCES_LABEL, language))
 
     if not grouped:
         none_text = get_message(SOURCES_NONE, language)

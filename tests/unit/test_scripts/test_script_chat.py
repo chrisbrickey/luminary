@@ -8,7 +8,11 @@ import pytest
 from tests.fake_authors import FAKE_AUTHOR_A
 from src.configs.authors import DEFAULT_AUTHOR
 from src.configs.common import ENGLISH_ISO_CODE, FRENCH_ISO_CODE
+from src.i18n import get_message
+from src.i18n.keys import SOURCES_LABEL
 from src.schemas import ChatResponse, SourceReference
+
+SOURCES_LABEL_EN = get_message(SOURCES_LABEL, ENGLISH_ISO_CODE)
 
 # Use centralized fake author constant from conftest
 TEST_AUTHOR = FAKE_AUTHOR_A
@@ -329,6 +333,7 @@ class TestRunInteractiveChat:
         # Verify chunks are NOT displayed
         assert "Retrieved chunks:" not in captured.out
 
+    @patch("scripts.chat.detect_language")
     @patch("scripts.chat.build_chain")
     @patch("scripts.chat.check_ollama_available")
     @patch("builtins.input")
@@ -337,6 +342,7 @@ class TestRunInteractiveChat:
         mock_input: MagicMock,
         mock_ollama: MagicMock,
         mock_build_chain: MagicMock,
+        mock_detect: MagicMock,
         capsys: pytest.CaptureFixture[str],
         test_db_path: Path,
     ) -> None:
@@ -346,6 +352,7 @@ class TestRunInteractiveChat:
 
         # Setup mocks with response that should NOT contain chunk IDs
         mock_ollama.return_value = None
+        mock_detect.return_value = ENGLISH_ISO_CODE  # Pins the footer to the English label
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = create_mock_response()
         mock_build_chain.return_value = mock_chain
@@ -366,7 +373,8 @@ class TestRunInteractiveChat:
 
         # Verify chunk IDs from metadata are NOT in the main output
         # (they should only appear in the --show-chunks section)
-        lines_before_chunks_section = captured.out.split("Sources:")[0]
+        assert SOURCES_LABEL_EN in captured.out, "Footer label missing; the split below would be a no-op"
+        lines_before_chunks_section = captured.out.split(SOURCES_LABEL_EN)[0]
         for chunk_id in TEST_CHUNK_IDS:
             assert chunk_id not in lines_before_chunks_section
 
@@ -407,14 +415,14 @@ class TestRunInteractiveChat:
         captured = capsys.readouterr()
 
         # Verify sources are displayed with English formatting (detected language)
-        assert "**Sources:**" in captured.out  # English label (from response.language="en")
+        assert SOURCES_LABEL_EN in captured.out  # English label (from response.language="en")
 
         # Single collapsed bullet exercises sorting (9 before 12), dedup (12 appears once),
         # and range collapsing (12, 13 -> "12-13") through the real CLI path
         assert f"- {TEST_SOURCE_TITLE} (pages: 9, 12-13)" in captured.out
 
         # Verify deduplication: the title appears in the sources section only once
-        sources_section = captured.out.split("**Sources")[1] if "**Sources" in captured.out else ""
+        sources_section = captured.out.split(SOURCES_LABEL_EN)[1]
         assert sources_section.count(TEST_SOURCE_TITLE) == 1, "Duplicate source should be collapsed into one bullet"
 
     @patch("scripts.chat.build_chain")
