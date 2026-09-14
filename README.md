@@ -1,7 +1,7 @@
 # Luminary
 
-A RAG application where Enlightenment writers (e.g., Voltaire, Olympe de Gouges) answer questions grounded exclusively in their historical texts with sources cited. 
-Available as both a web UI and interactive CLI.
+A multilingual RAG chat application where Enlightenment writers (e.g., Voltaire, Olympe de Gouges) engage in debate 
+grounded exclusively in their historical texts with sources cited. Available in both a web UI and an interactive CLI.
 
 ![Luminary web UI](docs/images/web-ui-compressed.jpg)
 
@@ -9,18 +9,18 @@ Available as both a web UI and interactive CLI.
 
 Luminary provides two interfaces for interacting with the philosophes. Both interfaces support the same core features and personas.
 
-- **Web UI**: Browser-based chat interface with message history, sidebar controls, and visual source citations
-- **CLI**: Command-line interactive chat with optional debug output and chunk inspection
+- **Web UI**: Browser-based chat interface with message history, sidebar controls, and source citations
+- **CLI**: Command-line interactive chat (including injected sources cited) with optional debug output and chunk inspection
 
 ## Key Features
 
-- **Grounded citations:** All responses include source references with page numbers in the text response. Additionally, a sources footer shows each unique source only once.
+- **Evaluation harness:** Bespoke, automated evaluation harness to drive response quality and prevent regressions.
+- **Grounded citations:** All responses include source references with page numbers injected into the text. Additionally, a footer summarizes sources retrieved in a human-readable list.
 - **Local-first execution:** Runs entirely locally with Ollama. No external API calls. No data sharing. No usage costs.
 - **Semantic search over historical corpus:** Uses vector similarity to find relevant passages across all texts, not just keyword matching.
 - **Transparent retrieval:** Optional debug mode shows exact text chunks and similarity scores used for each response.
-- **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. _Local LLMs are not deterministic. So adherence to the detected language depends on the training data available to the selected model._ 
+- **Multilingual chat:** Automatically detects the user's language and directs LLM to respond in the same language. 
 - **Localized interfaces:** Chat interface formatting (labels, buttons, loading messages) available in multiple languages and adapts to the detected language of the user.
-- **Evaluation harness:** Bespoke, automated evaluation harness to measure response quality and prevent regressions.
 
 ## Architecture
 
