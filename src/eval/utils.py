@@ -218,6 +218,20 @@ def load_eval_run(path: Path) -> EvalRun:
 
 #--- narrative eval report utilities ---
 
+# H2 sections of a narrative eval report, in the order they appear in docs/eval_reports/TEMPLATE.md.
+REPORT_SECTIONS = (
+    "Source Data",
+    "System Snapshot",
+    "Eval Run Summary",
+    "Issue Analysis",
+    "Changes Made",
+    "Changes Deferred",
+    "Changes Rejected",
+)
+
+# Sections the author completes by hand after the stub is generated.
+NARRATIVE_SECTIONS = ("Issue Analysis", "Changes Made", "Changes Deferred", "Changes Rejected")
+
 
 def format_eval_report_stub(artifact_path: Path, stub_created_at: str) -> str:
     """Generate pre-populated markdown stub for narrative eval report.

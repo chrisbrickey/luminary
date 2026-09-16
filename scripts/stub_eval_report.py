@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from src.eval.utils import format_eval_report_stub, format_timestamp
+from src.eval.utils import NARRATIVE_SECTIONS, format_eval_report_stub, format_timestamp
 
 DEFAULT_OUTPUT_PATH = Path("docs/eval_reports")
 
@@ -79,7 +79,7 @@ def main() -> None:
     print(f"\n✅ Eval report stub saved: {output_path}")
     print(f"\nNext steps:")
     print(f"  1. Open {output_path}")
-    print(f"  2. Fill out sections: Issue Analysis, Changes Made, Changes Deferred\n")
+    print(f"  2. Fill out sections: {', '.join(NARRATIVE_SECTIONS)}\n")
 
 
 if __name__ == "__main__":

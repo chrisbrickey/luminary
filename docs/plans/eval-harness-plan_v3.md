@@ -1390,6 +1390,11 @@ Instruct the user to complete these steps manually:
   - Removed [TODO] notations in autopopulation of markdown.
   - Renamed SystemVersion to SystemSnapshot and improved field structure and naming.
   - Simplified the README updates.
+  - Revised the report structure to match the shape the reports in recent use as of September 2026 to minimize manual edits when completing a report.
+    - Update sections in order: `Source Data`, `System Snapshot`, `Eval Run Summary`, `Issue Analysis`, `Changes Made`, `Changes Deferred`, `Changes Rejected`.
+    - Replaced the bullet placeholders in `Issue Analysis`, `Changes Made`, `Changes Deferred`, and `Changes Rejected` with one `###` subsection per issue or change.
+    - Section names and ordering live in `REPORT_SECTIONS` in `src/eval/utils.py`; `scripts/stub_eval_report.py` prints the `NARRATIVE_SECTIONS` subset as next steps.
+    - Integration test asserts the template's H2 headers match the constant exactly.
 
 ---
 

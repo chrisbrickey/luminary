@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from tests.fake_authors import FAKE_AUTHOR_A, FAKE_AUTHOR_B, FAKE_AUTHOR_C
 from src.configs.common import ENGLISH_ISO_CODE
-from src.eval.utils import discover_latest_golden_dataset, format_timestamp, load_eval_run, load_golden_dataset, save_eval_run, format_eval_report_stub
+from src.eval.utils import REPORT_SECTIONS, discover_latest_golden_dataset, format_timestamp, load_eval_run, load_golden_dataset, save_eval_run, format_eval_report_stub
 from src.schemas.eval import EvalRun, GoldenDataset, SystemSnapshot
 
 # --- Pytest fixtures ---
@@ -609,9 +609,9 @@ def test_load_eval_run_is_directory_error(tmp_path: Path) -> None:
 
 
 def test_format_eval_report_stub_includes_all_sections(tmp_path: Path) -> None:
-    """Test that format_eval_report_stub produces markdown including section headers.
+    """Test that format_eval_report_stub produces markdown including every report section.
 
-    This test uses a list of required sections instead of parsing the actual
+    This test iterates the shared REPORT_SECTIONS constant instead of parsing the actual
     template file because the real file is covered by integration tests."""
     artifact_path = tmp_path / "artifact.json"
     artifact_path.write_text(json.dumps(VALID_EVAL_RUN_DICT))
@@ -619,12 +619,8 @@ def test_format_eval_report_stub_includes_all_sections(tmp_path: Path) -> None:
     result = format_eval_report_stub(artifact_path, STUB_CREATED_AT)
 
     assert "# Eval Report" in result
-    assert "## Source Data" in result
-    assert "## System Snapshot" in result
-    assert "## Eval Run Summary" in result
-    assert "## Issue Analysis" in result
-    assert "## Changes Made" in result
-    assert "## Changes Deferred" in result
+    for section in REPORT_SECTIONS:
+        assert f"## {section}" in result, f"Stub should include section: {section}"
 
 
 def test_format_eval_report_stub_includes_metadata(tmp_path: Path) -> None:

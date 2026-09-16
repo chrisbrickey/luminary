@@ -85,10 +85,11 @@ Optional flags:
 
 3. Investigate failure modes by manually reviewing outputs for failing metrics in the actual json artifact at `evals/runs/{timestamp}.json`.
 
-4. Update the evaluation report with:
-   - Failure modes
-   - Proposed improvements
-   - Rejected ideas and why they were rejected
+4. Complete the narrative sections of the evaluation report, using one `###` subsection per issue or change:
+   - `Issue Analysis`: top failure modes, what failed and why, with representative examples
+   - `Changes Made`: changes adopted (e.g., code, prompts, configs, datasets), including rationales
+   - `Changes Deferred`: changes to be deferred (e.g., known gaps, missing cases), including rationales
+   - `Changes Rejected`: changes considered and rejected, including rationales
 
 5. Commit the completed evaluation report
 
