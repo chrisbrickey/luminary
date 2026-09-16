@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
+from src.eval.utils import NARRATIVE_SECTIONS
+
 FAKE_ARTIFACT_PATH = "evals/runs/2025-05-15T12-25-34.json" # created before triggering eval report
 FROZEN_ISO_TIMESTAMP = "2025-05-16T10:32:55"  # ISO 8601, returned by datetime.now().isoformat()
 FROZEN_TIMESTAMP = "2025-05-16T10-32-55"      # filename-safe, returned by format_timestamp(FROZEN_ISO_TIMESTAMP)
@@ -74,6 +76,21 @@ class TestCreateEvalReportStubMain:
 
         captured = capsys.readouterr()
         assert EXPECTED_FILENAME in captured.out
+
+    def test_prints_narrative_sections_in_next_steps(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test that main() names every section the author must complete by hand."""
+        with (
+            patch("scripts.stub_eval_report.format_eval_report_stub", return_value=FAKE_MARKDOWN_CONTENT),
+            patch("sys.argv", ["stub_eval_report.py", FAKE_ARTIFACT_PATH, "--output-path", str(tmp_path)]),
+        ):
+            from scripts.stub_eval_report import main
+            main()
+
+        captured = capsys.readouterr()
+        for section in NARRATIVE_SECTIONS:
+            assert section in captured.out, f"Next steps should name section: {section}"
 
     def test_handles_artifact_not_found(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Test that main() exits with code 1 when the artifact file does not exist."""
