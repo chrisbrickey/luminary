@@ -57,48 +57,7 @@ III. EVALUATION PIPELINE
 ──────────────────────────────────────────────────────────────
 load golden dataset -> invoke chat chain → apply all metrics → aggregate scores → persist eval run artifact
 ```
-
-##### Pipelines in Detail
-
-```
-INGESTION (one-time / on-demand via scripts)
-─────────────────────────────────────────────────────────────────────
- *_loader.py             fetches source data, strips formatting, returns LangChain Documents
-      │
-      ▼
- chunker.py              splits Documents into overlapping chunks and adds metadata
-      │
-      ▼
- chroma.py               embeds chunks and persists in a vector database
-
-
-QUERY (real-time via user prompt)
-─────────────────────────────────────────────────────────────────────
-  raw string             input from user in their natural language on which we detect language code
-      │
-      ▼
- retriever.py            embeds the prompt, performs similarity search on the vector database and retrieves top-k semantically similar chunks
-      │
-      ▼
- chat_chain.py           orchestrates retrieval, context formatting with labels, and LLM call including persona prompt and language; returns ChatResponse
-      │
-      ▼
- ChatResponse            validated and structured response in user's language
- 
- 
-EVALUATION (on-demand quality measurement)
-─────────────────────────────────────────────────────────────────────
- GoldenDataset            versioned example cases with expected behaviors (e.g., questions, expected chunks, keywords)
-      │
-      ▼
- runner.py                invokes chat chain for each example, applies metrics, aggregates scores
-      │
-      ▼
- metrics/                 deterministic graders such as retrieval_relevance, citation_accuracy, language compliance
-      │
-      ▼
- EvalRun                  machine-readable artifact with all results, scores, and system snapshot (saved to evals/runs/)
-```
+_See `docs/ingestion-pipeline-details.md` for greater detail._
 
 
 ## Setup

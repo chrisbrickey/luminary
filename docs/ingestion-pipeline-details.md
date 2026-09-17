@@ -2,6 +2,55 @@
 The top-level `README.md` contains the most pertinent information for understanding and running the ingestion pipeline.
 This file includes supplementary information.
 
+
+## Pipelines in Detail
+
+```
+INGESTION (one-time / on-demand via scripts)
+─────────────────────────────────────────────────────────────────────
+ *_loader.py             fetches source data, strips formatting, returns LangChain Documents
+      │
+      ▼
+ chunker.py              splits Documents into overlapping chunks and adds metadata
+      │
+      ▼
+ chroma.py               embeds chunks and persists in a vector database
+
+
+QUERY (real-time via user prompt)
+─────────────────────────────────────────────────────────────────────
+  raw string             input from user in their natural language on which we detect language code
+      │
+      ▼
+ retriever.py            embeds the prompt, performs similarity search on the vector database and retrieves top-k semantically similar chunks
+      │
+      ▼
+ chat_chain.py           orchestrates retrieval, context formatting with labels, and LLM call including persona prompt and language; returns ChatResponse
+      │
+      ▼
+ ChatResponse            validated and structured response in user's language
+ 
+ 
+EVALUATION (on-demand quality measurement)
+─────────────────────────────────────────────────────────────────────
+ GoldenDataset            versioned example cases with expected behaviors (e.g., questions, expected chunks, keywords)
+      │
+      ▼
+ runner.py                invokes chat chain for each example, applies metrics, aggregates scores
+      │
+      ▼
+ metrics/                 deterministic graders such as retrieval_relevance, citation_accuracy, language compliance
+      │
+      ▼
+ EvalRun                  machine-readable artifact with all results, scores, and system snapshot (saved to evals/runs/)
+ 
+ 
+MULTI-AGENT DEBATE (under development)
+─────────────────────────────────────────────────────────────────────
+
+```
+
+
 ## Run ingestion scripts separately
 
 This section contains information on the individual scripts for scraping and embedding that are both used by the single, unified command in the Setup section of top-level `README.md`.
